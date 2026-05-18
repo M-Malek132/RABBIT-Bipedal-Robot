@@ -1,0 +1,219 @@
+clear; clc; close all;
+% Get the directory of the current script
+current_dir = fileparts(mfilename('fullpath'));
+
+% Get the parent directory
+parent_dir = fileparts(current_dir);
+
+% Add parent directory and all its subfolders to MATLAB path
+addpath(genpath(parent_dir));
+
+%% =========================
+%% Generalized coordinates
+%% =========================
+
+syms x z qt q1 q2 q3 q4 real
+syms dx dz dqt dq1 dq2 dq3 dq4 real
+syms ddx ddz ddqt ddq1 ddq2 ddq3 ddq4 real
+
+q   = [x z qt q1 q2 q3 q4]';
+dq  = [dx dz dqt dq1 dq2 dq3 dq4]';
+ddq = [ddx ddz ddqt ddq1 ddq2 ddq3 ddq4]';
+
+%% =========================
+%% Symbolic parameters
+%% =========================
+
+syms mT m1 m2 l1 l2 lt g real
+syms I1 I2 IT real
+
+param = [m1 m2 mT l1 l2 lt I1 I2 IT g];
+
+%% =========================
+%% COM positions
+%% =========================
+
+% stance thigh
+p1 = [ x + (l1/2)*sin(qt +q1);
+       z - (l1/2)*cos(qt +q1) ];
+
+% stance shin
+p2 = [ x + l1*sin(qt +q1) + (l2/2)*sin(qt +q1+q2);
+       z - l1*cos(qt +q1) - (l2/2)*cos(qt +q1+q2) ];
+
+% swing thigh
+p3 = [ x + (l1/2)*sin(qt +q3);
+       z - (l1/2)*cos(qt +q3) ];
+
+% swing shin
+p4 = [ x + l1*sin(qt +q3) + (l2/2)*sin(qt +q3+q4);
+       z - l1*cos(qt +q3) - (l2/2)*cos(qt +q3+q4) ];
+
+% torso
+pT = [ x + (lt/2)*sin(qt);
+       z + (lt/2)*cos(qt) ];
+
+%% =========================
+%% Velocities via Jacobians
+%% =========================
+
+J1 = jacobian(p1,q);
+J2 = jacobian(p2,q);
+J3 = jacobian(p3,q);
+J4 = jacobian(p4,q);
+JT = jacobian(pT,q);
+
+v1 = J1*dq;
+v2 = J2*dq;
+v3 = J3*dq;
+v4 = J4*dq;
+vT = JT*dq;
+
+%% =========================
+%% Angular velocities
+%% =========================
+
+w1 = dq1;
+w2 = dq2;
+w3 = dq3;
+w4 = dq4;
+wT = dqt;
+
+%% =========================
+%% Kinetic Energy
+%% =========================
+
+T1 = 1/2*m1*(v1.'*v1) + 1/2*I1*w1^2;
+T2 = 1/2*m2*(v2.'*v2) + 1/2*I2*w2^2;
+
+T3 = 1/2*m1*(v3.'*v3) + 1/2*I1*w3^2;
+T4 = 1/2*m2*(v4.'*v4) + 1/2*I2*w4^2;
+
+TT = 1/2*mT*(vT.'*vT) + 1/2*IT*wT^2;
+
+T = simplify(T1 + T2 + T3 + T4 + TT);
+
+disp('Kinetic Energy:')
+disp(T)
+
+%% =========================
+%% Potential Energy
+%% =========================
+
+V1 = m1*g*p1(2);
+V2 = m2*g*p2(2);
+
+V3 = m1*g*p3(2);
+V4 = m2*g*p4(2);
+
+VT = mT*g*pT(2);
+
+V = simplify(V1 + V2 + V3 + V4 + VT);
+
+disp('Potential Energy:')
+disp(V)
+
+%% =========================
+%% Inertia Matrix D(q)
+%% =========================
+
+D = simplify(jacobian(jacobian(T,dq).',dq));
+
+disp('Inertia Matrix D(q):')
+disp(D)
+
+disp('Check symmetry of D:')
+disp(simplify(D - D.'))
+
+%% =========================
+%% Gravity Vector G(q)
+%% =========================
+
+G = simplify(jacobian(V,q).');
+
+disp('Gravity Vector G(q):')
+disp(G)
+
+%% =========================
+%% Coriolis Matrix C(q,dq)
+%% =========================
+
+n = length(q);
+
+C = sym(zeros(n,n));
+
+for k = 1:n
+    for j = 1:n
+        for i = 1:n
+
+            C(k,j) = C(k,j) + ...
+                0.5 * ( ...
+                diff(D(k,j),q(i)) + ...
+                diff(D(k,i),q(j)) - ...
+                diff(D(i,j),q(k)) ) * dq(i);
+
+        end
+    end
+end
+
+C = simplify(C);
+
+disp('Coriolis Matrix C(q,dq):')
+disp(C)
+
+%% =========================
+%% Export MATLAB functions
+%% =========================
+
+matlabFunction(D, ...
+    'File','Dynamics/D_matrix', ...
+    'Vars',{q,param});
+
+matlabFunction(C*dq, ...
+    'File','Dynamics/C_vector', ...
+    'Vars',{q,dq,param});
+
+matlabFunction(G, ...
+    'File','Dynamics/G_vector', ...
+    'Vars',{q,param});
+
+%% =========================
+%% Euler-Lagrange Check
+%% =========================
+
+L = T - V;
+
+dLd_dqdot = jacobian(L,dq).';
+
+temp = jacobian(dLd_dqdot,[q;dq]);
+
+EL = simplify(temp*[dq;ddq] - jacobian(L,q).');
+
+dyn = simplify(D*ddq + C*dq + G);
+
+disp('Euler-Lagrange Check:')
+disp(simplify(EL - dyn))
+
+%% =========================
+%% Example numerical usage
+%% =========================
+
+p = parameters();
+
+par = packParameters(p);
+
+q_num  = zeros(7,1);
+dq_num = zeros(7,1);
+
+D_num = D_matrix(q_num,par);
+C_num = C_vector(q_num,dq_num,par);
+G_num = G_vector(q_num,par);
+
+disp('Numerical D:')
+disp(D_num)
+
+disp('Numerical C:')
+disp(C_num)
+
+disp('Numerical G:')
+disp(G_num)
