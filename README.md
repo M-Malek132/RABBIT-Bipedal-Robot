@@ -41,3 +41,7 @@ q =
 \begin{bmatrix}
 p_x & p_z & q_1 & q_2 & q_3 & q_4 & q_5
 \end{bmatrix}^T
+
+## Example Simulation
+
+![Rabbit Walking](rabbit_animation.gif)
