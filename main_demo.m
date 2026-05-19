@@ -82,7 +82,7 @@ fprintf("Simulation finished.\n");
 
 %% Animate robot
 
-animate_rabbit(x_all,params);
+animate_rabbit_stepping_stones(x_all,params);
 
 fprintf("Animation complete.\n");
 

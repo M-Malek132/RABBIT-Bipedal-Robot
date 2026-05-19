@@ -7,7 +7,7 @@ dq = x_minus(8:14);
 [~, p_sw, ~, ~, ~, ~] = rabbit_kinematics(q,packParameters(param));
 
 % --- vertical translation ---
-q(1) = q(1) - p_sw(1);
+% q(1) = q(1) - p_sw(1);
 q(2) = q(2) - p_sw(2);
 
 
