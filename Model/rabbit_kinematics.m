@@ -1,7 +1,7 @@
 function [p_stance,p_swing,p_hip,p_knee_s,p_knee_sw,p_torso] = ...
     rabbit_kinematics(q,param)
 
-px = q(1);
+px = q(1);  
 pz = q(2);
 
 qt = q(3);

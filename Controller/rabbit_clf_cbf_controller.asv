@@ -59,9 +59,8 @@ function [u, delta] = rabbit_clf_cbf_controller(t, x, params, target_stone_idx)
 
     % Forward Kinematics for Swing Foot
     [~,p_swing,~,~,~,~] = rabbit_kinematics(q,param);
-    J_sw = J_swing(q,dq,p);
-    Jdot_sw_dq = Jdotdq_swing(q,dq,p);
-
+    
+%     [p_swing, J_swing, Jdot_swing_dq] = get_SwingFoot(q, dq);
     p_swing_x = p_swing(1);
     p_swing_z = p_swing(2);
 
@@ -81,7 +80,7 @@ function [u, delta] = rabbit_clf_cbf_controller(t, x, params, target_stone_idx)
     h = p_swing_z - z_boundary;
 
     % First Derivative of h (psi_1)
-    Jh = J_sw(2,:) - dz_bound_dx * J_sw(1,:); % Jacobian of h
+    Jh = J_swing(2,:) - dz_bound_dx * J_swing(1,:); % Jacobian of h
     h_dot = Jh * dq;
     
     gamma_1 = 10;
@@ -89,7 +88,7 @@ function [u, delta] = rabbit_clf_cbf_controller(t, x, params, target_stone_idx)
 
     % Second Derivative preparation (Lie derivatives of psi_1)
     % h_ddot = Jdot_h * dq + Jh * ddq
-    Jdot_h_dq = Jdot_sw_dq(2,:) - (d2z_bound_dx2 * (J_sw(1,:)*dq) * J_sw(1,:) + dz_bound_dx * Jdot_sw_dq(1,:));
+    Jdot_h_dq = Jdot_swing_dq(2,:) - (d2z_bound_dx2 * (J_swing(1,:)*dq) * J_swing(1,:) + dz_bound_dx * Jdot_swing_dq(1,:));
     
     Lf_psi1 = Jdot_h_dq * dq - Jh * D_inv * H + gamma_1 * h_dot;
     Lg_psi1 = Jh * D_inv * B;
