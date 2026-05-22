@@ -65,7 +65,7 @@ fprintf("Initial stance foot: [%f , %f]\n",p_st(1),p_st(2));
 fprintf("Initial swing  foot: [%f , %f]\n",p_sw(1),p_sw(2));
 
 %% Simulation settings
-nSteps = 20;
+nSteps = 2;
 
 % ---------------------------------------------------------------------
 % Integration: Custom CLF-CBF Stepping Stone Controller Handle
@@ -105,7 +105,7 @@ function u = execution_wrapper(t, x, params)
     target_stone_idx = 1; % Default fallback
     
     for i = 1:num_stones
-        stone = params.stones(i, :); % Fixed: Changed {} to ()
+        stone = params.stones(i, :); 
         % Target the first stone whose far edge hasn't been crossed yet
         if robot_x < stone(2)
             target_stone_idx = i;
