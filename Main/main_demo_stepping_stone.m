@@ -88,31 +88,42 @@ fprintf("Simulation finished.\n");
 animate_rabbit_stepping_stones(x_all,params);
 fprintf("Animation complete.\n");
 
+%% Save results
+% Define result directory
+result_dir = fullfile(pwd, 'Results/');
+if ~exist(result_dir, 'dir')
+    mkdir(result_dir);
 end
+
+% Create filename with timestamp to avoid overwriting
+timestamp = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
+filename = fullfile(result_dir, ['simulation_results_' timestamp '.mat']);
+
+% Save data
+save(filename, 't_all', 'x_all', 'params', 'impact_log');
+
+fprintf("Results successfully saved to: %s\n", filename);
+
+end
+
 
 % ---------------------------------------------------------------------
 % Real-Time Execution Wrapper & Stone Tracker
 % ---------------------------------------------------------------------
-% ---------------------------------------------------------------------
-% Real-Time Execution Wrapper & Stone Tracker
-% ---------------------------------------------------------------------
 function u = execution_wrapper(t, x, params)
-    % 1. Extract current horizontal position of the robot's base
-    robot_x = x(1);
+    % Persistent variable to keep track of the stone index across calls
+    persistent current_target_idx;
     
-    % 2. Automatically find the upcoming stone from the terrain matrix
-    num_stones = size(params.stones, 1); 
-    target_stone_idx = 1; % Default fallback
-    
-    for i = 1:num_stones
-        stone = params.stones(i, :); 
-        % Target the first stone whose far edge hasn't been crossed yet
-        if robot_x < stone(2)
-            target_stone_idx = i;
-            break;
-        end
+    if isempty(current_target_idx)
+        current_target_idx = 1;
     end
     
-    % 3. Call the QP controller and isolate the torques vector 'u'
-    [u, ~] = rabbit_clf_cbf_controller(t, x, params, target_stone_idx);
+    % Logic: Only advance if the robot has passed the current stone's center
+    % AND is in a "swing" phase.
+    % (Or use your existing impact detection logic here)
+    if check_if_step_complete(x, params, current_target_idx)
+        current_target_idx = min(current_target_idx + 1, size(params.stones, 1));
+    end
+
+    [u, ~, ~] = rabbit_clf_cbf_controller(t, x, params, current_target_idx);
 end
