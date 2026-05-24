@@ -94,6 +94,7 @@ title('Velocity Norm');
 % -----------------------------
 if isfield(S, 'impact_log')
     figure('Name','Impact Log','Color','w');
+    
     if isnumeric(S.impact_log) && ~isempty(S.impact_log)
         stem(S.impact_log, ones(size(S.impact_log)), 'filled');
         xlabel('Impact index / time entry');
@@ -111,7 +112,7 @@ end
 % -----------------------------
 if ~isempty(params)
     try
-        figure('Name','Rabbit Animation','Color','w');
+        %         figure('Name','Rabbit Animation','Color','w');
         animate_rabbit_stepping_stones(x_all, params);
     catch ME
         warning('Animation failed: %s', ME.message);

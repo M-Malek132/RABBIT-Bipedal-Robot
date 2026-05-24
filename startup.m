@@ -1,9 +1,9 @@
 %% startup.m
 % Initialize The-RABBIT-Robot project
 
-clc;
-clear;
-close all;
+% clc;
+% clear;
+% close all;
 
 fprintf('Initializing RABBIT Robot Project...\n');
 
