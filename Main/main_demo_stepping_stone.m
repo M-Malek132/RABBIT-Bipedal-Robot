@@ -75,5 +75,5 @@ step_idx = min(max(CURRENT_STEP, 1), size(params.stones, 1));
 
 % Call your step-aware controller.
 % Adjust the output signature here if your controller returns more values.
-[u, ~, ~] = rabbit_clf_cbf_controller(t, x, params, step_idx);
+[u, ~, ~] = rabbit_clf_cbf_controller_v2(t, x, params, step_idx);
 end
