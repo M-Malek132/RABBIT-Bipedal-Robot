@@ -43,6 +43,10 @@ CURRENT_STEP = 1;
 % simulate_n_steps expects a controller handle of the form controller(t, x)
 controller = @(t, x, params) execution_wrapper(t, x, params);
 
+t0 = 0;
+Initial_Condition_info = check_initial_safe_set(t0, x0, params, CURRENT_STEP+1);
+display(Initial_Condition_info)
+
 % Run hybrid multi-step simulation
 fprintf('Starting multi-step simulation...\n');
 [t_all, x_all, impact_log] = simulate_n_steps(x0, params, nSteps, controller);

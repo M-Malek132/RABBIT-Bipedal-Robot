@@ -168,7 +168,7 @@ b_ineq = [b_clf;
           b_cbf];
 
 % Input bounds
-u_max = 150;
+u_max = inf;
 lb = [-u_max*ones(4,1); 0; 0];
 ub = [ u_max*ones(4,1); Inf; Inf];
 
