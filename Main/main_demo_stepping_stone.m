@@ -43,9 +43,9 @@ CURRENT_STEP = 1;
 % simulate_n_steps expects a controller handle of the form controller(t, x)
 controller = @(t, x, params) execution_wrapper(t, x, params);
 
-t0 = 0;
-Initial_Condition_info = check_initial_safe_set(t0, x0, params, CURRENT_STEP+1);
-display(Initial_Condition_info)
+% t0 = 0;
+% Initial_Condition_info = check_initial_safe_set(t0, x0, params, CURRENT_STEP+1);
+% display(Initial_Condition_info)
 
 % Run hybrid multi-step simulation
 fprintf('Starting multi-step simulation...\n');
@@ -79,5 +79,5 @@ step_idx = min(max(CURRENT_STEP, 1), size(params.stones, 1));
 
 % Call your step-aware controller.
 % Adjust the output signature here if your controller returns more values.
-[u, ~, ~] = rabbit_clf_cbf_controller_v2(t, x, params, step_idx);
+[u, ~] = rabbit_clf_controller_v2(t, x, params);
 end
