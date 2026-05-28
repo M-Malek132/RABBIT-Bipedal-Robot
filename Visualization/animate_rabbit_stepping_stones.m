@@ -1,4 +1,4 @@
-function animate_rabbit(x_traj, params)
+function animate_rabbit_stepping_stones(x_traj, params)
 
     figure('Color','w');
     axis equal; grid on; hold on;

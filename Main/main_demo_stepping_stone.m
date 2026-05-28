@@ -49,7 +49,7 @@ controller = @(t, x, params) execution_wrapper(t, x, params);
 
 % Run hybrid multi-step simulation
 fprintf('Starting multi-step simulation...\n');
-[t_all, x_all, impact_log] = simulate_n_steps(x0, params, nSteps, controller);
+[t_all, x_all, impact_log] = simulate_n_steps(x0, params, 1, controller);
 
 % Save results if your project provides a saver
 if exist('save_results', 'file') == 2
