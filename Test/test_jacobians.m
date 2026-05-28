@@ -13,7 +13,7 @@ eps = 1e-6;
 
 %% stance foot function (same formula you used)
 stanceFoot = @(q,par)[
-    q(1) + p.l1*sin(q(3)+q(4)) + p.l2*sin(q(3)+q(4)+q(5));
+    q(1) - p.l1*sin(q(3)+q(4)) - p.l2*sin(q(3)+q(4)+q(5));
     q(2) - p.l1*cos(q(3)+q(4)) - p.l2*cos(q(3)+q(4)+q(5))
 ];
 

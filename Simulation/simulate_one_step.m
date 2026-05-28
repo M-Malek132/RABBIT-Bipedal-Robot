@@ -35,7 +35,7 @@ fprintf('\nStarting single-step simulation...\n');
 % Simulation Settings
 % ---------------------------------------------------------
 
-tspan = [0 5];
+tspan = [0 0.8];
 
 options = odeset( ...
     'RelTol', 1e-6, ...

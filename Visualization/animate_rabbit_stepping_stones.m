@@ -1,5 +1,7 @@
 function animate_rabbit_stepping_stones(x_traj, params)
 
+x_all = x_traj';
+
     figure('Color','w');
     axis equal; grid on; hold on;
     xlabel('X'); ylabel('Z');
@@ -42,13 +44,14 @@ function animate_rabbit_stepping_stones(x_traj, params)
     
     % Downsample data to speed up animation
     skip_frames = 10; 
-    frame_indices = 1 : skip_frames : size(x_traj, 2);
+    frame_indices = 1 : skip_frames : size(x_all, 2);
+    
     
     for idx = 1:length(frame_indices)
         k = frame_indices(idx);
         
         % States & Kinematics
-        q = x_traj(1:7, k);
+        q = x_all(1:7, k);
         px = q(1);
         [stance_foot, swing_foot, hip, stance_knee, swing_knee, torso_top] = rabbit_kinematics(q, p);
 

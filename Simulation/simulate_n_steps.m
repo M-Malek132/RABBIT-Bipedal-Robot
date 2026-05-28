@@ -65,12 +65,12 @@ for step = 1:nSteps
     % -----------------------------------------------------
     
     try
-
+        global CURRENT_STEP;
         [t_step, x_step, impact_info] = simulate_one_step( ...
             x_current, ...
             params, ...
             controller);
-%         CURRENT_STEP = CURRENT_STEP + 1;
+        CURRENT_STEP = CURRENT_STEP + 1;
         
     catch ME
         

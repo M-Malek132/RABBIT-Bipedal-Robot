@@ -15,7 +15,7 @@ function main_demo_stepping_stone()
 %   - save_results()           % optional, if you have it
 %   - illustrate_results()     % optional, if you have it
 
-clc;
+clc;clear;
 close all;
 
 fprintf('========================================================\n');

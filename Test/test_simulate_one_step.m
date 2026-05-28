@@ -121,7 +121,7 @@ grid on
 
 %% Animate robot motion
 figure
-animate_rabbit(x',params)
+animate_rabbit_stepping_stones(x',params)
 
 %% Final stance foot verification
 
