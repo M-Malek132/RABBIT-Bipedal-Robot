@@ -1,7 +1,7 @@
 % -------------------------------------------------------------------------
 % Robust CLF-QP Controller
 % -------------------------------------------------------------------------
-function [u, delta_clf] = rabbit_clf_controller_v2(t, x, params)
+function [u, delta_clf] = rabbit_clf_controller_v3(t, x, params)
 persistent x_initial last_step_idx t_step0
 global CURRENT_STEP;
 
@@ -63,9 +63,11 @@ V   = eta' * P * eta;
 LfV = 2 * eta' * P * F_err;
 LgV = 2 * eta' * P * G_err;
 
-% Convergence rate (soft start for first 0.1s of the step)
-c_clf = 5.0;
-if t < 0.1, c_clf = 1e3; end
+% Using a dynamic convergence rate based on error magnitude
+% This is a simplified approach to emulate the RES-CLF Epsilon tuning
+error_norm = norm(eta);
+c_clf = 5.0 + 10.0 * (1 - exp(-10 * error_norm));
+c_clf = 0.5* c_clf;
 
 %% 5. QP Formulation
 n_u = size(B,2);
@@ -83,14 +85,23 @@ A_ineq = [LgV, -1];
 b_ineq = -LfV - c_clf * V;
 
 % Actuator Constraints
-u_max = 150;
+u_max = inf;
 lb = [-u_max * ones(n_u, 1); 0];
 ub = [ u_max * ones(n_u, 1); Inf];
 
-% Add this to see if the solver is alive
-if mod(floor(t*1000), 50) == 0 % Print every 50ms of sim time
+% In rabbit_clf_controller_v3 or execution_wrapper, replace the fprintf with:
+persistent last_print_t;
+if isempty(last_print_t), last_print_t = -inf; end
+
+if t - last_print_t >= 0.05  % Print at most every 50ms of sim time
     fprintf('Sim Time: %.3f | Step: %d\n', t, CURRENT_STEP);
+    last_print_t = t;
 end
+
+% Add to rabbit_clf_controller_v3 before the QP:
+required_u_magnitude = (LfV + c_clf*V) / norm(LgV);
+fprintf('Required |u| to satisfy CLF: %.1f (limit: %.1f)\n', ...
+    required_u_magnitude, u_max);
 
 
 options = optimoptions('quadprog', ...
@@ -102,13 +113,20 @@ options = optimoptions('quadprog', ...
 [z_opt, ~, exitflag] = quadprog(H_qp, f_qp, A_ineq, b_ineq, [], [], lb, ub, [], options);
 
 %% 6. Output and Fallback
-if exitflag == 1 || exitflag == 0
+if (exitflag == 1 || exitflag == 0) && ~isempty(z_opt)
     u = z_opt(1:n_u);
     delta_clf = z_opt(n_z);
 else
-    % Safe Fallback: Saturated PD Control
-    u_pd = -(Kp_val*0.1 * e + Kd_val*0.2 * de);
-    u = max(min(u_pd, u_max), -u_max);
+    fprintf('[QP Debug] t=%.4f | V=%.4f | LfV=%.4f | LgV_norm=%.4f\n', ...
+        t, V, LfV, norm(LgV));
+%     fprintf('           Aeq row norms: %.4f | b bounds: [%.4f, %.4f]\n', ...
+%         norm(Aeq), min(beq), max(beq));
+    % Improved Fallback: Relax the CLF constraint entirely,
+    % Solve for Minimum Norm Control within Actuator Limits
+    warning('QP Infeasible: Using Minimum Norm Fallback');
+    u = pinv(Lg_ctrl) * (-Lf_drift); % Attempt to cancel nonlinearities
+%     u = 100*u;
+    u = max(min(u, u_max), -u_max);  % Saturate
     delta_clf = 0;
 end
 end

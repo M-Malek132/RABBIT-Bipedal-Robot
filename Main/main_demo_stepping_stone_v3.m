@@ -46,11 +46,24 @@ end
 % Execution Wrapper
 % -------------------------------------------------------------------------
 function u = execution_wrapper(t, x, params)
-    global CURRENT_STEP;
-    [u, ~] = rabbit_clf_controller_v3(t, x, params);
-    
-    % Optional: Stop simulation if it detects a fall
-    if x(2) < 0.3 % If torso height drops too low
-        error('Robot fell at t=%.3f during step %d', t, CURRENT_STEP);
-    end
+global CURRENT_STEP;
+
+% Check for bad state
+if any(isnan(x)) || any(isinf(x))
+    warning('Bad state at t=%.4f, step %d', t, CURRENT_STEP);
+    u = zeros(2,1);
+    return;
+end
+
+[u, ~] = rabbit_clf_controller_v3(t, x, params);
+
+if x(2) < 0.3
+    error('Robot fell at t=%.3f during step %d', t, CURRENT_STEP);
+end
+
+% In execution_wrapper, log the control output
+if t > 0.2  % only for step 2 region
+    fprintf('u = [%.2f, %.2f] at t=%.3f\n', u(1), u(2), t);
+end
+
 end
