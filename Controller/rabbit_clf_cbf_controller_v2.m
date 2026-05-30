@@ -46,93 +46,127 @@ LgV = 2 * eta' * P * G_ctrl;
 c_clf = 10;
 
 % ---------------------------------------------------------------------
-% 2. HOCBF Formulation: Annulus Constraints
+% A. Stepping constraints for step length (paper eqs. 28–32)
+% Replace the old annulus (R1^2 - ||.||^2) constraints with the
+% state-dependent circles O1/O2 construction.
 % ---------------------------------------------------------------------
-stone = params.stones(target_stone_idx, :);
 
-% Example annulus geometry
-% You should tune these to match your stepping-stone geometry
-R1 = 0.20;   % outer radius
-R2 = 0.05;   % inner radius
+% --- User params (you should provide these) ---
+lmin = params.lmin;     % minimum desired step length
+lmax = params.lmax;     % maximum desired step length
 
-% Centers of the annulus boundaries
-% Example choice based on stone interval midpoint
-stone_center_x = 0.5 * (stone(1) + stone(2));
-O1 = [stone_center_x; 0.20];
-O2 = [stone_center_x; 0.00];
+% Geometric construction constants (Fig. 5 in the paper)
+l1   = params.l1;       % distance from stance foot to O1 along +x
+d2   = params.d2;       % vertical offset defining O2 circle
 
-% Swing foot kinematics
+% --- Kinematics (use stance & swing feet) ---
+% You need both stance-foot and swing-foot positions to form:
+%   lf(q) = x_sw - x_st   (step length along x)
+%   hf(q) = z_sw - z_ground (swing foot height; typically z_sw if ground z=0)
+
 [~, p_sw, ~, ~, ~, ~] = rabbit_kinematics(q, p);
-J_sw = J_swing(q, p);
-Jdot_sw_dq = Jdotdq_swing(q, dq, p);
+J_sw        = J_swing(q, p);
+Jdot_sw_dq  = Jdotdq_swing(q, dq, p);
 
-x_sw = p_sw(1);
-z_sw = p_sw(2);
+% If you have a stance-foot kinematics function, use it; otherwise replace
+% x_st/z_st with your stance foot position variables.
+p_st        = p_stance(q,p);           % <-- YOU MUST PROVIDE THIS
+J_st        = J_stance(q,p);           % <-- YOU MUST PROVIDE THIS
+Jdot_st_dq  = Jdotdq_stance(q,dq,p);   % <-- YOU MUST PROVIDE THIS
 
-% Barrier functions
-h1 = R1^2 - ((x_sw - O1(1))^2 + (z_sw - O1(2))^2);
-h2 = ((x_sw - O2(1))^2 + (z_sw - O2(2))^2) - R2^2;
+x_sw = p_sw(1);   z_sw = p_sw(2);
+x_st = p_st(1);   z_st = p_st(2);
 
-% Gradients wrt swing-foot position
-grad_h1 = [2*(O1(1) - x_sw), 2*(O1(2) - z_sw)];
-grad_h2 = [2*(x_sw - O2(1)), 2*(z_sw - O2(2))];
+% lf, hf (Fig. 4)
+lf = x_sw - x_st;           % step length (x direction)
+hf = z_sw - 0.0;            % swing foot height above ground (ground z=0)
+
+% Jacobians for [lf; hf] wrt q: 2xN
+% lf_dot = (Jsw_x - Jst_x)*dq
+% hf_dot = (Jsw_z)*dq  (if ground is fixed)
+E = [1 0; 0 1]; % selecting x,z from your 2D foot position [x;z]
+Jlf = (E(1,:)*J_sw) - (E(1,:)*J_st);   % 1xN
+Jhf = (E(2,:)*J_sw);                   % 1xN  (z of swing)
+J_lfhf = [Jlf; Jhf];                   % 2xN
+
+v_lfhf = J_lfhf * dq;                  % [lf_dot; hf_dot]
+
+% Second derivative pieces for [lf; hf]:
+% a = Jdot*dq + J*ddq
+% ddq = D_inv*(B*u - H_dyn)
+Jdot_lf_dq = (E(1,:)*Jdot_sw_dq) - (E(1,:)*Jdot_st_dq);   % 1x1
+Jdot_hf_dq = (E(2,:)*Jdot_sw_dq);                         % 1x1
+
+% Drift acceleration for [lf; hf]
+a_lfhf_drift = [Jdot_lf_dq; Jdot_hf_dq] - J_lfhf * D_inv * H_dyn;  % 2x1
+% Control influence for [lf; hf]
+a_lfhf_ctrl  = J_lfhf * D_inv * B;                                  % 2xm
+
+% ---------------------------------------------------------------------
+% Step-length barrier functions (paper eq. 31)
+% Using:
+%   O1F = (l1 + lf)^2 + hf^2
+%   R1  = (l1 + lmax)^2      (NOTE: squared to match O1F)
+%
+%   O2F = (d2 + hf)^2 + (lf - lmin/2)^2
+%   R2  = d2^2 + (lmin/2)^2
+%
+% h1 = R1 - O1F >= 0
+% h2 = O2F - R2 >= 0
+% ---------------------------------------------------------------------
+
+O1F = (l1 + lf)^2 + hf^2;
+R1  = (l1 + lmax)^2;                  % squared radius
+h1  = R1 - O1F;
+
+O2F = (d2 + hf)^2 + (lf - 0.5*lmin)^2;
+R2  = d2^2 + (0.5*lmin)^2;
+h2  = O2F - R2;
+
+% Gradients wrt [lf; hf]
+% h1 = R1 - (l1+lf)^2 - hf^2
+grad_h1_lfhf = [ -2*(l1 + lf),  -2*hf ];                 % 1x2
+% h2 = (d2+hf)^2 + (lf-lmin/2)^2 - R2
+grad_h2_lfhf = [  2*(lf - 0.5*lmin),  2*(d2 + hf) ];     % 1x2
 
 % First derivatives
-h1_dot = grad_h1 * J_sw * dq;
-h2_dot = grad_h2 * J_sw * dq;
+h1_dot = grad_h1_lfhf * v_lfhf;
+h2_dot = grad_h2_lfhf * v_lfhf;
+
+% Hessians wrt [lf; hf] (constant)
+H1 = [-2  0;
+       0 -2];
+H2 = [ 2  0;
+       0  2];
+
+% Second derivatives:
+% h_ddot = grad*h * a + v' * Hessian * v
+h1_ddot_drift = grad_h1_lfhf * a_lfhf_drift + (v_lfhf.' * H1 * v_lfhf);
+h2_ddot_drift = grad_h2_lfhf * a_lfhf_drift + (v_lfhf.' * H2 * v_lfhf);
+
+h1_ddot_ctrl  = grad_h1_lfhf * a_lfhf_ctrl;   % 1xm
+h2_ddot_ctrl  = grad_h2_lfhf * a_lfhf_ctrl;   % 1xm
 
 % ---------------------------------------------------------------------
-% HOCBF construction
-% We use:
-%   psi1 = h_dot + alpha1*h
-%   psi2 = psi1_dot + alpha2*psi1 >= 0
-%
-% This means we need terms of the form:
-%   h_ddot = Lf^2 h + LgLf h * u
-%
-% For implementation, we approximate the second derivative contribution
-% through swing-foot acceleration dynamics.
+% HOCBF (relative degree 2) constraints:
+% psi1 = h_dot + alpha1*h
+% psi2 = psi1_dot + alpha2*psi1 >= 0
+% => h_ddot + (alpha1+alpha2)*h_dot + alpha1*alpha2*h >= 0
 % ---------------------------------------------------------------------
-
 alpha1 = 10;
 alpha2 = 20;
 
-% Swing foot velocity
-v_sw = J_sw * dq;   % 2x1
+k1 = (alpha1 + alpha2);
+k0 = (alpha1 * alpha2);
 
-% Swing foot acceleration drift term:
-% a_sw = Jdot*qdot + J*ddq
-% ddq = D^-1 (B*u - H_dyn)
-% so drift acceleration = Jdot*qdot - J*D^-1*H_dyn
-a_sw_drift = Jdot_sw_dq - J_sw * D_inv * H_dyn;
-
-% The control influence on swing-foot acceleration:
-a_sw_ctrl = J_sw * D_inv * B;
-
-% h_ddot = grad_h * a_sw + v' * Hessian(h) * v
-% For squared-distance barriers, Hessian terms are constant:
-%   h1 = R1^2 - ||p-O1||^2  => Hessian = -2*I
-%   h2 = ||p-O2||^2 - R2^2  => Hessian = +2*I
-%
-% Therefore:
-h1_ddot_drift = grad_h1 * a_sw_drift - 2 * (v_sw' * v_sw);
-h2_ddot_drift = grad_h2 * a_sw_drift + 2 * (v_sw' * v_sw);
-
-h1_ddot_ctrl = grad_h1 * a_sw_ctrl;
-h2_ddot_ctrl = grad_h2 * a_sw_ctrl;
-
-% Since h_ddot = h_ddot_drift + h_ddot_ctrl*u
-% and psi2 >= 0 gives:
-%   h_ddot + alpha2*h_dot + alpha1*h >= 0
-%
-% So constraint becomes:
-%   (h_ddot_ctrl) u >= -h_ddot_drift - alpha2*h_dot - alpha1*h
-
+% Inequalities in standard QP form A*u <= b:
+% h_ddot_ctrl*u >= -h_ddot_drift - k1*h_dot - k0*h
+% => -h_ddot_ctrl*u <= h_ddot_drift + k1*h_dot + k0*h
 A_cbf = -[h1_ddot_ctrl;
           h2_ddot_ctrl];
 
-b_cbf = [h1_ddot_drift + alpha2*h1_dot + alpha1*h1;
-         h2_ddot_drift + alpha2*h2_dot + alpha1*h2];
+b_cbf = [h1_ddot_drift + k1*h1_dot + k0*h1;
+         h2_ddot_drift + k1*h2_dot + k0*h2];
 
 % ---------------------------------------------------------------------
 % 3. Quadratic Program
