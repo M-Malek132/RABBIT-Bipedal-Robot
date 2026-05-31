@@ -1,5 +1,5 @@
 function animate_rabbit(x_traj, params)
-
+    
     figure('Color','w');
     axis equal; grid on; hold on;
     xlabel('X'); ylabel('Z');
