@@ -38,9 +38,9 @@ fprintf('\nStarting single-step simulation...\n');
 tspan = [0 0.8];
 
 options = odeset(...
-    'RelTol', 1e-3, ...       % default 1e-3, but check yours
-    'AbsTol', 1e-4, ...       % loosen if too tight
-    'MaxStep', 0.01, ...      % cap step size to 10ms
+    'RelTol', 1e-2, ...       % default 1e-3, but check yours
+    'AbsTol', 1e-2, ...       % loosen if too tight
+    'MaxStep', 0.05, ...      % cap step size to 10ms
     'Events', @(t,x) rabbit_impact_event(t, x, params));
 
 %% --------------------------------------------------------
