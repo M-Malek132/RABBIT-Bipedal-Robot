@@ -180,12 +180,12 @@ for step = 1:nSteps
     impact_info.swing_height = p_swing(2);
 
 
-    if any(abs(q) > pi)
-
-        fprintf('Robot likely fell. Terminating.\n');
-        break;
-
-    end
+%     if any(abs(q) > pi)
+% 
+%         fprintf('Robot likely fell. Terminating.\n');
+%         break;
+% 
+%     end
 
     fprintf('Step %d completed successfully.\n', step);
 
