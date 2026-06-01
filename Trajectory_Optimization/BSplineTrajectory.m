@@ -1,23 +1,21 @@
 classdef BSplineTrajectory < handle
     % B-spline virtual constraints for RABBIT bipedal robot
     %
-    % Defines desired trajectories for actuated joints as B-spline
-    % functions of the phase variable (torso angle).
+    % Phase variable: theta = q1 + 0.5*q3  (stance hip + 0.5*swing hip)
+    % Normalized: s = (theta - theta0) / (thetaf - theta0)
     %
-    % Phase: s = (qt - theta0) / (thetaf - theta0)
     % Virtual constraint: y = q_actuated - h_d(s)
     
     properties
         n           % number of data points (CPs = n+1)
         p           % B-spline degree
-        theta0      % torso angle at start of step
-        thetaf      % torso angle at end of step
+        theta0      % phase variable at start of step
+        thetaf      % phase variable at end of step
         CP          % (n+1) x 4 control points matrix
     end
     
     methods
         function obj = BSplineTrajectory(n, p, theta0, thetaf)
-            % Constructor
             obj.n = n;
             obj.p = p;
             obj.theta0 = theta0;
@@ -25,39 +23,40 @@ classdef BSplineTrajectory < handle
             obj.CP = zeros(n+1, 4);
         end
         
+        function theta = phase_variable(obj, q)
+            % Compute raw phase variable (same as working controller)
+            % theta = q1 + 0.5*q3 = q(4) + 0.5*q(6)
+            theta = q(4) + 0.5 * q(6);
+        end
+        
         function s = phase(obj, q)
-            % Compute normalized phase variable
-            % q: full state [x; z; qt; q1; q2; q3; q4]
-            qt = q(3);
-            s = (qt - obj.theta0) / (obj.thetaf - obj.theta0);
+            % Compute normalized phase variable s ∈ [0,1]
+            theta = obj.phase_variable(q);
+            s = (theta - obj.theta0) / (obj.thetaf - obj.theta0);
             s = min(max(s, 0), 1);
         end
         
         function ds = phase_derivative(obj, q, dq)
             % Compute time derivative of phase variable
-            dqt = dq(3);
-            ds = dqt / (obj.thetaf - obj.theta0);
+            % dtheta/dt = dq1 + 0.5*dq3 = dq(4) + 0.5*dq(6)
+            dtheta = dq(4) + 0.5 * dq(6);
+            ds = dtheta / (obj.thetaf - obj.theta0);
         end
         
         function hd = evaluate(obj, s)
             % Evaluate desired joint angles at phase s
-            % Returns 4x1 vector [q1_d; q2_d; q3_d; q4_d]
             N = BSpline(obj.n, obj.p, s);
-            hd = obj.CP' * N';  % 4x1
+            hd = obj.CP' * N';
         end
         
         function dhd = evaluate_derivative(obj, s)
             % Evaluate derivative of desired angles w.r.t. phase s
-            % Returns 4x1 vector
             dN = BSpline_derivative(obj.n, obj.p, s);
-            dhd = obj.CP' * dN';  % 4x1
+            dhd = obj.CP' * dN';
         end
         
         function [y, dy] = virtual_constraint(obj, q, dq)
             % Compute virtual constraint and its derivative
-            % y = q_act - h_d(s)
-            % dy = dq_act - dh_d/ds * ds/dt
-            
             s = obj.phase(q);
             ds = obj.phase_derivative(q, dq);
             
@@ -84,22 +83,18 @@ classdef BSplineTrajectory < handle
         end
         
         function x = get_optimization_vector(obj)
-            % Pack control points into vector for optimization
             x = obj.CP(:);
         end
         
         function set_from_optimization_vector(obj, x)
-            % Unpack optimization vector into control points
             obj.CP = reshape(x, obj.n+1, 4);
         end
         
         function n_vars = num_variables(obj)
-            % Number of optimization variables
             n_vars = (obj.n + 1) * 4;
         end
         
         function plot(obj)
-            % Plot desired trajectories vs phase
             s_vec = linspace(0, 1, 200);
             hd = zeros(4, 200);
             for i = 1:200
