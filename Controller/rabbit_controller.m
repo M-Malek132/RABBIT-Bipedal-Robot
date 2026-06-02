@@ -5,7 +5,7 @@ nq = 7;
 q  = x(1:nq);
 dq = x(nq+1:end);
 
-theta = q(4) + 0.5*q(6);
+theta = q(4) + 0.0*q(6);
 
 theta0 = -0.3;
 thetaf = 0.3;
