@@ -205,7 +205,7 @@ par = packParameters(p);
 q_num  = zeros(7,1);
 dq_num = zeros(7,1);
 
-q_num(6,1) = pi/2;
+
 
 D_num = D_matrix(q_num,par);
 C_num = C_vector(q_num,dq_num,par);
