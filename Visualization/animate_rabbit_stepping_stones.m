@@ -1,4 +1,4 @@
-function animate_rabbit(x_traj, params)
+function animate_rabbit_stepping_stones(x_traj, params)
 
     figure('Color','w');
     axis equal; grid on; hold on;
@@ -6,7 +6,7 @@ function animate_rabbit(x_traj, params)
     title('RABBIT 5-Link Walker with Discrete Foot Placement');
     view(2);
 
-    filename = 'rabbit_animation.gif';
+    filename = 'Results/rabbit_animation.gif';
 
     %==============================
     % Initialize Plot Handles

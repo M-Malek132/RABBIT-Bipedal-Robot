@@ -6,7 +6,7 @@ function animate_rabbit(x_traj, params)
     title('RABBIT 5-Link Walker');
     view(2);
 
-    filename = 'rabbit_animation.gif';
+    filename = 'Results/rabbit_animation.gif';
 
     %==============================
     % Initialize Plot Handles
