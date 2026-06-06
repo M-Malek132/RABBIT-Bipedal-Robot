@@ -156,8 +156,8 @@ for step = 1:nSteps
     fprintf('Post-impact state:\n');
     fprintf('  q  = [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n', x_current(1:7));
     fprintf('  dq = [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n', x_current(8:14));
-    fprintf('  Torso height: %.4f m\n', x_current(2)); 
-    fprintf('  Forward vel:  %.4f m/s\n', x_current(8)); 
+    fprintf('  Torso height: %.4f m\n', x_current(2));
+    fprintf('  Forward vel:  %.4f m/s\n', x_current(8));
     %% ----------------------------------------------------
     % Update Time Offset
     % -----------------------------------------------------
@@ -168,20 +168,24 @@ for step = 1:nSteps
     % Fall Detection
     % -----------------------------------------------------
 
-    nq = round(size(impact_info.state,1)/2);
-    q_minus = impact_info.state(1:nq);
-
-    [~, p_swing, ~, ~, ~, ~] = rabbit_kinematics(q_minus, packParameters(params));
+    if ~isempty(impact_info.state)
+        nq = round(size(impact_info.state,1)/2);
+        q_minus = impact_info.state(1:nq);
+        [~, p_swing, ~, ~, ~, ~] = rabbit_kinematics(q_minus, packParameters(params));
+        impact_info.swing_height = p_swing(2);
+    else
+        impact_info.swing_height = NaN;
+    end
 
     impact_info.swing_height = p_swing(2);
 
 
-    if any(abs(q) > pi)
-
-        fprintf('Robot likely fell. Terminating.\n');
-        break;
-
-    end
+%     if any(abs(q) > pi)
+% 
+%         fprintf('Robot likely fell. Terminating.\n');
+%         break;
+% 
+%     end
 
     fprintf('Step %d completed successfully.\n', step);
 

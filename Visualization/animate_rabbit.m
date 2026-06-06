@@ -1,12 +1,25 @@
 function animate_rabbit(x_traj, params)
-
+    
     figure('Color','w');
     axis equal; grid on; hold on;
     xlabel('X'); ylabel('Z');
     title('RABBIT 5-Link Walker');
     view(2);
 
+<<<<<<< HEAD
     filename = 'Results/rabbit_animation.gif';
+=======
+    % Create 'result' folder if it doesn't exist
+    result_folder = 'Results';
+    if ~exist(result_folder, 'dir')
+        mkdir(result_folder);
+        fprintf('Created folder: %s\n', result_folder);
+    end
+
+    % Save GIF in the result folder
+    filename = fullfile(result_folder, 'rabbit_animation.gif');
+
+>>>>>>> Trajectory-Optimization
 
     %==============================
     % Initialize Plot Handles
@@ -77,4 +90,6 @@ function animate_rabbit(x_traj, params)
             imwrite(A, map, filename, 'gif', 'WriteMode', 'append', 'DelayTime', 0.03);
         end
     end
+    
+    fprintf('Animation saved to: %s\n', filename);
 end
