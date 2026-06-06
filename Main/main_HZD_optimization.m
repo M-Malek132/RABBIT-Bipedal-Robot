@@ -1,117 +1,146 @@
+%% ============================================================
+%  main_HZD_optimization.m
+%  HZD Gait Optimization for RABBIT (7-DOF floating-base model)
+%
+%  Coordinates:  q = [px, pz, qt, q1, q2, q3, q4]'
+%    px, pz  : base (torso) position
+%    qt      : torso absolute angle
+%    q1, q2  : stance hip / knee angles
+%    q3, q4  : swing  hip / knee angles
+%
+%  Actuation:    u = [u1, u2, u3, u4]'  (q1..q4 are actuated)
+%
+%  Dependencies (all already in your repo):
+%    Model/parameters.m
+%    Dynamics/D_matrix.m, C_vector.m, G_vector.m, input_matrix.m
+%    Model/rabbit_kinematics.m
+%    Contact/rabbit_impact_map.m, rabbit_impact_event.m
+%    Reset_Map/rabbit_reset_map.m
+%    Controller/rabbit_virtual_constraints.m  (if you want to reuse it)
+%
+%  NEW files this script depends on (provided alongside this file):
+%    hzd_closedLoopDynamics.m
+%    hzd_simulateOneStep.m
+%    hzd_virtualConstraints.m
+%    hzd_h0_outputs.m
+%    hzd_phaseVariable.m
+%    hzd_objectiveHZD.m
+%    hzd_constraintsHZD.m
+%    hzd_unpackDecisionVars.m
+%    hzd_bezier.m
+%    hzd_plotResults.m
+%% ============================================================
+
 clear; clc; close all;
 
-% Get the directory of the current script
-current_dir = fileparts(mfilename('fullpath'));
+% ---- make sure repo is on path --------------------------------
+% (startup.m already does this; call it if needed)
+if ~exist('parameters', 'file')
+    run(fullfile(fileparts(which('main_HZD_optimization')), '..', 'startup.m'));
+end
 
-% Get the parent directory
-parent_dir = fileparts(current_dir);
+%% ---- Robot & model dimensions --------------------------------
+params      = parameters();      % load RABBIT physical parameters
+model.nq    = 7;                 % q = [px pz qt q1 q2 q3 q4]
+model.nu    = 4;                 % actuated: q1 q2 q3 q4
+model.g     = params.g;
+model.params = params;           % pass through to all sub-functions
 
-% Add parent directory and all its subfolders to MATLAB path
-addpath(genpath(parent_dir));
+%% ---- Optimization settings -----------------------------------
+opt.v_des          = 0.5;        % desired average walking speed [m/s]
+opt.M              = 5;          % Bezier polynomial degree
+opt.ny             = model.nu;   % number of virtual constraints (= nu)
+opt.nCoeff         = opt.M + 1;
+opt.nAlpha         = opt.ny * opt.nCoeff;
 
-%% ============================================================
-%  HZD Gait Optimization Template
-%  ------------------------------------------------------------
-%  This script optimizes virtual constraints for a walking robot
-%  using the Hybrid Zero Dynamics framework.
-%% ============================================================
+opt.mu             = 0.6;        % ground friction coefficient
+opt.hipHeightMin   = 0.55;       % minimum hip height [m]
 
-%% Robot and gait parameters
+opt.Tmin           = 0.25;       % step duration bounds [s]
+opt.Tmax           = 1.0;
 
-model.nq = 5;          % number of generalized coordinates
-model.nu = 4;          % number of actuators
-model.g  = 9.81;
+opt.uMax           =  80;        % joint torque limits [Nm]
+opt.uMin           = -80;
 
-% Desired average walking speed
-opt.v_des = 0.8;       % m/s
+% Phase variable limits (theta at start / end of step)
+% theta = c'*q;  see hzd_phaseVariable.m for definition.
+% These should bracket one full step; tune if optimiser fails.
+opt.thetaStart     = -0.20;
+opt.thetaEnd       =  0.20;
 
-% Bezier polynomial degree
-opt.M = 6;
+% Joint angle limits (for all 7 DOF; px/pz limits are large)
+opt.qMin = [-5; -5;  -pi; -pi/2; -pi; -pi/2; -pi];
+opt.qMax = [ 5;  5;   pi;  pi/2;   0;  pi/2;    0];
+% NOTE: knee angles (q2, q4) are negative on RABBIT when bent.
+%       Adjust the above to match your sign convention.
 
-% Number of outputs
-opt.ny = model.nu;
+% Controller gains (for the inner feedback linearisation loop)
+opt.Kp = 200;
+opt.Kd =  30;
 
-% Number of Bezier coefficients per output
-opt.nCoeff = opt.M + 1;
+%% ---- Initial guess -------------------------------------------
+% Reasonable flat-footed standing pose for RABBIT
+q0_init  = [0.00;   % px  – doesn't matter for periodicity
+            0.90;   % pz  – torso ~0.9 m above ground
+           -0.05;   % qt  – torso slightly backward
+           -0.20;   % q1  – stance hip flexed
+           -0.40;   % q2  – stance knee bent
+            0.20;   % q3  – swing  hip extended
+           -0.30];  % q4  – swing  knee slightly bent
 
-% Total number of alpha parameters
-opt.nAlpha = opt.ny * opt.nCoeff;
+dq0_init = [0.50;   % px_dot  – forward walking speed
+            0.00;
+            0.00;
+            0.00;
+            0.00;
+            0.00;
+            0.00];
 
-% Friction coefficient
-opt.mu = 0.6;
-
-% Minimum hip height
-opt.hipHeightMin = 0.55;
-
-% Step time bounds
-opt.Tmin = 0.25;
-opt.Tmax = 1.0;
-
-% Torque bounds
-opt.uMax = 80;         % Nm
-opt.uMin = -80;        % Nm
-
-% Joint limits, example values
-opt.qMin = [-pi; -pi; -pi; -pi; -pi];
-opt.qMax = [ pi;  pi;  pi;  pi;  pi];
-
-%% Initial guess
-
-% Initial Bezier coefficients
+% Initial Bezier coefficients: shape a smooth ramp for each output
 alpha0 = zeros(opt.ny, opt.nCoeff);
+alpha0(1,:) = linspace(-0.20,  0.20, opt.nCoeff);  % q1 trajectory
+alpha0(2,:) = linspace(-0.40, -0.25, opt.nCoeff);  % q2 trajectory
+alpha0(3,:) = linspace( 0.20, -0.20, opt.nCoeff);  % q3 trajectory
+alpha0(4,:) = linspace(-0.30, -0.25, opt.nCoeff);  % q4 trajectory
 
-% Example initial guess
-% You should replace this with a reasonable pose trajectory
-alpha0(1,:) = linspace( 0.2, -0.2, opt.nCoeff);
-alpha0(2,:) = linspace(-0.3,  0.3, opt.nCoeff);
-alpha0(3,:) = linspace(-0.5, -0.2, opt.nCoeff);
-alpha0(4,:) = linspace(-0.2, -0.6, opt.nCoeff);
+T0 = 0.50;   % initial step duration guess
 
+%% ---- Decision variable vector --------------------------------
+% z = [alpha(:); q0(1..nq); dq0(1..nq); T]
 alpha0_vec = alpha0(:);
+z0 = [alpha0_vec; q0_init; dq0_init; T0];
 
-% Initial condition after impact
-q0 = [0.1; -0.2; -0.3; -0.4; 0.2];
-dq0 = [0.5; -0.2; 0.1; -0.1; 0.3];
-
-% Initial step time
-T0 = 0.6;
-
-% Decision variable:
-% z = [alpha(:); q0; dq0; T]
-z0 = [alpha0_vec; q0; dq0; T0];
-
-%% Bounds
-
-lb_alpha = -5 * ones(opt.nAlpha,1);
-ub_alpha =  5 * ones(opt.nAlpha,1);
+%% ---- Bounds --------------------------------------------------
+lb_alpha = -8 * ones(opt.nAlpha, 1);
+ub_alpha =  8 * ones(opt.nAlpha, 1);
 
 lb_q  = opt.qMin;
 ub_q  = opt.qMax;
 
-lb_dq = -10 * ones(model.nq,1);
-ub_dq =  10 * ones(model.nq,1);
+lb_dq = -15 * ones(model.nq, 1);
+ub_dq =  15 * ones(model.nq, 1);
 
-lb_T = opt.Tmin;
-ub_T = opt.Tmax;
+lb = [lb_alpha; lb_q; lb_dq; opt.Tmin];
+ub = [ub_alpha; ub_q; ub_dq; opt.Tmax];
 
-lb = [lb_alpha; lb_q; lb_dq; lb_T];
-ub = [ub_alpha; ub_q; ub_dq; ub_T];
-
-%% Optimization options
-
+%% ---- fmincon options -----------------------------------------
 options = optimoptions('fmincon', ...
-    'Algorithm', 'sqp', ...
-    'Display', 'iter', ...
-    'MaxIterations', 300, ...
-    'MaxFunctionEvaluations', 2e5, ...
-    'ConstraintTolerance', 1e-5, ...
-    'OptimalityTolerance', 1e-5, ...
-    'StepTolerance', 1e-8);
+    'Algorithm',              'sqp', ...
+    'Display',                'iter', ...
+    'MaxIterations',          500, ...
+    'MaxFunctionEvaluations', 5e5, ...
+    'ConstraintTolerance',    1e-4, ...
+    'OptimalityTolerance',    1e-5, ...
+    'StepTolerance',          1e-9, ...
+    'FiniteDifferenceStepSize', 1e-6);
 
-%% Run optimization
+%% ---- Run optimisation ----------------------------------------
+fprintf('\n=== Starting HZD gait optimisation ===\n');
+fprintf('Decision vars: %d  (alpha:%d  q0:%d  dq0:%d  T:1)\n', ...
+    length(z0), opt.nAlpha, model.nq, model.nq);
 
-problem.objective = @(z) objectiveHZD(z, model, opt);
-problem.nonlcon   = @(z) constraintsHZD(z, model, opt);
+problem.objective = @(z) hzd_objectiveHZD(z, model, opt);
+problem.nonlcon   = @(z) hzd_constraintsHZD(z, model, opt);
 problem.x0        = z0;
 problem.lb        = lb;
 problem.ub        = ub;
@@ -120,33 +149,35 @@ problem.options   = options;
 
 [zStar, JStar, exitflag, output] = fmincon(problem);
 
-disp('Optimization complete.');
-disp(['Cost = ', num2str(JStar)]);
-disp(['Exit flag = ', num2str(exitflag)]);
+fprintf('\n=== Optimisation complete ===\n');
+fprintf('Cost      = %.6f\n', JStar);
+fprintf('Exit flag = %d\n',   exitflag);
+fprintf('Message   : %s\n',   output.message);
 
-%% Extract solution
+%% ---- Extract & display solution ------------------------------
+[alphaStar, q0Star, dq0Star, TStar] = hzd_unpackDecisionVars(zStar, model, opt);
 
-[alphaStar, q0Star, dq0Star, TStar] = unpackDecisionVariables(zStar, model, opt);
-
-disp('Optimized step time:');
-disp(TStar);
-
-disp('Optimized Bezier coefficients:');
+fprintf('\nOptimised step duration: %.4f s\n', TStar);
+fprintf('Optimised Bezier coefficients:\n');
 disp(alphaStar);
 
-%% Simulate optimized gait
-
-x0Star = [q0Star; dq0Star];
-
-simOpt.alpha = alphaStar;
-simOpt.T = TStar;
-simOpt.Kp = 100;
-simOpt.Kd = 20;
+%% ---- Simulate optimised gait (5 steps) -----------------------
+simOpt.alpha  = alphaStar;
+simOpt.T      = TStar;
+simOpt.Kp     = opt.Kp;
+simOpt.Kd     = opt.Kd;
 
 nSteps = 5;
+x0Star = [q0Star; dq0Star];
 
-[tAll, xAll, uAll] = simulateHybridWalking(x0Star, model, opt, simOpt, nSteps);
+[tAll, xAll, uAll] = hzd_simulateNSteps(x0Star, model, opt, simOpt, nSteps);
 
-%% Plot results
+%% ---- Plot ----------------------------------------------------
+hzd_plotResults(tAll, xAll, uAll, model, opt);
 
-plotHZDResults(tAll, xAll, uAll, model, opt);
+%% ---- Save results --------------------------------------------
+timestamp = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
+save(fullfile('..','Results', ['hzd_result_', timestamp, '.mat']), ...
+    'alphaStar', 'q0Star', 'dq0Star', 'TStar', 'tAll', 'xAll', 'uAll', ...
+    'model', 'opt', 'JStar');
+fprintf('Results saved.\n');
