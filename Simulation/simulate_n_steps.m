@@ -65,11 +65,12 @@ for step = 1:nSteps
     % -----------------------------------------------------
 
     try
-
+        global CURRENT_STEP;
         [t_step, x_step, impact_info] = simulate_one_step( ...
             x_current, ...
             params, ...
             controller);
+        CURRENT_STEP = CURRENT_STEP + 1;
 
     catch ME
 
@@ -152,6 +153,11 @@ for step = 1:nSteps
     fprintf('Post-impact stance foot height: %.6f\n', p_st(2));
     fprintf('Post-impact swing foot height : %.6f\n', p_sw(2));
 
+    fprintf('Post-impact state:\n');
+    fprintf('  q  = [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n', x_current(1:7));
+    fprintf('  dq = [%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f]\n', x_current(8:14));
+    fprintf('  Torso height: %.4f m\n', x_current(2)); 
+    fprintf('  Forward vel:  %.4f m/s\n', x_current(8)); 
     %% ----------------------------------------------------
     % Update Time Offset
     % -----------------------------------------------------

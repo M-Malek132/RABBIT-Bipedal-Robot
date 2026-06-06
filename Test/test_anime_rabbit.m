@@ -40,5 +40,5 @@ x_traj = [q_traj; zeros(7, N)];
 
 % Run Animation
 disp('Starting Animation Test...');
-animate_rabbit(x_traj);
+animate_rabbit_stepping_stones(x_traj',parameters());
 disp('Animation Finished.');

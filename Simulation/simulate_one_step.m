@@ -35,11 +35,12 @@ fprintf('\nStarting single-step simulation...\n');
 % Simulation Settings
 % ---------------------------------------------------------
 
-tspan = [0 5];
+tspan = [0 0.8];
 
-options = odeset( ...
-    'RelTol', 1e-6, ...
-    'AbsTol', 1e-8, ...
+options = odeset(...
+    'RelTol', 1e-3, ...       % default 1e-3, but check yours
+    'AbsTol', 1e-4, ...       % loosen if too tight
+    'MaxStep', 0.01, ...      % cap step size to 10ms
     'Events', @(t,x) rabbit_impact_event(t, x, params));
 
 %% --------------------------------------------------------
@@ -65,10 +66,11 @@ try
         options);
 
 catch ME
-
-    fprintf('ODE integration failed.\n');
+    global CURRENT_STEP
+    fprintf('Integration failed at step %d: %s\n', CURRENT_STEP, ME.message);
+    fprintf('Initial state for this step:\n');
+    disp(x0);
     rethrow(ME);
-
 end
 
 %% --------------------------------------------------------

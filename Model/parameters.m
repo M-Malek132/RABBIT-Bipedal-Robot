@@ -20,7 +20,7 @@ p.IT = 0.2;
 p.g  = 9.81;
 
 % --- Generate Random Discrete Stepping Stones ---
-num_stones = 14;
+num_stones = 20;
 stones = zeros(num_stones + 2, 2);
 
 % Initial ground (covers starting stance foot safely)
