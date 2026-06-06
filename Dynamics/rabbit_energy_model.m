@@ -34,19 +34,19 @@ param = [m1 m2 mT l1 l2 lt I1 I2 IT g];
 %% =========================
 
 % stance thigh
-p1 = [ x + (l1/2)*sin(qt +q1);
+p1 = [ x - (l1/2)*sin(qt +q1);
        z - (l1/2)*cos(qt +q1) ];
 
 % stance shin
-p2 = [ x + l1*sin(qt +q1) + (l2/2)*sin(qt +q1+q2);
+p2 = [ x - l1*sin(qt +q1) - (l2/2)*sin(qt +q1+q2);
        z - l1*cos(qt +q1) - (l2/2)*cos(qt +q1+q2) ];
 
 % swing thigh
-p3 = [ x + (l1/2)*sin(qt +q3);
+p3 = [ x - (l1/2)*sin(qt +q3);
        z - (l1/2)*cos(qt +q3) ];
 
 % swing shin
-p4 = [ x + l1*sin(qt +q3) + (l2/2)*sin(qt +q3+q4);
+p4 = [ x - l1*sin(qt +q3) - (l2/2)*sin(qt +q3+q4);
        z - l1*cos(qt +q3) - (l2/2)*cos(qt +q3+q4) ];
 
 % torso
