@@ -85,7 +85,7 @@ try
              kneeViol(:); torqueHi(:); torqueLo(:)];
 
 catch ME
-    warning('hzd_constraintsHZD: %s', ME.message);
+    warning(ME.identifier, 'hzd_constraintsHZD: %s', ME.message);
     cineq = 1e6*ones(200,1);
     ceq   = 1e6*ones(30,1);
 end
