@@ -49,8 +49,8 @@ opt.Tmax         = 1.0;
 %% ---- Physical constraints -----------------------------------
 opt.mu           = 0.6;
 opt.hipHeightMin = 0.55;
-opt.uMax         =  80;
-opt.uMin         = -80;
+opt.uMax         =  150;
+opt.uMin         = -150;
 
 opt.qMin = [-5; -5;  -pi;  -pi/2; -pi;  -pi/2; -pi];
 opt.qMax = [ 5;  5;   pi;   pi/2;   0;   pi/2;    0];
