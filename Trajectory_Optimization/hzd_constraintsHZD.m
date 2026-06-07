@@ -15,6 +15,11 @@ nq     = model.nq;
 
 [CP, q0, dq0, T] = hzd_unpackDecisionVars(z, model, opt);
 
+[theta0, ~] = hzd_phaseVariable(q0, model);
+
+ceq = [ceq;
+    theta0 - opt.thetaStart];
+
 simOpt.CP = CP;
 simOpt.T  = T;
 simOpt.Kp = opt.Kp;
@@ -25,37 +30,42 @@ ceq   = [];
 
 try
     [t, x, u] = hzd_simulateOneStep([q0; dq0], model, opt, simOpt);
-
+    
     if any(isnan(x(:))) || any(isnan(u(:))) || length(t) < 3
         cineq = 1e6*ones(200,1); ceq = 1e6*ones(30,1); return;
     end
-
+    
     qStart  = x(1,   1:nq)';   dqStart = x(1,   nq+1:end)';
     qEnd    = x(end, 1:nq)';   dqEnd   = x(end, nq+1:end)';
-
+    
+    [thetaEnd, ~] = hzd_phaseVariable(qEnd, model);
+    
+    ceq = [ceq;
+        thetaEnd - opt.thetaEnd];
+    
     %% 1. Impact + relabelling
     xPlus      = rabbit_impact_map([qEnd; dqEnd], params);
     xRelabeled = rabbit_reset_map(xPlus, params);
     qRel  = xRelabeled(1:nq);
     dqRel = xRelabeled(nq+1:end);
-
+    
     %% 2. Periodicity
     ceq = [ceq; qRel - qStart; dqRel - dqStart];
-
+    
     %% 3. Speed
     kin_s   = rabbit_kinematics(qStart, params);
     kin_e   = rabbit_kinematics(qEnd,   params);
     stepLen = kin_e.swingFoot(1) - kin_s.swingFoot(1);
     ceq = [ceq; stepLen/T - opt.v_des];
-
+    
     %% 4. Foot height at impact
     ceq = [ceq; kin_e.swingFoot(2)];
-
+    
     %% 5. HZD invariance
     [y0,    dy0   ] = hzd_virtualConstraints(qStart, dqStart, CP, model, opt);
     [yPlus, dyPlus] = hzd_virtualConstraints(qRel,   dqRel,  CP, model, opt);
     ceq = [ceq; y0; dy0; yPlus; dyPlus];
-
+    
     %% 6. Path inequality constraints
     N = length(t);
     footClr   = zeros(N,1);
@@ -65,12 +75,12 @@ try
     jointHi   = zeros(N, nq);
     jointLo   = zeros(N, nq);
     kneeViol  = zeros(N,2);
-
+    
     for k = 1:N
         qk  = x(k, 1:nq)';
         uk  = u(k,:)';
         kin = rabbit_kinematics(qk, params);
-
+        
         footClr(k)     = -kin.swingFoot(2);
         hipViol(k)     = opt.hipHeightMin - kin.hip(2);
         jointHi(k,:)   = qk' - opt.qMax';
@@ -80,10 +90,10 @@ try
         torqueHi(k,:)  = uk' - opt.uMax;
         torqueLo(k,:)  = opt.uMin - uk';
     end
-
+    
     cineq = [footClr; hipViol; jointHi(:); jointLo(:); ...
-             kneeViol(:); torqueHi(:); torqueLo(:)];
-
+        kneeViol(:); torqueHi(:); torqueLo(:)];
+    
 catch ME
     warning(ME.identifier, 'hzd_constraintsHZD: %s', ME.message);
     cineq = 1e6*ones(200,1);
