@@ -1,0 +1,202 @@
+To keep the repository clean and consistent with its modular design, the **HZD optimization utilities should live inside `Trajectory_Optimization/`**, because that folder already contains:
+
+- `optimize_gait.m`
+- `direct_collocation.m`
+- `gait_constraints.m`
+- `rabbit_hzd_trajectory_optimization.m`
+
+Your new files are **trajectory optimization utilities**, not controllers or dynamics, so they belong there.
+
+Also keep the **entry script** in `Main/` so it matches the repo style (`main_walk.m`, `main_hzd.m`, etc.).
+
+---
+
+# Recommended Folder Placement
+
+```
+RABBIT-Bipedal-Robot
+│
+├── Main
+│   ├── main_HZD_optimization.m      % run optimization
+│   ├── main_animation.m
+│   ├── main_hzd.m
+│   └── ...
+│
+├── Trajectory_Optimization
+│   │
+│   ├── hzd_unpackDecisionVars.m
+│   ├── hzd_bezier.m
+│   ├── hzd_phaseVariable.m
+│   ├── hzd_h0_outputs.m
+│   ├── hzd_jacobian_h0.m
+│   ├── hzd_virtualConstraints.m
+│   │
+│   ├── hzd_closedLoopDynamics.m
+│   ├── hzd_footStrikeEvent.m
+│   ├── hzd_simulateOneStep.m
+│   ├── hzd_simulateNSteps.m
+│   │
+│   ├── hzd_objectiveHZD.m
+│   ├── hzd_constraintsHZD.m
+│   │
+│   └── hzd_plotResults.m
+│
+├── Dynamics
+│   ├── D_matrix.m
+│   ├── C_vector.m
+│   ├── G_vector.m
+│   ├── input_matrix.m
+│   └── ...
+│
+├── Contact
+│   ├── rabbit_impact_event.m
+│   ├── rabbit_impact_map.m
+│   └── ...
+│
+├── Reset_Map
+│   └── rabbit_reset_map.m
+│
+├── Model
+│   ├── parameters.m
+│   ├── rabbit_kinematics.m
+│   └── ...
+│
+├── Simulation
+│   ├── simulate_one_step.m
+│   ├── simulate_n_steps.m
+│   └── hybrid_simulation.m
+│
+└── Visualization
+    └── animate_rabbit.m
+```
+
+---
+
+# File Purpose in This Structure
+
+### Entry script
+`Main/main_HZD_optimization.m`
+
+Runs:
+
+- parameter loading
+- fmincon optimization
+- gait simulation
+- plotting
+
+---
+
+### HZD math utilities
+`Trajectory_Optimization/`
+
+- `hzd_bezier.m`
+- `hzd_phaseVariable.m`
+- `hzd_h0_outputs.m`
+- `hzd_jacobian_h0.m`
+- `hzd_virtualConstraints.m`
+
+These define the **HZD outputs and desired trajectories**.
+
+---
+
+### Simulation utilities
+
+Also in `Trajectory_Optimization/`:
+
+- `hzd_closedLoopDynamics.m`
+- `hzd_footStrikeEvent.m`
+- `hzd_simulateOneStep.m`
+- `hzd_simulateNSteps.m`
+
+They reuse existing repo functions:
+
+- `D_matrix`
+- `C_vector`
+- `G_vector`
+- `input_matrix`
+- `rabbit_kinematics`
+- `rabbit_impact_map`
+- `rabbit_reset_map`
+
+---
+
+### Optimization components
+
+Also in `Trajectory_Optimization/`:
+
+- `hzd_unpackDecisionVars.m`
+- `hzd_objectiveHZD.m`
+- `hzd_constraintsHZD.m`
+
+These implement the **fmincon problem**.
+
+---
+
+### Visualization
+
+`Trajectory_Optimization/hzd_plotResults.m`
+
+Plots:
+
+- joint angles
+- torques
+- swing foot height
+- phase variable
+
+---
+
+# MATLAB Path Requirement
+
+Your `startup.m` probably already adds subfolders.  
+If not, add:
+
+```matlab
+addpath(genpath(pwd));
+```
+
+so MATLAB sees:
+
+- `Trajectory_Optimization`
+- `Dynamics`
+- `Model`
+- `Contact`
+
+---
+
+# Resulting Call Graph
+
+```
+main_HZD_optimization
+        │
+        ├── fmincon
+        │     ├── hzd_objectiveHZD
+        │     └── hzd_constraintsHZD
+        │
+        └── hzd_simulateOneStep
+              │
+              ├── hzd_closedLoopDynamics
+              │      ├── D_matrix
+              │      ├── C_vector
+              │      ├── G_vector
+              │      └── input_matrix
+              │
+              ├── rabbit_kinematics
+              ├── rabbit_impact_map
+              └── rabbit_reset_map
+```
+
+---
+
+✅ This layout keeps:
+
+- **dynamics → Dynamics/**
+- **contact → Contact/**
+- **controllers → Controller/**
+- **optimization → Trajectory_Optimization/**
+- **scripts → Main/**
+
+which matches the design of the repo.
+
+---
+
+If you want, I can also show the **clean HZD data flow for this exact Rabbit model** (which joints should be outputs, correct phase variable, etc.). That will prevent most HZD bugs before you even run the optimizer.
