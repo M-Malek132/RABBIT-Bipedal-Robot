@@ -25,6 +25,7 @@ nu     = model.nu;
 
 [CP, q0, dq0, T] = hzd_unpackDecisionVars(z, model, opt);
 
+<<<<<<< HEAD
 fprintf('\n--- After unpacking z ---\n');
 fprintf('size(CP)  = [%d %d]\n', size(CP,1), size(CP,2));
 fprintf('size(q0)  = [%d %d]\n', size(q0,1), size(q0,2));
@@ -45,6 +46,12 @@ dq0 = dq0(:);
 x0 = [q0; dq0];
 
 fprintf('size(x0) = [%d %d]\n', size(x0,1), size(x0,2));
+=======
+[theta0, ~] = hzd_phaseVariable(q0, model);
+
+ceq = [ceq;
+    theta0 - opt.thetaStart];
+>>>>>>> aa216f4d7a6dd6cf2aedd29054e4b061d37b3595
 
 simOpt.CP = CP;
 simOpt.T  = T;
@@ -55,6 +62,7 @@ cineq = [];
 ceq   = [];
 
 try
+<<<<<<< HEAD
     fprintf('\n--- Calling hzd_simulateOneStep ---\n');
 
     [t, x, u] = hzd_simulateOneStep(x0, model, opt, simOpt);
@@ -122,29 +130,55 @@ try
     qEnd    = x(end, 1:nq).';
     dqEnd   = x(end, nq+1:2*nq).';
 
+=======
+    [t, x, u] = hzd_simulateOneStep([q0; dq0], model, opt, simOpt);
+    
+    if any(isnan(x(:))) || any(isnan(u(:))) || length(t) < 3
+        cineq = 1e6*ones(200,1); ceq = 1e6*ones(30,1); return;
+    end
+    
+    qStart  = x(1,   1:nq)';   dqStart = x(1,   nq+1:end)';
+    qEnd    = x(end, 1:nq)';   dqEnd   = x(end, nq+1:end)';
+    
+    [thetaEnd, ~] = hzd_phaseVariable(qEnd, model);
+    
+    ceq = [ceq;
+        thetaEnd - opt.thetaEnd];
+    
+>>>>>>> aa216f4d7a6dd6cf2aedd29054e4b061d37b3595
     %% 1. Impact + relabelling
 %     xPlus      = rabbit_impact_map([qEnd; dqEnd], p);
     xRelabeled = rabbit_reset_map([qEnd; dqEnd], params);
     qRel  = xRelabeled(1:nq);
+<<<<<<< HEAD
     dqRel = xRelabeled(nq+1:2*nq);
 
+=======
+    dqRel = xRelabeled(nq+1:end);
+    
+>>>>>>> aa216f4d7a6dd6cf2aedd29054e4b061d37b3595
     %% 2. Periodicity
     ceq = [ceq; qRel - qStart; dqRel - dqStart];
-
+    
     %% 3. Speed
     [~,swing_foot_s,~,~,~,~]    = rabbit_kinematics(qStart, p);
     [~,swing_foot_e,~,~,~,~]    = rabbit_kinematics(qEnd,   p);
     stepLen = swing_foot_e(1) - swing_foot_s(1);
     ceq = [ceq; stepLen/T - opt.v_des];
-
+    
     %% 4. Foot height at impact
+<<<<<<< HEAD
     ceq = [ceq; swing_foot_e(2)];
 
+=======
+    ceq = [ceq; kin_e.swingFoot(2)];
+    
+>>>>>>> aa216f4d7a6dd6cf2aedd29054e4b061d37b3595
     %% 5. HZD invariance
     [y0,    dy0   ] = hzd_virtualConstraints(qStart, dqStart, CP, model, opt);
     [yPlus, dyPlus] = hzd_virtualConstraints(qRel,   dqRel,  CP, model, opt);
     ceq = [ceq; y0; dy0; yPlus; dyPlus];
-
+    
     %% 6. Path inequality constraints
     N = size(x,1);
     footClr   = zeros(N,1);
@@ -154,13 +188,13 @@ try
     jointHi   = zeros(N, nq);
     jointLo   = zeros(N, nq);
     kneeViol  = zeros(N,2);
-
+    
     for k = 1:N
         qk = x(k,1:nq).';
         uk = u(k,:).';
 
         kin = rabbit_kinematics(qk, params);
-
+        
         footClr(k)     = -kin.swingFoot(2);
         hipViol(k)     = opt.hipHeightMin - kin.hip(2);
         jointHi(k,:)   = qk.' - opt.qMax.';
@@ -170,10 +204,14 @@ try
         torqueHi(k,:)  = uk.' - opt.uMax;
         torqueLo(k,:)  = opt.uMin - uk.';
     end
-
+    
     cineq = [footClr; hipViol; jointHi(:); jointLo(:); ...
         kneeViol(:); torqueHi(:); torqueLo(:)];
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> aa216f4d7a6dd6cf2aedd29054e4b061d37b3595
 catch ME
     fprintf(2, '\n[hzd_constraintsHZD ERROR]\n');
     fprintf(2, '%s\n', getReport(ME, 'extended', 'hyperlinks', 'off'));
