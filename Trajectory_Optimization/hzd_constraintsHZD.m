@@ -19,6 +19,7 @@ fprintf('model.nq = %d\n', model.nq);
 fprintf('model.nu = %d\n', model.nu);
 
 params = model.params;
+p = packParameters(params);
 nq     = model.nq;
 nu     = model.nu;
 
@@ -131,13 +132,13 @@ try
     ceq = [ceq; qRel - qStart; dqRel - dqStart];
 
     %% 3. Speed
-    kin_s   = rabbit_kinematics(qStart, p);
-    kin_e   = rabbit_kinematics(qEnd,   p);
-    stepLen = kin_e.swingFoot(1) - kin_s.swingFoot(1);
+    [~,swing_foot_s,~,~,~,~]    = rabbit_kinematics(qStart, p);
+    [~,swing_foot_e,~,~,~,~]    = rabbit_kinematics(qEnd,   p);
+    stepLen = swing_foot_e(1) - swing_foot_s(1);
     ceq = [ceq; stepLen/T - opt.v_des];
 
     %% 4. Foot height at impact
-    ceq = [ceq; kin_e.swingFoot(2)];
+    ceq = [ceq; swing_foot_e(2)];
 
     %% 5. HZD invariance
     [y0,    dy0   ] = hzd_virtualConstraints(qStart, dqStart, CP, model, opt);
