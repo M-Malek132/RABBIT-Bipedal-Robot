@@ -1,17 +1,21 @@
 function [theta, dtheta_dq] = hzd_phaseVariable(q, model)
-%HZD_PHASEVARIABLE  Phase variable for 7-DOF RABBIT — consistent with
-%                   BSplineTrajectory.phase_variable.
+%HZD_PHASEVARIABLE Posture-based phase variable for RABBIT.
 %
-%  q = [px, pz, qt, q1, q2, q3, q4]'   (7×1)
+% Coordinates:
+%   q = [px, pz, qt, q1, q2, q3, q4]'
 %
-%  theta = q(1) = px  (forward base position)
+% Phase:
+%   theta = -qt - q1 - 0.5*q2
 %
-%  This is monotonically increasing during a walking step and matches
-%  exactly the phase variable used inside BSplineTrajectory:
-%      theta = q(1);   ds = dq(1) / (thetaf - theta0)
-%
-%  opt.thetaStart and opt.thetaEnd are therefore px values [m].
+% MATLAB indexing:
+%   qt = q(3), q1 = q(4), q2 = q(5)
 
-theta       = q(1);
-dtheta_dq   = [1, 0, 0, 0, 0, 0, 0];   % 1×7 row vector
+    nq = model.nq;
+
+    theta = +q(3) + q(4) + 0.5*q(5);
+
+    dtheta_dq = zeros(1, nq);
+    dtheta_dq(3) = +1.0;
+    dtheta_dq(4) = +1.0;
+    dtheta_dq(5) = +0.5;
 end
