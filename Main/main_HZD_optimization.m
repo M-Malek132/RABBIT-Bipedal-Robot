@@ -34,12 +34,13 @@ opt.ny     = model.nu;     % 4 outputs
 
 opt.nCP_vars = (opt.n_bs + 1) * opt.ny;   % 6*4 = 24  (same count as Bezier M=5)
 
-% Phase variable:  theta = q(1) = px  (increases monotonically as robot walks)
-% Set these to the expected px range over one step.
-% For v_des = 0.5 m/s, T ~ 0.5 s  =>  step_length ~ 0.25 m
-% Start at 0, end ~ step_length.
-opt.thetaStart =  0.00;    % px at step start [m]  — adjust after first run
-opt.thetaEnd   =  0.30;    % px at step end   [m]  — adjust after first run
+% Phase variable:
+%   theta = -q(3) - q(4) - 0.5*q(5)
+%
+% These values are set later after q0_init and q_act_end are defined.
+% They are not step lengths.
+opt.thetaStart = [];
+opt.thetaEnd   = [];
 
 %% ---- Walking targets ----------------------------------------
 opt.v_des        = 0.5;    % desired average walking speed [m/s]
@@ -49,8 +50,8 @@ opt.Tmax         = 1.0;
 %% ---- Physical constraints -----------------------------------
 opt.mu           = 0.6;
 opt.hipHeightMin = 0.55;
-opt.uMax         =  80;
-opt.uMin         = -80;
+opt.uMax         =  150;
+opt.uMin         = -150;
 
 opt.qMin = [-5; -5;  -pi;  -pi/2; -pi;  -pi/2; -pi];
 opt.qMax = [ 5;  5;   pi;   pi/2;   0;   pi/2;    0];
@@ -61,30 +62,116 @@ opt.Kd =  30;
 
 %% ---- Initial guess -------------------------------------------
 % Control points: (n+1) rows × 4 columns  [q1 q2 q3 q4]
-% Initialise with a linear ramp from a plausible start to end pose.
-q_act_start = [-0.20; -0.40;  0.20; -0.30];   % [q1 q2 q3 q4] at step start
-q_act_end   = [ 0.20; -0.25; -0.20; -0.25];   % [q1 q2 q3 q4] at step end
+q_act_start = [-0.20; -0.40;  0.20; -0.30];
+q_act_end   = [ 0.20; -0.25; -0.20; -0.25];
 
 n_pts = opt.n_bs + 1;
 CP0 = zeros(n_pts, opt.ny);
+
 for j = 1:opt.ny
     CP0(:, j) = linspace(q_act_start(j), q_act_end(j), n_pts);
 end
-CP0_vec = CP0(:);   % column-major, length = (n+1)*4
 
-% Initial robot state
-q0_init  = [0.00; 0.90; -0.05; -0.20; -0.40;  0.20; -0.30];
-dq0_init = [0.50; 0.00;  0.00;  0.00;  0.00;  0.00;  0.00];
-T0       = 0.50;
+CP0_vec = CP0(:);
+
+% Initial robot configuration.
+q0_init = [0.00; 0.90; -0.05; q_act_start];
+
+% Set thetaStart from the actual initial configuration.
+theta0_init = -q0_init(3) - q0_init(4) - 0.5*q0_init(5);
+opt.thetaStart = theta0_init;
+
+% Estimate thetaEnd from approximate final shape.
+qt_end_guess = -0.05;
+qEnd_shape_guess = [0.30; 0.90; qt_end_guess; q_act_end];
+
+thetaEnd_guess = -qEnd_shape_guess(3) ...
+                 -qEnd_shape_guess(4) ...
+                 -0.5*qEnd_shape_guess(5);
+
+opt.thetaEnd = thetaEnd_guess;
+
+% Step duration guess.
+T0 = 0.50;
+
+% Initial velocity guess consistent with dy = 0.
+[~, dhd_dtheta0] = hzd_evalBSpline(opt.thetaStart, CP0, opt);
+
+% Choose phase speed.
+% If thetaEnd < thetaStart, use negative dtheta.
+if opt.thetaEnd < opt.thetaStart
+    dtheta0 = -1.0;
+else
+    dtheta0 =  1.0;
+end
+
+dq_act0 = dhd_dtheta0 * dtheta0;
+
+dpx0 = opt.v_des;
+dpz0 = 0.0;
+
+% Because theta_dot = -dq(3) - dq(4) - 0.5*dq(5)
+dqt0 = -(1 + dhd_dtheta0(1) + 0.5*dhd_dtheta0(2)) * dtheta0;
+
+dq0_init = [dpx0; dpz0; dqt0; dq_act0];
 
 z0 = [CP0_vec; q0_init; dq0_init; T0];
 
 %% ---- Variable bounds ----------------------------------------
-lb_CP = -pi * ones(opt.nCP_vars, 1);
-ub_CP =  pi * ones(opt.nCP_vars, 1);
 
-lb = [lb_CP;  opt.qMin; -15*ones(model.nq,1); opt.Tmin];
-ub = [ub_CP;  opt.qMax;  15*ones(model.nq,1); opt.Tmax];
+% Control-point bounds based on actuated joint limits.
+lb_CP_mat = repmat(opt.qMin(4:7).', n_pts, 1);
+ub_CP_mat = repmat(opt.qMax(4:7).', n_pts, 1);
+
+lb_CP = lb_CP_mat(:);
+ub_CP = ub_CP_mat(:);
+
+% Initial configuration bounds.
+q0_lb = opt.qMin;
+q0_ub = opt.qMax;
+
+% Fix horizontal translation gauge.
+q0_lb(1) = 0.0;
+q0_ub(1) = 0.0;
+
+% Floating-base height.
+q0_lb(2) = opt.hipHeightMin;
+q0_ub(2) = 1.15;
+
+% Torso angle.
+q0_lb(3) = -0.50;
+q0_ub(3) =  0.50;
+
+% Initial velocity bounds.
+dq0_lb = -10 * ones(model.nq, 1);
+dq0_ub =  10 * ones(model.nq, 1);
+
+% Forward velocity.
+dq0_lb(1) = 0.05;
+dq0_ub(1) = 1.50;
+
+% Vertical velocity.
+dq0_lb(2) = -1.00;
+dq0_ub(2) =  1.00;
+
+% Torso angular velocity.
+dq0_lb(3) = -6.00;
+dq0_ub(3) =  6.00;
+
+lb = [lb_CP; q0_lb; dq0_lb; opt.Tmin];
+ub = [ub_CP; q0_ub; dq0_ub; opt.Tmax];
+
+fprintf('\nInitial phase diagnostics:\n');
+fprintf('thetaStart = %.6f\n', opt.thetaStart);
+fprintf('thetaEnd   = %.6f\n', opt.thetaEnd);
+fprintf('Delta theta = %.6f\n', opt.thetaEnd - opt.thetaStart);
+fprintf('Initial dtheta = %.6f\n', dtheta0);
+
+x0_init = [q0_init; dq0_init];
+[y0, dy0, ~] = hzd_virtualConstraints(x0_init, CP0, model, opt);
+
+fprintf('Initial ||y||  = %.3e\n', norm(y0));
+fprintf('Initial ||dy|| = %.3e\n', norm(dy0));
 
 %% ---- fmincon ------------------------------------------------
 options = optimoptions('fmincon', ...
