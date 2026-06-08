@@ -6,6 +6,7 @@ function [dx, u] = hzd_closedLoopDynamics(t, x, model, opt, simOpt)
 
 nq     = model.nq;
 params = model.params;
+p = packParameters(params);
 
 q  = x(1:nq);
 dq = x(nq+1:end);
@@ -15,10 +16,10 @@ Kp = simOpt.Kp;
 Kd = simOpt.Kd;
 
 % ---- Dynamics matrices ----------------------------------------
-D = D_matrix(q, params);
-C = C_vector(q, dq, params);
-G = G_vector(q, params);
-B = input_matrix(q, params);   % 7×4
+D = D_matrix(q, p);
+C = C_vector(q, dq, p);
+G = G_vector(q, p);
+B = input_matrix();   % 7×4
 
 % ---- Virtual constraints -------------------------------------
 [y, dy, Jy] = hzd_virtualConstraints(q, dq, CP, model, opt);
@@ -32,12 +33,12 @@ Jydot_dq = ((Jy_p - Jy) / eps_fd) * dq;
 % ---- Input-output linearisation  ddy = v ---------------------
 v     = -Kd * dy - Kp * y;
 A_mat = Jy  * (D \ B);                          % 4×4
-b_vec = v - Jydot_dq + Jy * (D \ (C*dq + G));  % 4×1
+b_vec = v - Jydot_dq + Jy * (D \ (C + G));  % 4×1
 
 u = A_mat \ b_vec;
 u = max(min(u, opt.uMax), opt.uMin);
 
 % ---- State derivative ----------------------------------------
-ddq = D \ (B*u - C*dq - G);
+ddq = D \ (B*u - C - G);
 dx  = [dq; ddq];
 end

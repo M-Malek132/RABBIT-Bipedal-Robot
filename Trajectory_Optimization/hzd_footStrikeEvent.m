@@ -8,13 +8,14 @@ function [value, isterminal, direction] = hzd_footStrikeEvent(t, x, model, opt)
 
 nq     = model.nq;
 params = model.params;
+p = packParameters(params);
 
 q = x(1:nq);
 
-kin = rabbit_kinematics(q, params);
+[~,swing_foot,~,~,~,~] = rabbit_kinematics(q, p);
 
-% Swing foot vertical height — should cross zero at touchdown
-value      = kin.swingFoot(2);
+% Always return the true continuous foot height
+value = swing_foot(2);
 
 isterminal = 1;     % stop integration
 direction  = -1;    % detect only downward crossing
