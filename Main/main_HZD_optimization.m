@@ -54,7 +54,7 @@ opt.uMax         =  150;
 opt.uMin         = -150;
 
 opt.qMin = [-5; -5;  -pi;  -pi/2; -pi;  -pi/2; -pi];
-opt.qMax = [ 5;  5;   pi;   pi/2;   0;   pi/2;    0];
+opt.qMax = [5; 5; pi; 1.5; 1.5; 1.5; 1.5];
 
 %% ---- Controller gains ---------------------------------------
 opt.Kp = 200;
@@ -62,7 +62,10 @@ opt.Kd =  30;
 
 %% ---- Initial guess -------------------------------------------
 % Control points: (n+1) rows × 4 columns  [q1 q2 q3 q4]
-q_act_start = [-0.20; -0.40;  0.20; -0.30];
+q_act_start =    [-0.316969066015193
+    0.740545951688271
+   -0.737791239686444
+    0.516687166027459];
 q_act_end   = [ 0.20; -0.25; -0.20; -0.25];
 
 n_pts = opt.n_bs + 1;
@@ -74,48 +77,79 @@ end
 
 CP0_vec = CP0(:);
 
-% Initial robot configuration.
-q0_init = [0.00; 0.90; -0.05; q_act_start];
+%% ---- Initial guess from provided state -----------------------
 
-% Set thetaStart from the actual initial configuration.
-theta0_init = -q0_init(3) - q0_init(4) - 0.5*q0_init(5);
-opt.thetaStart = theta0_init;
+x0_guess = [
+    0.184960894261270
+    0.913697468187791
+    0.146428704138018
+   -0.316969066015193
+    0.740545951688271
+   -0.737791239686444
+    0.516687166027459
+    0.676639780570254
+   -0.209372372209695
+    0.879620500001476
+   -0.319771891690171
+    0.392229976631628
+    0.963605877665479
+   -0.0270056036752210
+];
 
-% Estimate thetaEnd from approximate final shape.
-qt_end_guess = -0.05;
-qEnd_shape_guess = [0.30; 0.90; qt_end_guess; q_act_end];
+q0_init  = x0_guess(1:model.nq);
+dq0_init = x0_guess(model.nq+1:2*model.nq);
 
-thetaEnd_guess = -qEnd_shape_guess(3) ...
-                 -qEnd_shape_guess(4) ...
-                 -0.5*qEnd_shape_guess(5);
+% Update actuated start to match the provided initial condition.
+q_act_start = q0_init(4:7);
 
-opt.thetaEnd = thetaEnd_guess;
+% Keep your chosen end shape, or make it approximately relabelled/opposite.
+q_act_end = [ ...
+    0.3000
+   -1.0000
+    0.6000
+   -0.3000
+];
+
+% Rebuild B-spline control points using the provided initial q_act_start.
+n_pts = opt.n_bs + 1;
+CP0 = zeros(n_pts, opt.ny);
+
+for j = 1:opt.ny
+    CP0(:, j) = linspace(q_act_start(j), q_act_end(j), n_pts);
+end
+
+CP0_vec = CP0(:);
+
+% Phase values from actual start and guessed end.
+opt.thetaStart = -q0_init(3) - q0_init(4) - 0.5*q0_init(5);
+
+qEnd_shape_guess = [
+    q0_init(1) + opt.v_des * 0.50
+    q0_init(2)
+    q0_init(3)
+    q_act_end
+];
+
+opt.thetaEnd = -qEnd_shape_guess(3) ...
+               -qEnd_shape_guess(4) ...
+               -0.5*qEnd_shape_guess(5);
 
 % Step duration guess.
 T0 = 0.50;
 
-% Initial velocity guess consistent with dy = 0.
-[~, dhd_dtheta0] = hzd_evalBSpline(opt.thetaStart, CP0, opt);
-
-% Choose phase speed.
-% If thetaEnd < thetaStart, use negative dtheta.
-if opt.thetaEnd < opt.thetaStart
-    dtheta0 = -1.0;
-else
-    dtheta0 =  1.0;
-end
-
-dq_act0 = dhd_dtheta0 * dtheta0;
-
-dpx0 = opt.v_des;
-dpz0 = 0.0;
-
-% Because theta_dot = -dq(3) - dq(4) - 0.5*dq(5)
-dqt0 = -(1 + dhd_dtheta0(1) + 0.5*dhd_dtheta0(2)) * dtheta0;
-
-dq0_init = [dpx0; dpz0; dqt0; dq_act0];
-
 z0 = [CP0_vec; q0_init; dq0_init; T0];
+
+fprintf('\nInitial guess check:\n');
+disp('q0_init =');  disp(q0_init);
+disp('dq0_init ='); disp(dq0_init);
+
+fprintf('thetaStart = %.6f\n', opt.thetaStart);
+fprintf('thetaEnd   = %.6f\n', opt.thetaEnd);
+fprintf('Delta theta = %.6f\n', opt.thetaEnd - opt.thetaStart);
+
+[y0, dy0, ~] = hzd_virtualConstraints(q0_init, dq0_init, CP0, model, opt);
+fprintf('Initial ||y||  = %.3e\n', norm(y0));
+fprintf('Initial ||dy|| = %.3e\n', norm(dy0));
 
 %% ---- Variable bounds ----------------------------------------
 
@@ -135,8 +169,8 @@ q0_lb(1) = 0.0;
 q0_ub(1) = 0.0;
 
 % Floating-base height.
-q0_lb(2) = opt.hipHeightMin;
-q0_ub(2) = 1.15;
+q0_lb(2) = max(opt.hipHeightMin, q0_init(2) - 0.15);
+q0_ub(2) = q0_init(2) + 0.15;
 
 % Torso angle.
 q0_lb(3) = -0.50;
@@ -165,10 +199,10 @@ fprintf('\nInitial phase diagnostics:\n');
 fprintf('thetaStart = %.6f\n', opt.thetaStart);
 fprintf('thetaEnd   = %.6f\n', opt.thetaEnd);
 fprintf('Delta theta = %.6f\n', opt.thetaEnd - opt.thetaStart);
-fprintf('Initial dtheta = %.6f\n', dtheta0);
+% fprintf('Initial dtheta = %.6f\n', dtheta0);
 
 x0_init = [q0_init; dq0_init];
-[y0, dy0, ~] = hzd_virtualConstraints(x0_init, CP0, model, opt);
+[y0, dy0, ~] = hzd_virtualConstraints(q0_init, dq0_init, CP0, model, opt);
 
 fprintf('Initial ||y||  = %.3e\n', norm(y0));
 fprintf('Initial ||dy|| = %.3e\n', norm(dy0));
@@ -225,3 +259,88 @@ ts = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
 save(fullfile('..','Results',['hzd_bspline_',ts,'.mat']), ...
     'CPstar','q0Star','dq0Star','TStar','tAll','xAll','uAll','model','opt','JStar');
 fprintf('Saved.\n');
+
+function theta = hzd_theta(q)
+%HZD_THETA Phase variable used in this optimization.
+%
+% theta = -q(3) - q(4) - 0.5*q(5)
+
+    theta = -q(3) - q(4) - 0.5*q(5);
+end
+
+
+function pStance = getStanceFootPosition(q, model)
+%GETSTANCEFOOTPOSITION Return stance-foot Cartesian position.
+%
+% This wrapper handles both possible rabbit_kinematics styles:
+%
+%   1. Struct output:
+%        kin = rabbit_kinematics(q, params)
+%        kin.stanceFoot
+%
+%   2. Multiple outputs:
+%        [stanceFoot, swingFoot, ...] = rabbit_kinematics(q, p)
+%
+% If your rabbit_kinematics has a different output order, adjust this
+% function only.
+
+    params = model.params;
+
+    try
+        kin = rabbit_kinematics(q, params);
+
+        if isstruct(kin)
+            if isfield(kin, 'stanceFoot')
+                pStance = kin.stanceFoot(:);
+                return;
+            elseif isfield(kin, 'stance_foot')
+                pStance = kin.stance_foot(:);
+                return;
+            elseif isfield(kin, 'stance')
+                pStance = kin.stance(:);
+                return;
+            else
+                error('Struct output has no recognizable stance-foot field.');
+            end
+        end
+
+    catch
+        % Fall through to multiple-output version.
+    end
+
+    p = packParameters(params);
+
+    [stanceFoot, ~, ~, ~, ~, ~] = rabbit_kinematics(q, p);
+
+    pStance = stanceFoot(:);
+end
+
+
+function J = numericalFootJacobian(footFcn, q)
+%NUMERICALFOOTJACOBIAN Numerically compute foot-position Jacobian.
+%
+% footFcn : function handle returning 2x1 foot position
+% q       : nq x 1 configuration
+%
+% J       : 2 x nq Jacobian
+
+    q = q(:);
+
+    nq = numel(q);
+    f0 = footFcn(q);
+    nf = numel(f0);
+
+    J = zeros(nf, nq);
+
+    epsFD = 1e-6;
+
+    for i = 1:nq
+        dq = zeros(nq, 1);
+        dq(i) = epsFD;
+
+        fp = footFcn(q + dq);
+        fm = footFcn(q - dq);
+
+        J(:, i) = (fp - fm) / (2 * epsFD);
+    end
+end
