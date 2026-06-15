@@ -12,13 +12,13 @@ addpath(genpath(parent_dir));
 %% Generalized coordinates
 %% =========================
 
-syms x z qt q1 q2 q3 q4 real
-syms dx dz dqt dq1 dq2 dq3 dq4 real
-syms ddx ddz ddqt ddq1 ddq2 ddq3 ddq4 real
+syms x y qt q1 q2 q3 q4 real
+syms dx dy dqt dq1 dq2 dq3 dq4 real
+syms ddx ddy ddqt ddq1 ddq2 ddq3 ddq4 real
 
-q   = [x z qt q1 q2 q3 q4]';
-dq  = [dx dz dqt dq1 dq2 dq3 dq4]';
-ddq = [ddx ddz ddqt ddq1 ddq2 ddq3 ddq4]';
+q   = [x y qt q1 q2 q3 q4]';
+dq  = [dx dy dqt dq1 dq2 dq3 dq4]';
+ddq = [ddx ddy ddqt ddq1 ddq2 ddq3 ddq4]';
 
 %% =========================
 %% Symbolic parameters
@@ -35,23 +35,23 @@ param = [m1 m2 mT l1 l2 lt I1 I2 IT g];
 
 % stance thigh
 p1 = [ x - (l1/2)*sin(qt +q1);
-       z - (l1/2)*cos(qt +q1) ];
+       y + (l1/2)*cos(qt +q1) ];
 
 % stance shin
 p2 = [ x - l1*sin(qt +q1) - (l2/2)*sin(qt +q1+q2);
-       z - l1*cos(qt +q1) - (l2/2)*cos(qt +q1+q2) ];
+       y + l1*cos(qt +q1) + (l2/2)*cos(qt +q1+q2) ];
 
 % swing thigh
 p3 = [ x - (l1/2)*sin(qt +q3);
-       z - (l1/2)*cos(qt +q3) ];
+       y + (l1/2)*cos(qt +q3) ];
 
 % swing shin
 p4 = [ x - l1*sin(qt +q3) - (l2/2)*sin(qt +q3+q4);
-       z - l1*cos(qt +q3) - (l2/2)*cos(qt +q3+q4) ];
+       y + l1*cos(qt +q3) + (l2/2)*cos(qt +q3+q4) ];
 
 % torso
 pT = [ x + (lt/2)*sin(qt);
-       z + (lt/2)*cos(qt) ];
+       y - (lt/2)*cos(qt) ];
 
 %% =========================
 %% Velocities via Jacobians

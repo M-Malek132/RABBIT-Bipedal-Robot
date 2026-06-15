@@ -27,7 +27,7 @@ B = input_matrix();   % 7×4
 % ---- Numerical  dot(Jy)*dq  ----------------------------------
 eps_fd = 1e-7;
 q_p    = q + eps_fd * dq;
-[~, ~, Jy_p] = hzd_virtualConstraints(q_p, dq, CP, model, opt);
+[~, ~, Jy_p] = hzd_virtualConstraints(q, dq, CP, model, opt);
 Jydot_dq = ((Jy_p - Jy) / eps_fd) * dq;
 
 % ---- Input-output linearisation  ddy = v ---------------------
