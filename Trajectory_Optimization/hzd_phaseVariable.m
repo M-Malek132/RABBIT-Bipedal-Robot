@@ -11,7 +11,7 @@ function [theta, dtheta_dq] = hzd_phaseVariable(q, model)
 %   qt = q(3), q1 = q(4), q2 = q(5)
 
     nq = model.nq;
-
+    % assumption of equal length for shank and thigh
     theta = +q(3) + q(4) + 0.5*q(5);
 
     dtheta_dq = zeros(1, nq);
