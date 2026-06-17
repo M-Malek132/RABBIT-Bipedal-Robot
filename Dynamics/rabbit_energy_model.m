@@ -108,7 +108,7 @@ V4 = m2*g*p4(2);
 
 VT = mT*g*pT(2);
 
-V = simplify(V1 + V2 + V3 + V4 + VT);
+V = simplify(-(V1 + V2 + V3 + V4 + VT));
 
 disp('Potential Energy:')
 disp(V)
