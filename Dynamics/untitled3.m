@@ -128,7 +128,7 @@ P2=m(3)*g'*T2(theta)*com(:,3);
 P3=m(4)*g'*T3(theta)*com(:,4);
 P4=m(5)*g'*T4(theta)*com(:,5);
 
-P = (-(Pt+P1+P2+P3+P4));
+P = ((Pt+P1+P2+P3+P4));
 
 G1 = diff(P,theta1);
 G2 = diff(P,theta2);
