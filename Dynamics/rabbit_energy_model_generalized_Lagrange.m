@@ -39,7 +39,7 @@ T_34 = [cos(q4)      -sin(q4)        0     0;
 T_tmp = [eye(3) [1 0 1.5]'; zeros(1,3) 1]* T_wt;
 T_w1 = T_tmp*    T_t1;
 T_w2 = T_w1*    T_12;
-T_w3 = T_wt*    T_t3;
+T_w3 = T_tmp*    T_t3;
 T_w4 = T_w3*    T_34;
 
 T_wt = matlabFunction(T_tmp,'File','Tt','Vars',{X});
