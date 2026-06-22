@@ -129,7 +129,7 @@ P2=m(3)*g'*T2(theta)*com(:,3);
 P3=m(4)*g'*T3(theta)*com(:,4);
 P4=m(5)*g'*T4(theta)*com(:,5);
 
-P = ((Pt+P1+P2+P3+P4));
+P = (-(Pt+P1+P2+P3+P4));
 
 G1 = diff(P,theta1);
 G2 = diff(P,theta2);
@@ -162,9 +162,9 @@ comt = [X Y Z]';
 	Iyx = 0	;Iyy = 0.05;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.2;
     
-    Ixx = Ixx + Mt*(Y^2+Z^2);
-    Iyy = Iyy + Mt*(X^2+Z^2);
-    Izz = Izz + Mt*(Y^2+X^2);
+%     Ixx = Ixx + Mt*(Y^2+Z^2);
+%     Iyy = Iyy + Mt*(X^2+Z^2);
+%     Izz = Izz + Mt*(Y^2+X^2);
 
     I_t = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             Mt*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              Mt*Y; ...
@@ -188,9 +188,9 @@ com1 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-    Ixx = Ixx + Mt*(Y^2+Z^2);
-    Iyy = Iyy + Mt*(X^2+Z^2);
-    Izz = Izz + Mt*(Y^2+X^2);
+%     Ixx = Ixx + Mt*(Y^2+Z^2);
+%     Iyy = Iyy + Mt*(X^2+Z^2);
+%     Izz = Izz + Mt*(Y^2+X^2);
 
     I_1 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M1*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M1*Y; ...
@@ -213,9 +213,9 @@ com2 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-    Ixx = Ixx + Mt*(Y^2+Z^2);
-    Iyy = Iyy + Mt*(X^2+Z^2);
-    Izz = Izz + Mt*(Y^2+X^2);
+%     Ixx = Ixx + Mt*(Y^2+Z^2);
+%     Iyy = Iyy + Mt*(X^2+Z^2);
+%     Izz = Izz + Mt*(Y^2+X^2);
 
     I_2 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M2*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M2*Y; ...
@@ -240,9 +240,9 @@ com3 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-    Ixx = Ixx + Mt*(Y^2+Z^2);
-    Iyy = Iyy + Mt*(X^2+Z^2);
-    Izz = Izz + Mt*(Y^2+X^2);
+%     Ixx = Ixx + Mt*(Y^2+Z^2);
+%     Iyy = Iyy + Mt*(X^2+Z^2);
+%     Izz = Izz + Mt*(Y^2+X^2);
 
     I_3 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M3*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M3*Y; ...
@@ -265,9 +265,9 @@ com4 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-    Ixx = Ixx + Mt*(Y^2+Z^2);
-    Iyy = Iyy + Mt*(X^2+Z^2);
-    Izz = Izz + Mt*(Y^2+X^2);
+%     Ixx = Ixx + Mt*(Y^2+Z^2);
+%     Iyy = Iyy + Mt*(X^2+Z^2);
+%     Izz = Izz + Mt*(Y^2+X^2);
 
     I_4 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M4*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M4*Y; ...
