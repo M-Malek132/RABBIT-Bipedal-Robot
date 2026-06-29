@@ -119,7 +119,7 @@ V = matlabFunction(V,'File','V','var',{in});
 % Potential Energy
 clc;clear
 
-[m, com, I] = Mass_Properties();
+[m, com, ~] = Mass_Properties();
 syms theta [7 1]
 g=[0 0 -9.8062 0]';
 
@@ -159,12 +159,12 @@ comt = [X Y Z]';
 % Moments of inertia: (Kgrams *  square meters )
 % Taken at the  COM
 	Ixx = 0.2	;Ixy = 0	;Ixz = 0;
-	Iyx = 0	;Iyy = 0.2;	Iyz = 0;
-	Izx = 0	;Izy = 0	;Izz = 0.05;
+	Iyx = 0	;Iyy = 0.05;	Iyz = 0;
+	Izx = 0	;Izy = 0	;Izz = 0.2;
     
-%     Ixx = Ixx + Mt*(Y^2+Z^2);
-%     Iyy = Iyy + Mt*(X^2+Z^2);
-%     Izz = Izz + Mt*(Y^2+X^2);
+    Ixx = Ixx + Mt*(Y^2+Z^2);
+    Iyy = Iyy + Mt*(X^2+Z^2);
+    Izz = Izz + Mt*(Y^2+X^2);
 
     I_t = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             Mt*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              Mt*Y; ...
@@ -188,9 +188,9 @@ com1 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-%     Ixx = Ixx + Mt*(Y^2+Z^2);
-%     Iyy = Iyy + Mt*(X^2+Z^2);
-%     Izz = Izz + Mt*(Y^2+X^2);
+    Ixx = Ixx + M1*(Y^2+Z^2);
+    Iyy = Iyy + M1*(X^2+Z^2);
+    Izz = Izz + M1*(Y^2+X^2);
 
     I_1 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M1*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M1*Y; ...
@@ -213,9 +213,9 @@ com2 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-%     Ixx = Ixx + Mt*(Y^2+Z^2);
-%     Iyy = Iyy + Mt*(X^2+Z^2);
-%     Izz = Izz + Mt*(Y^2+X^2);
+    Ixx = Ixx + M2*(Y^2+Z^2);
+    Iyy = Iyy + M2*(X^2+Z^2);
+    Izz = Izz + M2*(Y^2+X^2);
 
     I_2 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M2*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M2*Y; ...
@@ -240,9 +240,9 @@ com3 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-%     Ixx = Ixx + Mt*(Y^2+Z^2);
-%     Iyy = Iyy + Mt*(X^2+Z^2);
-%     Izz = Izz + Mt*(Y^2+X^2);
+    Ixx = Ixx + M3*(Y^2+Z^2);
+    Iyy = Iyy + M3*(X^2+Z^2);
+    Izz = Izz + M3*(Y^2+X^2);
 
     I_3 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M3*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M3*Y; ...
@@ -265,9 +265,9 @@ com4 = [X Y Z]';
 	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
 	Izx = 0	;Izy = 0	;Izz = 0.1;
     
-%     Ixx = Ixx + Mt*(Y^2+Z^2);
-%     Iyy = Iyy + Mt*(X^2+Z^2);
-%     Izz = Izz + Mt*(Y^2+X^2);
+    Ixx = Ixx + M4*(Y^2+Z^2);
+    Iyy = Iyy + M4*(X^2+Z^2);
+    Izz = Izz + M4*(Y^2+X^2);
 
     I_4 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M4*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M4*Y; ...
