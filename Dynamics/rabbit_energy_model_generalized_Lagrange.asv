@@ -48,6 +48,7 @@ T_w2 = matlabFunction(T_w2,'File','T2','Vars',{X});
 T_w3 = matlabFunction(T_w3,'File','T3','Vars',{X});
 T_w4 = matlabFunction(T_w4,'File','T4','Vars',{X});
 
+Pos_stance = T_w2 * 
 %% +++++++++++++++++++++++++++++++++++++++++ %%
 
 clc;clear;close all

@@ -7,7 +7,7 @@ clc;clear;close all
 
 X = sym('theta',[7 1],'real');
 
-x = X(1);   z = X(2);   qt = X(3);  q1 = X(4);  q2 = X(5);  q3 = X(6);  q4 = X(7);
+x = X(1);   z = X(2);   qt = X(3);   q1 = X(4);  q2 = X(5);     q3 = X(6);  q4 = X(7);
 
 % Transformation Matrixs
 % forward
@@ -37,10 +37,13 @@ T_34 = [cos(q4)      -sin(q4)        0     0;
             0                   0                0     1];
 
 T_tmp = [eye(3) [1 0 1.5]'; zeros(1,3) 1]* T_wt;
-T_w1 = T_tmp*    T_t1;
+T_w1 = T_tmp*   T_t1;
 T_w2 = T_w1*    T_12;
 T_w3 = T_tmp*    T_t3;
 T_w4 = T_w3*    T_34;
+
+Pos_stance = T_w2* [0 0.5 0 1]';
+Pos_swing = T_w4* [0 0.5 0 1]';
 
 T_wt = matlabFunction(T_tmp,'File','Tt','Vars',{X});
 T_w1 = matlabFunction(T_w1,'File','T1','Vars',{X});
@@ -48,6 +51,8 @@ T_w2 = matlabFunction(T_w2,'File','T2','Vars',{X});
 T_w3 = matlabFunction(T_w3,'File','T3','Vars',{X});
 T_w4 = matlabFunction(T_w4,'File','T4','Vars',{X});
 
+Pos_stance = matlabFunction(Pos_stance,'File','Pos_stance','Vars',{X});
+Pos_swing = matlabFunction(Pos_swing,'File','Pos_swing','Vars',{X});
 %% +++++++++++++++++++++++++++++++++++++++++ %%
 
 clc;clear;close all
@@ -72,7 +77,6 @@ end
 M=simplify(M);
 
 M = matlabFunction(M,'File','M','Vars',{theta});
-
 %% +++++++++++++++++++++++++++++++++++++++++ %%
 
 % Calculating M_dot wrt Time
@@ -171,7 +175,7 @@ comt = [X Y Z]';
 	        Izx                 Izy         (Ixx+Iyy-Izz)/2         Mt*Z; ...
             Mt*X                Mt*Y                Mt*Z             Mt];
 
-% +++++++++ %% +++++++++ %% +++++++++ %
+    % +++++++++ %% +++++++++ %% +++++++++ %
 
 
 M1 = 5; %Kg
@@ -222,8 +226,7 @@ com2 = [X Y Z]';
 	        Izx                 Izy         (Ixx+Iyy-Izz)/2         M2*Z; ...
             M2*X                M2*Y                M2*Z             M2];
 
-
-% +++++++++ %% +++++++++ %% +++++++++ %
+    % +++++++++ %% +++++++++ %% +++++++++ %
 
 
 M3 = 5; %Kg
