@@ -61,7 +61,7 @@ syms dq [7 1] real
 %% Stance Jacobian
 %% =========================
 
-J_st = simplify(jacobian(P_st(q),q));
+J_st = simplify(jacobian(Pos_stance(q),q));
 
 disp('Stance foot Jacobian:')
 disp(J_st)
@@ -70,7 +70,7 @@ disp(J_st)
 %% Swing Jacobian
 %% =========================
 
-J_sw = simplify(jacobian(P_sw(q),q));
+J_sw = simplify(jacobian(Pos_swing(q),q));
 
 disp('Swing foot Jacobian:')
 disp(J_sw)
@@ -98,32 +98,34 @@ disp(Jdotdq_sw)
 %% =========================
 
 matlabFunction(J_st, ...
-    'File','J_st', ...
-    'Vars',{q});
+    'File','Dynamics/J_stance', ...
+    'Vars',{q,param});
 
 matlabFunction(Jdotdq_st, ...
-    'File','Jdotdq_st', ...
-    'Vars',{q,dq});
+    'File','Dynamics/Jdotdq_stance', ...
+    'Vars',{q,dq,param});
 
 matlabFunction(J_sw, ...
-    'File','J_sw', ...
-    'Vars',{q});
+    'File','Dynamics/J_swing', ...
+    'Vars',{q,param});
 
 matlabFunction(Jdotdq_sw, ...
-    'File','Jdotdq_sw', ...
-    'Vars',{q,dq});
+    'File','Dynamics/Jdotdq_swing', ...
+    'Vars',{q,dq,param});
 
 %% =========================
 %% Example numerical usage
 %% =========================
 
+p = parameters();
 
+par = packParameters(p);
 
 q_num  = zeros(7,1);
 dq_num = zeros(7,1);
 
-J_num = J_stance(q_num);
-Jdotdq_num = Jdotdq_stance(q_num,dq_num);
+J_num = J_stance(q_num,par);
+Jdotdq_num = Jdotdq_stance(q_num,dq_num,par);
 
 disp('Numerical stance Jacobian:')
 disp(J_num)

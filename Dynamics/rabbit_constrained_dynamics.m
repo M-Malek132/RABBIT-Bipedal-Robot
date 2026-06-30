@@ -1,19 +1,19 @@
-function [ddq,lambda] = rabbit_constrained_dynamics(q,dq,u,param)
+function [ddq,lambda] = rabbit_constrained_dynamics(q,dq,u)
 
 % Dynamics terms
-D = D_matrix(q,param);
+D = D(q);
 
-C = C_vector(q,dq,param);
+C = C(q,dq);
 
-G = G_vector(q,param);
+G = G(q);
 
 B = input_matrix();
 
 % Contact Jacobian
-J = J_stance(q,param);
+J = J_st(q);
 
 % Jdot*dq term
-Jdotdq = Jdotdq_stance(q,dq,param);
+Jdotdq = Jdotdq_st(q,dq);
 
 % Augmented system
 A = [D   -J';
