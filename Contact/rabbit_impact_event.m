@@ -1,9 +1,7 @@
-function [value, isterminal, direction] = rabbit_impact_event(t, x, params)
+function [value, isterminal, direction] = rabbit_impact_event(t, x)
 
 q = x(1:7);
-p = packParameters(params);
-[~,swing_foot,~,~,~,~] = rabbit_kinematics(q, p);
-
+swing_foot = P_sw(q);
 % Always return the true continuous foot height
 value = swing_foot(2);
 

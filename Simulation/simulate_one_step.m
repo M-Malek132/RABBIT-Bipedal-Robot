@@ -1,146 +1,77 @@
-function [t_out, x_out, impact_info] = simulate_one_step( ...
-    x0, ...
-    params, ...
-    controller)
-
-% =========================================================
-% SIMULATE_ONE_STEP
+function [t_out, x_out, impact_info] = simulate_one_step(x0, controller)
+% SIMULATE_ONE_STEP Simulates one continuous walking step of the RABBIT robot.
 %
-% Simulates one continuous walking step of the
-% RABBIT robot until impact occurs.
+%   [t_out, x_out, impact_info] = simulate_one_step(x0, controller)
 %
-% INPUTS:
-%   x0          : initial state [q; dq]
-%   params      : robot parameter structure
-%   controller  : optional controller function handle
+%   INPUTS:
+%       x0          - Initial state [q; dq]
+%       controller  - (Optional) Controller function handle
 %
-% OUTPUTS:
-%   t_out       : simulation time vector
-%   x_out       : state trajectory
-%   impact_info : impact event information
-%
-% =========================================================
+%   OUTPUTS:
+%       t_out       - Simulation time vector
+%       x_out       - State trajectory
+%       impact_info - Struct containing event detection details
 
-%% --------------------------------------------------------
-% Input Handling
-% ---------------------------------------------------------
+    % Input validation
+    narginchk(1, 2);
+    if nargin < 2, controller = []; end
 
-if nargin < 3
-    controller = [];
+    fprintf('Starting single-step simulation...\n');
+
+    %% Solver Configuration
+    % Note: rabbit_impact_event and rabbit_ode must now access 
+    % parameters via global variables or internal constants.
+    options = odeset(...
+        'RelTol', 1e-3, ...       
+        'AbsTol', 1e-3, ...       
+        'MaxStep', 0.05, ...      
+        'Events', @(t,x) rabbit_impact_event(t, x));
+
+    ode_fun = @(t,x) rabbit_ode(t, x, controller);
+
+    %% Integrate Dynamics
+    try
+        [t_out, x_out, te, xe, ie] = ode45(ode_fun, [0 0.8], x0, options);
+    catch ME
+        % Safely handle the global step counter
+        if exist('CURRENT_STEP', 'var')
+            fprintf(2, 'Integration failed at step %d: %s\n', CURRENT_STEP, ME.message);
+        else
+            fprintf(2, 'Integration failed: %s\n', ME.message);
+        end
+        rethrow(ME);
+    end
+
+    %% Post-Integration Validation
+    if isempty(t_out) || any(isnan(x_out(:)))
+        error('Simulation failed: Trajectory is empty or contains NaNs.');
+    end
+
+    %% Process Impact Info
+    impact_info = struct('detected', false, 'time', [], 'state', [], 'index', []);
+    
+    if ~isempty(te)
+        fprintf('Impact detected at t = %.4f sec\n', te(end));
+        impact_info.detected = true;
+        impact_info.time     = te(end);
+        impact_info.state    = xe(end,:)';
+        impact_info.index    = ie(end);
+    else
+        fprintf('No impact detected.\n');
+    end
+
+    %% Diagnostics
+    fprintf('Simulation finished in %.4f sec (%d points)\n', t_out(end), length(t_out));
+    check_stability(x_out);
 end
 
-fprintf('\nStarting single-step simulation...\n');
-
-%% --------------------------------------------------------
-% Simulation Settings
-% ---------------------------------------------------------
-
-tspan = [0 0.8];
-
-options = odeset(...
-    'RelTol', 1e-2, ...       % default 1e-3, but check yours
-    'AbsTol', 1e-2, ...       % loosen if too tight
-    'MaxStep', 0.05, ...      % cap step size to 10ms
-    'Events', @(t,x) rabbit_impact_event(t, x, params));
-
-%% --------------------------------------------------------
-% ODE Function
-% ---------------------------------------------------------
-
-ode_fun = @(t,x) rabbit_ode( ...
-    t, ...
-    x, ...
-    params, ...
-    controller);
-
-%% --------------------------------------------------------
-% Integrate Dynamics
-% ---------------------------------------------------------
-
-try
-
-    [t_out, x_out, te, xe, ie] = ode45( ...
-        ode_fun, ...
-        tspan, ...
-        x0, ...
-        options);
-
-catch ME
-    global CURRENT_STEP
-    fprintf('Integration failed at step %d: %s\n', CURRENT_STEP, ME.message);
-    fprintf('Initial state for this step:\n');
-    disp(x0);
-    rethrow(ME);
+function check_stability(x_out)
+    % Helper to check for physically unrealistic values
+    n = size(x_out, 2) / 2;
+    if any(abs(x_out(:, 1:n)) > 10, 'all')
+        warning('Large joint angles detected.');
+    end
+    if any(abs(x_out(:, n+1:end)) > 100, 'all')
+        warning('Large joint velocities detected.');
+    end
 end
-
-%% --------------------------------------------------------
-% Validate Output
-% ---------------------------------------------------------
-
-if isempty(t_out)
-    error('Empty trajectory returned from ODE solver.');
-end
-
-if any(isnan(x_out(:)))
-    error('NaN detected during integration.');
-end
-
-%% --------------------------------------------------------
-% Impact Information
-% ---------------------------------------------------------
-
-impact_info = struct();
-
-if isempty(te)
-
-    fprintf('No impact detected.\n');
-
-    impact_info.detected = false;
-    impact_info.time     = [];
-    impact_info.state    = [];
-    impact_info.index    = [];
-
-else
-
-    fprintf('Impact detected at t = %.4f sec\n', te(end));
-
-    impact_info.detected = true;
-    impact_info.time     = te(end);
-    impact_info.state    = xe(end,:)';
-    impact_info.index    = ie(end);
-
-end
-
-%% --------------------------------------------------------
-% Trajectory Diagnostics
-% ---------------------------------------------------------
-
-fprintf('Simulation duration : %.4f sec\n', t_out(end));
-fprintf('Trajectory samples  : %d\n', length(t_out));
-
-%% --------------------------------------------------------
-% Optional Stability Check
-% ---------------------------------------------------------
-
-n = size(x_out,2)/2;
-
-q  = x_out(:,1:n);
-dq = x_out(:,n+1:end);
-
-if any(abs(q(:)) > 10)
-
-    warning('Large joint angles detected.');
-
-end
-
-if any(abs(dq(:)) > 100)
-
-    warning('Large joint velocities detected.');
-
-end
-
-fprintf('Single-step simulation completed.\n');
-
-end
-
-
