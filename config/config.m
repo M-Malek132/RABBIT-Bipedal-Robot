@@ -1,16 +1,16 @@
-function val = config(request)
-    % CONFIG: Acts as a central database for all system parameters.
-    % Uses existing parameters() and init_bspline_params() functions.
-    
+function varargout = config(varargin)
     persistent data;
     
-    if nargin < 1, request = 'get'; end
+    % Handle the empty call case
+    if nargin == 0
+        varargout{1} = data;
+        return;
+    end
     
-    switch request
+    action = varargin{1};
+    switch action
         case 'init'
-            % 1. Get physical params from your existing function
-            p = parameters(); 
-            
+
             % 2. Generate Stones (Persistent across calls)
             num_stones = 20;
             stones = zeros(num_stones + 2, 2);
@@ -25,16 +25,13 @@ function val = config(request)
             stones(end, :) = [current_x + 0.1, current_x + 6.0];
             p.stones = stones;
             
-            % 3. Embed controller params from your existing function
+            % 3. Controller Parameters
             p.ctrl = init_bspline_params();
             
             data = p;
-            fprintf('Configuration initialized: Robot parameters, B-splines, and Stones loaded.\n');
-            
+            fprintf('Configuration initialized: System constants and stones loaded.\n');
+            varargout{1} = data;
         case 'get'
-            val = data;
-            
-        case 'stones'
-            val = data.stones;
+            varargout{1} = data;
     end
 end
