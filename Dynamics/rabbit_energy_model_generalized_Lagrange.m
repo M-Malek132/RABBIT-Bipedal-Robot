@@ -42,12 +42,17 @@ T_w2 = T_w1*    T_12;
 T_w3 = T_tmp*    T_t3;
 T_w4 = T_w3*    T_34;
 
+Pos_stance = T_w2* [0 0.5 0 1]';
+Pos_swing = T_w4* [0 0.5 0 1]';
+
 T_wt = matlabFunction(T_tmp,'File','Tt','Vars',{X});
 T_w1 = matlabFunction(T_w1,'File','T1','Vars',{X});
 T_w2 = matlabFunction(T_w2,'File','T2','Vars',{X});
 T_w3 = matlabFunction(T_w3,'File','T3','Vars',{X});
 T_w4 = matlabFunction(T_w4,'File','T4','Vars',{X});
 
+Pos_stance = matlabFunction(Pos_stance,'File','P_st','Vars',{X});
+Pos_swing = matlabFunction(Pos_swing,'File','P_sw','Vars',{X});
 %% +++++++++++++++++++++++++++++++++++++++++ %%
 
 clc;clear;close all
