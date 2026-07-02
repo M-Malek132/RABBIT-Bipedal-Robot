@@ -64,7 +64,7 @@ function animate_rabbit(x_traj)
     % 4. Animation and GIF Generation Loop
     %======================================================================
     % Transpose trajectory if it is oriented vertically (states as rows)
-    if size(x_traj, 1) > size(x_traj, 2)
+    if size(x_traj, 1) ~= 14
         x_traj = x_traj';
     end
     
@@ -130,8 +130,14 @@ function [stance_foot, swing_foot, hip, stance_knee, swing_knee, torso_top] = ra
     % Wrapper for kinematic position functions generated from your dynamic model
     stance_foot = P_st(q);
     swing_foot  = P_sw(q);
-    hip         = P_hip(q);
-    stance_knee = P_knee_st(q);
-    swing_knee  = P_knee_sw(q);
-    torso_top   = P_torso(q);
+
+    pos_hip = Tt(q)* [0 0 0 1]';
+    P_torso = Tt(q)* [0 -0.75 0 1]';
+    P_knee_st = T2(q)* [0 0 0 1]';
+    P_knee_sw = T4(q)* [0 0 0 1]';
+
+    hip         = [pos_hip(1,1);   pos_hip(3,1)];
+    stance_knee = [P_knee_st(1,1);   P_knee_st(3,1)];
+    swing_knee  = [P_knee_sw(1,1);   P_knee_sw(3,1)];
+    torso_top   = [P_torso(1,1);   P_torso(3,1)];
 end
