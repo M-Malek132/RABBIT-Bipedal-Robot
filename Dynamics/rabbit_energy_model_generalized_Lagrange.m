@@ -35,7 +35,8 @@ T_34 = [cos(q4)      -sin(q4)        0     0;
              0                  0                1     0;
             0                   0                0     1];
 
-T_tmp = [eye(3) [1 0 1.5]'; zeros(1,3) 1]* T_wt;
+% T_tmp = [eye(3) [1 0 1.5]'; zeros(1,3) 1]* T_wt;
+T_tmp = T_wt;
 T_w1 = T_tmp*   T_t1;
 T_w2 = T_w1*    T_12;
 T_w3 = T_tmp*    T_t3;
