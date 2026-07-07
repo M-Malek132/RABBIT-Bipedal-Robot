@@ -26,4 +26,5 @@ x = A\b;
 nq = length(q);
 ddq = x(1:nq);
 lambda = x(nq+1:end);
+
 end

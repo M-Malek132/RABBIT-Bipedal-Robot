@@ -4,15 +4,15 @@ q  = x_minus(1:7);
 dq = x_minus(8:14);
 
 % --- kinematics ---
-[~, p_sw, ~, ~, ~, ~] = rabbit_kinematics(q,packParameters(param));
+swing_foot = P_sw(q);
 
 % --- vertical translation ---
 % q(1) = q(1) - p_sw(1);
-q(2) = q(2) - p_sw(2);
+q(2) = q(2) + swing_foot(2);
 
 
 % --- compute impact velocity ---
-x_tmp = rabbit_impact_map([q; dq], packParameters(param));
+x_tmp = rabbit_impact_map([q; dq]);
 dq_plus = x_tmp(8:14);
 
 % --- leg relabeling ---

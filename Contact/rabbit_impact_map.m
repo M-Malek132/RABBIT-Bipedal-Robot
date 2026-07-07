@@ -1,10 +1,10 @@
-function x_plus = rabbit_impact_map(x_minus,p)
+function x_plus = rabbit_impact_map(x_minus)
 
 q  = x_minus(1:7);
 dq = x_minus(8:14);
 
-D = D_matrix(q,p);
-J = J_swing(q,p);   % <--- USE SWING FOOT JACOBIAN HERE
+D = M(q);
+J = J_sw(q);   % <--- USE SWING FOOT JACOBIAN HERE
 
 A = [D -J';
      J zeros(size(J,1))];

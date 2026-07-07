@@ -113,20 +113,3 @@ matlabFunction(Jdotdq_sw, ...
     'File','Jdotdq_sw', ...
     'Vars',{q,dq});
 
-%% =========================
-%% Example numerical usage
-%% =========================
-
-
-
-q_num  = zeros(7,1);
-dq_num = zeros(7,1);
-
-J_num = J_stance(q_num);
-Jdotdq_num = Jdotdq_stance(q_num,dq_num);
-
-disp('Numerical stance Jacobian:')
-disp(J_num)
-
-disp('Numerical Jdot*dq stance:')
-disp(Jdotdq_num)
