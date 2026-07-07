@@ -1,4 +1,4 @@
-function [t_out, x_out, impact_info] = simulate_one_step(x0, controller)
+function [t_out, x_out] = simulate_one_step(x0, controller)
 % SIMULATE_ONE_STEP Simulates one continuous walking step of the RABBIT robot.
 
 %% Input Handling
@@ -20,26 +20,11 @@ ode_fun = @(t, x) rabbit_ode(t, x, controller);
 
 %% Integration
 % Note: Using 0.8 as a hard time limit for a single step
-[t_out, x_out, te, xe, ie] = ode45(ode_fun, [0 0.8], x0, options);
+[t_out, x_out, te, xe, ie] = ode45(ode_fun, [0 10], x0, options);
 
 %% Validation
 if isempty(t_out) || any(isnan(x_out), 'all')
     error('Simulation failed: Trajectory is empty or contains NaNs.');
-end
-
-%% Process Impact Information
-impact_info = struct('detected', ~isempty(te), ...
-                     'time',     [], ...
-                     'state',    [], ...
-                     'index',    []);
-
-if impact_info.detected
-    impact_info.time  = te(end);
-    impact_info.state = xe(end, :)';
-    impact_info.index = ie(end);
-    fprintf('Impact detected at t = %.4fs\n', impact_info.time);
-else
-    warning('No impact detected within time limit.');
 end
 
 %% Diagnostics

@@ -5,7 +5,7 @@ function x0 = make_initial_state()
     %-----------------------
     % Configuration (q)
     %-----------------------
-    q0 = [1; -1; 0.1; -0.3; 0.6; -1.0; 0.6]; % [px, pz, qt, q1, q2, q3, q4]
+    q0 = [0; -1; 0.1; -0.3; 0.6; -1.0; 0.6]; % [px, pz, qt, q1, q2, q3, q4]
 
     % Enforce stance foot on ground (z = 0)
     tmp = P_st(q0);        % expected: scalar stance foot height

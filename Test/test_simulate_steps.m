@@ -9,7 +9,7 @@ x0 = make_initial_state();
 % animate_rabbit(x0);
 
 % Controller is now decoupled from the workspace state
-[t, x, impact] = simulate_n_steps(x0, 5, @rabbit_controller);
+[t, x] = simulate_n_steps(x0, 10, @rabbit_controller);
 
 %% VISUALIZATION
 % No params passed to animation

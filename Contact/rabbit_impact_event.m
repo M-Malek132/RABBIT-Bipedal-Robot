@@ -6,7 +6,7 @@ swing_foot = P_sw(q);
 value = swing_foot(2);
 
 % Only stop the simulation if enough time has passed for the foot to lift off
-if t < 0.05
+if t < 0.005
     isterminal = 0; % Ignore zero-crossings right after step starts
 else
     isterminal = 1; % Stop simulation on impact
