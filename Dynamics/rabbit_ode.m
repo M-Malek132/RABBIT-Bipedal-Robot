@@ -9,7 +9,7 @@ dq = x(8:14);
 if isempty(controller)
     u = zeros(4,1);           % e.g., 4 joint torques
 else
-    u = controller(t, x);
+    u = controller(x);
 end
 
 % call constrained dynamics
