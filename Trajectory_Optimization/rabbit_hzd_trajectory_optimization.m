@@ -5,7 +5,7 @@ p.nu       = 4;      % actuated joints: q1,q2,q3,q4
 p.n_coeffs = 6;       % Bezier control points per joint (degree 5)
 p.nq       = 7;
 p.theta_plus = ...;   % FIXED design target: desired theta(q) at impact (sets nominal step size — tune this)
-p.T_max      = 2.0;   % max integration time per step (safety cap for the event detector)
+p.T_max = 2.0;   % max integration time per step (safety cap for the event detector)
 p.Kp = 400;  p.Kd = 40;  % PD gains tracking the virtual constraints (tune)
 % ... plus whatever fields your dynamics/kinematics functions need (link lengths, masses, etc.)
 
