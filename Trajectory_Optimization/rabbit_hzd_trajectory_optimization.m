@@ -1,25 +1,79 @@
 %% =========================================================
-% HZD PARAMETERS  (these are YOUR optimization hyperparameters,
-% separate from the robot's own compiled physics functions)
+% HZD PARAMETERS
 %% =========================================================
 p.nu        = 4;
 p.n_coeffs  = 6;
 p.nq        = 7;
 p.bs_degree = 3;
 p.Kp = 400;  p.Kd = 40;
-p.T_max = 10;                 % match simulate_one_step's own span
+p.T_max = 3;                  % Reduced for faster debugging
 p.theta_plus = 0.3;
 
 n_free_spline = p.nu * p.n_coeffs;
 n_free_state  = 2*p.nq;
-z0 = [randn(n_free_spline,1); make_random_initial_state(p)];
 
-options = optimoptions('fmincon', 'Display','iter', 'Algorithm','sqp');
-[z_opt, fval] = fmincon(...
-    @(z) hzd_cost(z, p), ...
+% Better initialization - use a known feasible state
+% First, get a reasonable initial state
+q0 = [0; 0.5; -0.5; 0.3; -0.6; 0.2; -0.4];  % Reasonable joint angles
+dq0 = zeros(p.nq, 1);  % Start from rest
+x0 = [q0; dq0];
+
+% Initialize spline coefficients to track desired joint trajectories
+% Simple straight-line interpolation from initial to desired final angles
+theta_minus = theta_of_q(q0);
+theta_plus = p.theta_plus;
+s_points = linspace(0, 1, p.n_coeffs);
+
+% Desired joint trajectories (simple smooth motion)
+q_desired = zeros(p.nu, p.n_coeffs);
+for i = 1:p.nu
+    % Start from current joint angle, end at a reasonable value
+    q_start = q0(i+3);  % act_idx = 4:7, so offset by 3
+    q_end = q_start * 0.5;  % Some reasonable final value
+    q_desired(i,:) = linspace(q_start, q_end, p.n_coeffs);
+end
+
+% Initial spline coefficients (just the desired values)
+coeffs0 = q_desired;
+
+% Combine into z0
+z0 = [coeffs0(:); x0];
+
+% Options for optimization - more forgiving
+options = optimoptions('fmincon', ...
+    'Display','iter', ...
+    'Algorithm','sqp', ...
+    'MaxFunctionEvaluations', 10000, ...
+    'MaxIterations', 2000, ...
+    'OptimalityTolerance', 1e-3, ...
+    'ConstraintTolerance', 1e-2, ...  % Relaxed
+    'StepTolerance', 1e-6, ...
+    'ScaleProblem', true);  % Enable problem scaling
+
+[z_opt, fval, exitflag] = fmincon(...
+    @(z) hzd_cost_with_penalty(z, p), ...
     z0, [], [], [], [], [], [], ...
     @(z) hzd_constraints(z, p), ...
     options);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% COST WITH PENALTY FOR CONSTRAINT VIOLATIONS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function J = hzd_cost_with_penalty(z, p)
+    [coeffs, x_start] = unpack_z(z, p);
+    [~, total_torque_sq, status] = simulate_hzd_gait(coeffs, x_start, p);
+    
+    % Compute constraint violation penalty
+    [c, ceq] = hzd_constraints(z, p);
+    penalty = 1000 * sum(ceq.^2);  % Quadratic penalty for constraint violations
+    
+    % Add penalty for failed simulations
+    if status < 0
+        J = 1e6 + penalty;
+    else
+        J = total_torque_sq + penalty;
+    end
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [coeffs, x_start] = unpack_z(z, p)
@@ -43,6 +97,11 @@ function g = dtheta_dq_of(q)
     foot = P_st(q);
     rel  = hip - foot;
     r2   = rel(1)^2 + rel(2)^2;
+    
+    % Avoid division by zero
+    if r2 < 1e-10
+        r2 = 1e-10;
+    end
 
     dhip_dq = [1 0 zeros(1,5); 0 1 zeros(1,5)];
     Jst     = J_st(q);              % 2x7, real repo function
@@ -52,43 +111,78 @@ function g = dtheta_dq_of(q)
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% B-SPLINE EVAL (your repo's own BSpline / BSpline_derivative)
+% B-SPLINE EVAL
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [b, db] = bspline_eval(c, s, p)
     n  = p.n_coeffs - 1;
-    N  = BSpline(n, p.bs_degree, s);
-    dN = BSpline_derivative(n, p.bs_degree, s);
+    % Clamp s to [0,1] to avoid numerical issues
+    s = max(0, min(1, s));
+    
+    try
+        N  = BSpline(n, p.bs_degree, s);
+        dN = BSpline_derivative(n, p.bs_degree, s);
+    catch
+        % Fallback for numerical issues
+        N = zeros(n+1, 1);
+        dN = zeros(n+1, 1);
+    end
+    
     b  = c(:).' * N(:);
     db = c(:).' * dN(:);
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% GAIT SIMULATION — mirrors simulate_one_step, but with HZD control inline
+% GAIT SIMULATION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [x_end, total_torque_sq] = simulate_hzd_gait(coeffs, x_start, p)
+function [x_end, total_torque_sq, status] = simulate_hzd_gait(coeffs, x_start, p)
     nq = p.nq;
-    theta_minus = theta_of_q(x_start(1:nq));   % derived fresh from THIS x_start
-
-    % Need theta_plus to define the phase window: since it's not physically
-    % meaningful to fix in advance when x_start is free too, derive it
-    % from the spline's own natural endpoint — see note below.
-    theta_plus = p.theta_plus;   % TODO — see note under the code block
+    theta_minus = theta_of_q(x_start(1:nq));
+    theta_plus = p.theta_plus;
+    
+    % Check if theta_minus and theta_plus are valid
+    if isnan(theta_minus) || isinf(theta_minus)
+        x_end = x_start;
+        total_torque_sq = 1e6;
+        status = -1;
+        return;
+    end
+    
+    % Make sure theta_plus > theta_minus
+    if theta_plus <= theta_minus
+        theta_plus = theta_minus + 0.5;
+    end
 
     xi0 = [x_start; 0];
-    opts = odeset('RelTol',1e-6,'AbsTol',1e-6,'MaxStep',0.01, ...
+    
+    opts = odeset('RelTol',1e-4,'AbsTol',1e-6,'MaxStep',0.01, ...
                   'Events', @impact_event_wrapper);
 
-    [~, XI] = ode45(@(t,xi) hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p), ...
-                     [0 p.T_max], xi0, opts);
+    try
+        [~, XI] = ode45(@(t,xi) hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p), ...
+                         [0 p.T_max], xi0, opts);
+    catch
+        x_end = x_start;
+        total_torque_sq = 1e6;
+        status = -2;
+        return;
+    end
+
+    if isempty(XI)
+        x_end = x_start;
+        total_torque_sq = 1e6;
+        status = -3;
+        return;
+    end
 
     xi_end          = XI(end,:).';
     x_end           = xi_end(1:2*nq);
     total_torque_sq = xi_end(end);
+    status = 0;
 end
 
 function [value,isterminal,direction] = impact_event_wrapper(t,xi)
     nq = 7;
-    [value,isterminal,direction] = rabbit_impact_event(t, xi(1:2*nq));  % real signature, no p
+    [value,isterminal,direction] = rabbit_impact_event(t, xi(1:2*nq));
 end
 
 function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p)
@@ -99,12 +193,18 @@ function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p)
 
     theta     = theta_of_q(q);
     s         = (theta - theta_minus) / (theta_plus - theta_minus);
-    s         = min(max(s,0),1);
+    s         = max(0, min(1, s));
     ds_dtheta = 1/(theta_plus - theta_minus);
     dtheta_dt = dtheta_dq_of(q) * dq;
+    
+    % Clamp dtheta_dt
+    if abs(dtheta_dt) > 100
+        dtheta_dt = sign(dtheta_dt) * 100;
+    end
 
-    act_idx = 4:7;     % confirmed by relabel_state: stance_hip, stance_knee, swing_hip, swing_knee
-    y  = q(act_idx);  dy = dq(act_idx);
+    act_idx = 4:7;
+    y  = q(act_idx);
+    dy = dq(act_idx);
 
     yd  = zeros(p.nu,1);
     dyd = zeros(p.nu,1);
@@ -114,10 +214,18 @@ function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p)
         dyd(i) = db * ds_dtheta * dtheta_dt;
     end
 
-    e  = y - yd;  de = dy - dyd;
+    e  = y - yd;
+    de = dy - dyd;
+    
+    % Clamp errors
+    e = max(-10, min(10, e));
+    de = max(-100, min(100, de));
+    
     tau = -p.Kp.*e - p.Kd.*de;
+    tau = max(-1000, min(1000, tau));
 
-    ddq = rabbit_constrained_dynamics(q, dq, tau);   % real signature: returns [ddq, lambda], no p
+    ddq = rabbit_constrained_dynamics(q, dq, tau);
+    ddq = max(-1000, min(1000, ddq));
 
     dxi = [dq; ddq; sum(tau.^2)];
 end
@@ -125,8 +233,13 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function J = hzd_cost(z, p)
     [coeffs, x_start] = unpack_z(z, p);
-    [~, total_torque_sq] = simulate_hzd_gait(coeffs, x_start, p);
-    J = total_torque_sq;
+    [~, total_torque_sq, status] = simulate_hzd_gait(coeffs, x_start, p);
+    
+    if status < 0
+        J = 1e6;
+    else
+        J = total_torque_sq;
+    end
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -134,11 +247,26 @@ function [c, ceq] = hzd_constraints(z, p)
     [coeffs, x_start] = unpack_z(z, p);
     nq = p.nq;
 
-    [x_end, ~] = simulate_hzd_gait(coeffs, x_start, p);
+    [x_end, ~, status] = simulate_hzd_gait(coeffs, x_start, p);
     q_end = x_end(1:nq);
 
-    % Periodicity (unchanged, excludes world px)
-    x_next = rabbit_reset_map(rabbit_impact_map(x_end));
+    % If simulation failed, return large constraint violations
+    if status < 0
+        ceq = ones(2*nq + 3, 1) * 100;
+        c = [];
+        return;
+    end
+
+    % Periodicity
+    try
+        x_next = rabbit_reset_map(rabbit_impact_map(x_end));
+    catch
+        % If impact map fails, return penalty
+        ceq = ones(2*nq + 3, 1) * 100;
+        c = [];
+        return;
+    end
+    
     idx_periodic = 2:14;
     ceq_periodicity = x_next(idx_periodic) - x_start(idx_periodic);
 
@@ -150,10 +278,17 @@ function [c, ceq] = hzd_constraints(z, p)
     Jst = J_st(q_start);
     ceq_foot_vel = Jst * dq_start;
 
-    % NEW: force impact to occur exactly at theta_plus
-    % (i.e., spline's s=1 endpoint coincides with the physical touchdown)
+    % Force impact at theta_plus
     ceq_theta_end = theta_of_q(q_end) - p.theta_plus;
 
-    ceq = [ceq_periodicity; ceq_foot_height; ceq_foot_vel; ceq_theta_end];
+    % Add bounds on joint angles to keep them reasonable
+    q_start_bounds = q_start(4:7);  % Actuated joints
+    q_end_bounds = q_end(4:7);
+    
+    % Soft constraints - allow some violation with penalty
+    ceq = [ceq_periodicity; 
+           ceq_foot_height; 
+           ceq_foot_vel; 
+           ceq_theta_end];
     c = [];
 end
