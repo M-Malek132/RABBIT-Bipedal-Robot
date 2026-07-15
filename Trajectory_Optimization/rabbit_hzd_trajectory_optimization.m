@@ -56,6 +56,8 @@ options = optimoptions('fmincon', ...
     @(z) hzd_constraints(z, p), ...
     options);
 
+animate_hzd_result(z_opt, p, 10);
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % COST WITH PENALTY FOR CONSTRAINT VIOLATIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -228,6 +230,58 @@ function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p)
     ddq = max(-1000, min(1000, ddq));
 
     dxi = [dq; ddq; sum(tau.^2)];
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLAYBACK VERSION — same dynamics as simulate_hzd_gait, but returns
+% the full trajectory instead of just the final state
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [t_out, x_out] = simulate_hzd_gait_full(coeffs, x_start, p)
+    nq = p.nq;
+    theta_minus = theta_of_q(x_start(1:nq));
+    theta_plus  = p.theta_plus;
+
+    xi0 = [x_start; 0];
+    opts = odeset('RelTol',1e-6,'AbsTol',1e-6,'MaxStep',0.01, ...
+                  'Events', @impact_event_wrapper);
+
+    [t_out, XI] = ode45(@(t,xi) hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p), ...
+                         [0 p.T_max], xi0, opts);
+
+    x_out = XI(:, 1:2*nq);   % drop the appended torque-cost column
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ANIMATE THE OPTIMIZED GAIT
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function animate_hzd_result(z_opt, p, nSteps)
+    if nargin < 3, nSteps = 10; end
+
+    [coeffs, x_current] = unpack_z(z_opt, p);
+
+    t_all = [];
+    x_all = [];
+    time_offset = 0;
+
+    for step = 1:nSteps
+        [t_step, x_step] = simulate_hzd_gait_full(coeffs, x_current, p);
+
+        if isempty(t_all)
+            t_all = t_step;
+            x_all = x_step;
+        else
+            t_all = [t_all; t_step(2:end) + time_offset];
+            x_all = [x_all; x_step(2:end, :)];
+        end
+
+        x_minus        = x_step(end, :)';
+        x_after_impact = rabbit_impact_map(x_minus);
+        x_current      = rabbit_reset_map(x_after_impact);
+
+        time_offset = t_all(end);
+    end
+
+    animate_rabbit(x_all);   % your existing function — expects 14 x N or N x 14, handles both
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
