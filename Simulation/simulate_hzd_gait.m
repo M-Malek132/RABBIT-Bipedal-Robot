@@ -28,7 +28,10 @@ function [x_end, total_torque_sq, max_penetration, status] = simulate_hzd_gait(c
         status = -1;
     end
 
-    % Dense-sample the whole step to find worst ground clipping
+    % Dense-sample the whole step to find worst ground clipping.
+    % World-frame Z is UP-positive (ground = 0), so penetration depth is
+    % -min(height); a negative max_penetration means everyone stayed
+    % above ground by that margin.
     t_samples  = linspace(sol.x(1), sol.x(end), 40);
     xi_samples = deval(sol, t_samples);
 
@@ -36,7 +39,7 @@ function [x_end, total_torque_sq, max_penetration, status] = simulate_hzd_gait(c
     for k = 1:length(t_samples)
         q_k = xi_samples(1:nq, k);
         pts = get_body_points(q_k);
-        max_penetration = max([max_penetration, pts.torso_top(2), ...
-                                pts.stance_knee(2), pts.swing_knee(2), pts.swing_foot(2)]);
+        h_min = min([pts.torso_top(2), pts.stance_knee(2), pts.swing_knee(2), pts.swing_foot(2)]);
+        max_penetration = max(max_penetration, -h_min);
     end
 end
