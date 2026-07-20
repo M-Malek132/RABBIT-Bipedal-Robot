@@ -1,12 +1,12 @@
-function g = dtheta_dq_of(q)
-    hip  = q(1:2);
-    foot = P_st(q);
-    rel  = hip - foot;
-    r2   = max(rel(1)^2 + rel(2)^2, 1e-10);   % avoid divide-by-zero
-
-    dhip_dq = [1 0 zeros(1,5); 0 1 zeros(1,5)];
-    Jst     = J_st(q);
-    drel_dq = dhip_dq - Jst;
-
-    g = ( rel(2)*drel_dq(1,:) - rel(1)*drel_dq(2,:) ) / r2;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% GRADIENT OF THE PHASE VARIABLE: d(theta)/dq = c, a CONSTANT row vector.
+%
+% Since theta_of_q is linear (theta = qt + q1 + 0.5*q2 = c*q), its Jacobian
+% is just c -- exact, constant, and free of the singularities the previous
+% atan2-based version had (it divided by |hip-foot|^2 and needed J_st).
+%
+% Keep this in sync with theta_of_q.m: they must be the same c.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function g = dtheta_dq_of(~)
+    g = [0, 0, 1, 1, 0.5, 0, 0];
 end
