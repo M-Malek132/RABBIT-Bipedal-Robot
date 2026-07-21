@@ -1,4 +1,8 @@
-function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p)
+function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p,foot_ref)
+    % foot_ref (optional 2x1): world-frame stance-foot pin location. When
+    % given, the constrained dynamics applies Baumgarte stabilization so the
+    % stance foot does not drift during the step. Omit for the old behaviour.
+    if nargin < 7, foot_ref = []; end
     nq = p.nq;
     x  = xi(1:2*nq);
     q  = x(1:nq);
@@ -28,7 +32,17 @@ function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p)
     tau = -p.Kp.*e - p.Kd.*de;
     tau = max(-1000, min(1000, tau));    % debug safety net
 
-    ddq = rabbit_constrained_dynamics(q, dq, tau);
+    % Baumgarte only if a pin is given AND gains exist and are nonzero.
+    % (Old saved p structs predate the baumgarte fields, so guard with isfield
+    % — this keeps previously saved results simulatable.)
+    use_baumgarte = ~isempty(foot_ref) && isfield(p,'baumgarte_beta') && ...
+                    (p.baumgarte_beta ~= 0 || p.baumgarte_alpha ~= 0);
+    if use_baumgarte
+        ddq = rabbit_constrained_dynamics(q, dq, tau, foot_ref, ...
+                                          p.baumgarte_alpha, p.baumgarte_beta);
+    else
+        ddq = rabbit_constrained_dynamics(q, dq, tau);
+    end
     ddq = max(-1000, min(1000, ddq));    % debug safety net
 
     dxi = [dq; ddq; sum(tau.^2)];

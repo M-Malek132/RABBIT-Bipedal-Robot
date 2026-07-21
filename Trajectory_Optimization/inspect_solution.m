@@ -21,6 +21,22 @@ function report = inspect_solution(z, p)
     report.step_length     = L_step;
     report.step_duration   = T_step;
     report.walking_speed   = v_avg;
+
+    % STANCE-FOOT DRIFT: the stance foot is held only by an acceleration-level
+    % holonomic constraint, so ode45 lets it creep. Re-simulate the full
+    % trajectory and measure how far P_st wanders from its t=0 position.
+    if status > 0
+        [~, x_traj] = simulate_hzd_gait_full(coeffs, x_start, p);
+        foot0 = P_st(x_traj(1, 1:nq)');
+        drift = 0;
+        for kk = 1:size(x_traj, 1)
+            fk    = P_st(x_traj(kk, 1:nq)');
+            drift = max(drift, norm(fk - foot0));
+        end
+        report.stance_foot_drift = drift;
+    else
+        report.stance_foot_drift = NaN;
+    end
     report.cost_normalized = total_torque_sq / max(L_step, eps);
     report.max_penetration = max_penetration;
     report.swing_clearance = swing_clearance;
@@ -43,6 +59,8 @@ function report = inspect_solution(z, p)
             theta_of_q(x_start(1:nq)), theta_of_q(q_end), p.theta_plus);
     fprintf('step length:                %.4f m\n', L_step);
     fprintf('step duration:              %.4f s\n', T_step);
+    fprintf('stance-foot drift in step:  %.4f m   (should be ~0; large => constraint drift)\n', ...
+            report.stance_foot_drift);
     fprintf('walking speed L/T:          %.4f m/s   (v_des %.4f, NEC1 resid %+.4f)\n', ...
             v_avg, p.v_des, ceq(18));
     fprintf('raw   torque^2:             %.4f\n', total_torque_sq);

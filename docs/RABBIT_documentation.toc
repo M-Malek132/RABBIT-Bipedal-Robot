@@ -1,0 +1,23 @@
+\contentsline {section}{\numberline {1}Overview}{1}{section.1}%
+\contentsline {paragraph}{Dependencies.}{2}{section*.2}%
+\contentsline {paragraph}{Working entry point.}{2}{lstlisting.-1}%
+\contentsline {section}{\numberline {2}Robot model}{2}{section.2}%
+\contentsline {paragraph}{Physical parameters.}{2}{section*.4}%
+\contentsline {paragraph}{Sign convention (important).}{2}{section*.5}%
+\contentsline {section}{\numberline {3}Continuous dynamics}{2}{section.3}%
+\contentsline {paragraph}{Single--support (constrained) dynamics.}{3}{section*.6}%
+\contentsline {section}{\numberline {4}Hybrid model}{3}{section.4}%
+\contentsline {section}{\numberline {5}Phase variable and Hybrid Zero Dynamics}{3}{section.5}%
+\contentsline {paragraph}{Phase variable (linear in $q$).}{3}{section*.7}%
+\contentsline {paragraph}{Virtual constraints.}{3}{section*.8}%
+\contentsline {section}{\numberline {6}Trajectory optimization (the nonlinear program)}{4}{section.6}%
+\contentsline {paragraph}{Decision vector.}{4}{section*.9}%
+\contentsline {paragraph}{Cost}{4}{section*.10}%
+\contentsline {paragraph}{Constraints}{4}{section*.11}%
+\contentsline {paragraph}{Solver}{4}{section*.12}%
+\contentsline {paragraph}{Diagnostics.}{4}{section*.13}%
+\contentsline {section}{\numberline {7}Software architecture and data flow}{4}{section.7}%
+\contentsline {section}{\numberline {8}File reference}{4}{section.8}%
+\contentsline {section}{\numberline {9}Reproducibility}{6}{section.9}%
+\contentsline {section}{\numberline {10}Known issues and broken legacy entry points}{7}{section.10}%
+\contentsline {paragraph}{Open item: stance--foot constraint drift.}{7}{section*.20}%
