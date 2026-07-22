@@ -70,23 +70,40 @@ production step.
 
 A collocation gait is periodic on the zero-dynamics manifold *by construction*,
 but that does **not** guarantee a given feedback law reproduces it in closed
-loop. `col_crosscheck` measures the gap. On the N=20 gait
-(`col_result_2026-07-22_22-40-29.mat`, seeded from the natural-speed PD gait):
+loop. `col_crosscheck` measures the gap. Measured on two N=20 gaits — the plain
+solve (`col_result_2026-07-22_22-40-29.mat`) and the one re-solved with the GRF
+and impact-impulse toggles ON (`col_result_2026-07-23_00-45-04.mat`,
+`p_over = struct('enforce_grf',true,'enforce_impulse',true)`):
 
-| | PD | CLF-QP |
-|---|---|---|
-| joint-pos RMS err | 0.037 rad | **0.032 rad** |
-| closed-loop periodicity defect (∞) | 23.5 | **8.9** |
+| | plain PD | plain CLF-QP | GRF+imp PD | GRF+imp CLF-QP |
+|---|---|---|---|---|
+| joint-pos RMS err (rad) | 0.037 | 0.032 | **0.026** | **0.017** |
+| closed-loop periodicity defect (∞) | 23.5 | 8.9 | 22.3 | 17.3 |
 
-CLF-QP holds the manifold tighter and lands ~2.6× closer to periodic than the
-fixed-gain PD law (its exponential-convergence guarantee at work), but **neither
-closes the orbit**: this seed-gait family has a near-singular impact (impulse
-~1e4) that amplifies any residual tracking error through the reset map. The
-practical fix is to re-solve the collocation with the impact-impulse and GRF
-toggles ON (`p.enforce_impulse`, `p.enforce_grf`) so the optimizer finds a
-gentle-impact gait a controller can actually hold — the toggles are already
-inherited from `hzd_problem_setup`.
+Two findings:
+
+1. **The GRF/impulse constraints make the gait easier to TRACK.** The smoother
+   gait roughly halves the joint RMS error under both controllers and makes the
+   closed-loop step length nearly match the collocation (vs a ~25% overshoot
+   before). CLF-QP tracks tighter than PD throughout.
+
+2. **They do NOT close the orbit.** The periodicity defect stays ~O(20) — a
+   post-impact *velocity* mismatch — and does not improve. An earlier note in
+   this file blamed a "near-singular impact (~1e4 Ns)"; that was a stale figure
+   from an older gait. The actual impulse here was 16.7 Ns (9.8 after the
+   re-solve), and making it gentler did **not** help periodicity. The gap is a
+   **closed-loop invariance/stability** issue, not an impact-magnitude one:
+   direct collocation finds an *open-loop* periodic orbit, but nothing here makes
+   that orbit a *stable fixed point of the step-to-step map under a specific
+   controller*.
+
+**To actually get a closed-loop-periodic gait** you need a stability condition,
+not more physical constraints: add the step-to-step Poincaré spectral-radius
+requirement (`poincare_stability`, the `p.enforce_stability` path the shooting
+solver already has) in a warm-started final phase, and/or enforce hybrid
+invariance of the controlled dynamics. That is the open next step.
 
 > Caveat: `col_crosscheck` compares ONE step from the collocation's node-1
 > state. True closed-loop periodicity is a step-to-step Poincaré fixed point
-> (`poincare_stability`), a stronger test than the single-step defect here.
+> (`poincare_stability`), a stronger test than the single-step defect here, so
+> the absolute defect values above are indicative, not a stability certificate.

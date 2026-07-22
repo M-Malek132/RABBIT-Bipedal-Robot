@@ -1,18 +1,26 @@
-function [p, lb, ub, options] = col_problem_setup(N)
+function [p, lb, ub, options] = col_problem_setup(N, p_over)
 %COL_PROBLEM_SETUP  Parameters, bounds and fmincon options for the HZD
 % direct-collocation solver. Inherits every field of hzd_problem_setup (so the
 % two solvers share cost weights, speed target, physical limits, spline
 % degree, ...) and adds the node count p.N plus the collocation-vector bounds.
 %
-%   [p, lb, ub, options] = col_problem_setup()      % default N = 20 nodes
+%   [p, lb, ub, options] = col_problem_setup()          % default N = 20 nodes
 %   [p, lb, ub, options] = col_problem_setup(N)
+%   [p, lb, ub, options] = col_problem_setup(N, p_over) % override p fields
 %
-% Decision-vector order matches col_pack: [X ; U ; Lam ; coeffs ; T].
+% p_over is an optional struct whose fields overwrite the inherited p BEFORE
+% the bounds are built -- so toggling e.g. enforce_torque also updates the
+% torque box on U. Decision-vector order matches col_pack: [X;U;Lam;coeffs;T].
 
     if nargin < 1 || isempty(N), N = 20; end
 
     p   = hzd_problem_setup();     % single source of truth for shared params
-    p.N = N;
+
+    if nargin >= 2 && ~isempty(p_over)
+        fn = fieldnames(p_over);
+        for k = 1:numel(fn), p.(fn{k}) = p_over.(fn{k}); end
+    end
+    p.N = N;                       % N always wins over any p_over.N
 
     nq = p.nq;  nu = p.nu;  nc = p.n_coeffs;  nx = 2*nq;
 
