@@ -52,6 +52,7 @@ per-node holonomic + virtual equalities, so vars > equalities (well-posed NLP).
 | `col_seed_from_pd.m` | warm start: simulate one PD step, resample to `N` nodes, recompute node `u`,`λ`. |
 | `col_verify_seed.m` | **test**: reports per-block constraint residuals of a PD seed + an FD check; run this before a long solve. |
 | `col_crosscheck.m` | **closed-loop cross-check**: `R = col_crosscheck(col_file, controller, do_plot)`. Extracts `coeffs` + node-1 state, simulates one step under `p.controller` (`'pd'`/`'clfqp'`) with a bounded, robust integrator, and reports joint-error RMS/max, step-length/speed/duration collocation-vs-sim, and the closed-loop periodicity defect. |
+| `col_poincare.m` | **orbital-stability diagnostic**: `[rho,eig] = col_poincare(col_file, controller)`. Full-order step-to-step spectral radius via `poincare_stability` under the chosen controller (`'pd'` fast, `'clfqp'` slow). `rho < 1` ⇒ walkable. |
 
 ## Usage
 
@@ -107,3 +108,41 @@ invariance of the controlled dynamics. That is the open next step.
 > state. True closed-loop periodicity is a step-to-step Poincaré fixed point
 > (`poincare_stability`), a stronger test than the single-step defect here, so
 > the absolute defect values above are indicative, not a stability certificate.
+
+## Orbital stability (col_poincare)
+
+`col_poincare(col_file, controller)` extracts the coeffs + node-1 state and
+computes the full-order step-to-step spectral radius `rho` via
+`poincare_stability` (which now dispatches on `p.controller`). Measured under PD:
+
+| gait | rho | verdict |
+|---|---|---|
+| plain N=20 (`..._22-40-29`) | **9.83** | unstable |
+| GRF+impulse N=20 (`..._00-45-04`) | **19.83** | unstable |
+
+`rho < 1` is required for a walkable gait; both are ~10–20, i.e. the step map
+amplifies perturbations ~10–20× per step. This is the quantitative root cause of
+the large `col_crosscheck` periodicity defects, and it confirms the point above:
+**direct collocation optimizes feasibility with no stability term, so it lands on
+an arbitrary (here, violently unstable) member of the periodic-orbit family.**
+Note the GRF/impulse constraints made it *more* unstable (9.8→19.8) — physical
+realizability and orbital stability trade off.
+
+### Getting a stable gait — the remaining work
+
+Two routes, neither yet run to completion here:
+
+1. **Shooting `p.enforce_stability` (proven, expensive).** Warm-start the
+   shooting solver with the stability constraint (`rho <= rho_max`). Each
+   fmincon iteration nests `poincare_stability` (~26 sims) inside finite
+   differences over 38 vars (~13 min/iter), and driving `rho` from ~10–20 to <1
+   is a large change — realistically hours.
+
+2. **Reduced zero-dynamics restricted Poincaré map in the collocation
+   (thesis-faithful, cheap, TODO).** Integrate only the 1-DOF underactuated
+   dynamics and constrain its scalar return-map eigenvalue. A first attempt
+   validated the manifold `θ̈` at interior nodes but hit a decoupling-matrix
+   singularity at the impact boundary (s=1); doing it robustly means projecting
+   onto the angular-momentum / unactuated direction rather than inverting the
+   decoupling matrix. This is the right long-term path (keeps collocation
+   ODE-free) but is unfinished.
