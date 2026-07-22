@@ -1,6 +1,33 @@
 # Controller/
 
-The **phase variable** used by the HZD framework, plus a legacy PD controller.
+The **phase variable** used by the HZD framework, the **CLF-QP controller**,
+plus a legacy PD controller.
+
+## CLF-QP controller (thesis Chapter 3)
+
+| file | signature | role |
+|------|-----------|------|
+| `rabbit_clf_qp_controller.m` | `[u, info] = rabbit_clf_qp_controller(q, dq, coeffs, theta_minus, theta_plus, p)` | Input-output-linearizing **control-Lyapunov-function quadratic-program** controller. Drop-in alternative to the fixed-gain PD virtual-constraint law: same HZD outputs `y = q(4:7) − yd(s)`, same acceleration-level constrained dynamics, but the torque solves a QP that enforces the RES-CLF descent `V̇ ≤ −(γ/ε)V` while respecting a hard torque box (and an optional friction cone). Returns the torque `u` and an `info` struct (`ddq`, `lambda`, `V`, `Vdot`, `delta`, decoupling matrix `Adec`, `Lf2y`, `exitflag`). |
+
+**How it works.** Because `h0(q)=q(4:7)` is linear and the phase `θ` is linear in
+`q`, the outputs have relative degree 2 and
+`ÿ = L_f²y + (L_gL_fy)·u`, with the decoupling matrix `L_gL_fy = Jy·(∂q̈/∂u)`
+and `L_f²y = Jy·q̈₀ − κ²·(d²yd/ds²)·(c·dq)²` (`Jy = H − κ·(dyd/ds)·c`,
+`κ = 1/(θ⁺−θ⁻)`, `c = dtheta_dq_of`). The accelerations come from the same KKT
+system as `rabbit_constrained_dynamics` (Baumgarte off), written as the affine
+map `q̈ = q̈₀ + Mᵤ·u`. In transverse coordinates `η=[y; ẏ]` the CARE
+`F'P+PF−PGG'P+I=0` has the closed form `P=[√3·I, I; I, √3·I]`; the ε-scaled
+`P_ε` gives the rapidly-exponentially-stabilizing CLF `V=η'P_εη`, and the QP
+minimizes `½‖u‖² + p_relax·δ²` subject to the (softened) CLF inequality, the
+torque box, and optional friction. Tunables live on `p`
+(`clf_eps`, `clf_R`, `clf_relax`, `clf_enforce_torque`, `clf_enforce_friction`);
+sensible defaults are baked in.
+
+The swing-phase closed loop under this law is
+`Dynamics/clf_qp_closed_loop_ode.m` (the CLF-QP analogue of
+`hzd_closed_loop_ode`). Validate with `Test/test_clf_qp.m`, which finite-
+difference-checks the analytic Lie derivatives and the CLF descent against a
+saved gait.
 
 ## Phase variable (used by the HZD pipeline)
 

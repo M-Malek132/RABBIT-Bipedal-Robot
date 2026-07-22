@@ -11,6 +11,21 @@ function [p, lb, ub, options] = hzd_problem_setup()
     p.bs_degree     = 3;
     p.Kp = 400;  p.Kd = 40;
     p.T_max         = 3;
+
+    % SWING-PHASE FEEDBACK LAW used by the simulation (and hence the optimizer):
+    %   'pd'    -- fixed-gain virtual-constraint PD (Kp/Kd above). Default.
+    %   'clfqp' -- input-output-linearizing control-Lyapunov-function QP
+    %              (Controller/rabbit_clf_qp_controller.m, thesis Chapter 3).
+    % The CLF-QP law enforces the torque box (and optionally the friction cone)
+    % INSIDE the feedback, so a gait optimized under it is torque-feasible by
+    % construction. It solves a QP at every ODE step, so an optimization run is
+    % much slower than under PD -- warm-start from a PD gait, don't cold-start.
+    p.controller           = 'pd';
+    p.clf_eps              = 0.10;   % CLF convergence-rate factor (smaller=faster)
+    p.clf_R                = 1;      % weight on ||u||^2 in the QP
+    p.clf_relax            = 1e3;    % penalty on the CLF-constraint relaxation
+    p.clf_enforce_torque   = true;   % apply the |u|<=u_max box in the QP
+    p.clf_enforce_friction = false;  % add the |Fx|<=mu*Fz cone in the QP
     p.theta_plus    = 0.3;
     p.min_theta_gap = 0.15;     % reject x_start too close to theta_plus (denominator blowup)
     p.ground_tol    = 1e-3;     % ground penetration / foot-height tolerance

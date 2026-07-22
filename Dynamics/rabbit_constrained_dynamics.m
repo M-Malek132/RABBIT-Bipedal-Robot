@@ -30,8 +30,8 @@ Jdotdq = Jdotdq_st(q,dq);
 
 % Baumgarte constraint-stabilization term (0 if no reference given)
 if nargin >= 4 && ~isempty(foot_ref)
-    if nargin < 5 || isempty(alpha), alpha = 200; end
-    if nargin < 6 || isempty(beta),  beta  = 1000; end
+    if nargin < 5 || isempty(alpha), alpha = 20; end
+    if nargin < 6 || isempty(beta),  beta  = 10; end
     c_pos = P_st(q) - foot_ref(:);   % position violation (foot vs pin)   2x1
     c_vel = J * dq;                  % velocity violation (foot velocity) 2x1
     stab  = 2*alpha*c_vel + beta^2*c_pos;

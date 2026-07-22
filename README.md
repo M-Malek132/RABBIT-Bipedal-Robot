@@ -230,8 +230,11 @@ the point of use — a summary:
   - *Equality:* one-step **periodicity** (13), stance-foot on ground (1),
     stance-foot zero velocity (2), `θ_end = θ_plus` (1), and **NEC1** average
     walking rate `L_step / T_step = v_des` (1).
-  - *Inequality:* no ground penetration, mid-step **swing-foot clearance**
-    (NIC3), and a **step-length floor** (prevents the degenerate scuff).
+  - *Inequality (8):* no ground penetration, mid-step **swing-foot clearance**
+    (NIC3), a **step-length floor** (prevents the degenerate scuff), **orbital
+    stability** (`rho < 1`, gated), and the four **physical-realizability**
+    limits — torque, friction cone, min vertical GRF, impact impulse (thesis
+    Table 3.1, each individually gated). See `Trajectory_Optimization/DOCS.md`.
 - **Solver** (`hzd_problem_setup`): `fmincon` SQP, **central** finite
   differences (the event-triggered `ode45` makes forward FD noisy),
   `ScaleProblem` **off** (so reported feasibility is comparable to the

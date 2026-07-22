@@ -9,6 +9,13 @@
 % fixed point (clean validation). To reach other speeds use build_gait_library.
 p.v_des = 0.355;                % [m/s]
 
+% ---- SWING-PHASE CONTROLLER (see hzd_problem_setup) -----------------------
+% 'pd' (default) = fixed-gain virtual-constraint PD; 'clfqp' = CLF quadratic
+% program that enforces the torque box inside the feedback. The CLF-QP path
+% solves a QP at every ODE step, so it is MUCH slower -- use it to POLISH a
+% gait already found under PD (warm start below), not for a cold solve.
+% p.controller = 'clfqp';
+
 % ---- PHYSICAL CONSTRAINTS: enable ONE AT A TIME, re-solving each ----------
 % Order matters. The measured reference gait has the vertical GRF going
 % NEGATIVE (min ~ -193 N: the foot would have to be pulled down, i.e. it lifts
@@ -22,9 +29,9 @@ p.v_des = 0.355;                % [m/s]
 %   phase 4: + impact impulse   (already ~10 Ns; likely free)
 %   (then p.enforce_stability for the final, hardest phase)
 p.enforce_grf      = true;      % <-- phase 1 (the root pathology)
-p.enforce_friction = false;
-p.enforce_torque   = false;
-p.enforce_impulse  = false;
+p.enforce_friction = true;
+p.enforce_torque   = true;
+p.enforce_impulse  = true;
 
 %% =========================================================
 % INITIAL STATE — natural post-impact start-of-step pose

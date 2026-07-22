@@ -40,11 +40,21 @@ function F = gait_forces(coeffs, x_start, p)
     Fz_sum  =  0;
     mu_max  =  0;
 
+    use_clfqp = isfield(p,'controller') && strcmpi(p.controller,'clfqp');
+
     for k = 1:N
         q  = x(k,1:nq)';
         dq = x(k,nq+1:end)';
-        [~, tau, lambda] = hzd_control_and_dynamics(q, dq, coeffs, ...
-                                theta_minus, theta_plus, p, foot_ref);
+        % Recompute torque/force with the SAME law the sim used, so the
+        % physical-realizability constraints match the actual trajectory.
+        if use_clfqp
+            [tau, cinfo] = rabbit_clf_qp_controller(q, dq, coeffs, ...
+                                theta_minus, theta_plus, p);
+            lambda = cinfo.lambda;
+        else
+            [~, tau, lambda] = hzd_control_and_dynamics(q, dq, coeffs, ...
+                                    theta_minus, theta_plus, p, foot_ref);
+        end
         peak_torque = max(peak_torque, abs(tau));
 
         Fx = lambda(1);   Fz = lambda(2);   % tangential, vertical (world)

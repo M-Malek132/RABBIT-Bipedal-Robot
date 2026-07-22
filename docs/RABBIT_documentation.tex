@@ -252,9 +252,13 @@ Normalizing by $L_{\text{step}}$ removes the degenerate incentive to
   \item touchdown phase, $\theta(q_{\text{end}}) = \theta^{+}$ \hfill (1);
   \item \textbf{NEC1} average walking rate, $L_{\text{step}}/T_{\text{step}} = v_{\text{des}}$ \hfill (1).
 \end{itemize}
-Inequalities ($c\in\mathbb{R}^{4}$, $c\le 0$): no ground penetration; mid--step
-swing--foot clearance (NIC3); step--length floor; and orbital stability
-(Section~\ref{sec:stability}, gated behind \code{p.enforce\_stability}).
+Inequalities ($c\in\mathbb{R}^{8}$, $c\le 0$): no ground penetration; mid--step
+swing--foot clearance (NIC3); step--length floor; orbital stability
+(Section~\ref{sec:stability}); and the four \emph{physical realizability}
+constraints of Section~\ref{sec:physical} (torque, friction, ground reaction,
+impact impulse). The stability and physical constraints are each individually
+\emph{gated} (default off) --- see those sections. Disabled inequalities are
+held at a trivially satisfied value so $c$ keeps constant length.
 
 \paragraph{Solver} (\fname{hzd\_problem\_setup.m}). \code{fmincon} SQP with
 \emph{central} finite differences (the event--triggered \code{ode45} makes
@@ -343,6 +347,118 @@ mathematically periodic but physically un--walkable orbit. In both cases the
 optimizer was doing exactly what it was told; the specification was incomplete.
 
 % =====================================================================
+\section{Physical realizability (thesis Table 3.1)}
+\label{sec:physical}
+% =====================================================================
+\paragraph{Two families of constraints.} It helps to see the whole set as doing
+two different jobs:
+\begin{itemize}
+  \item \textbf{Mathematical validity} --- is this a \emph{real, attracting}
+        gait? Periodicity (a fixed point), $\theta_{\text{end}}=\theta^{+}$
+        (the phase closes), NEC1 (walking rate), and orbital stability
+        ($\rho<1$, Section~\ref{sec:stability}). These say nothing about
+        physics: a gait can satisfy all of them and be impossible to build.
+  \item \textbf{Physical realizability} --- can the hardware and the ground
+        actually produce it? The Table~3.1 constraints below.
+\end{itemize}
+Both are required, and ``periodic'' (cheap to satisfy) is a tiny subset of
+``walkable'' (both families). All of the physical quantities are recovered from
+the \emph{same} simulation the optimizer already runs: the contact force
+$\lambda=[F_x;F_z]$ is an output of \fname{rabbit\_constrained\_dynamics}, the
+joint torque $u$ of \fname{hzd\_control\_and\_dynamics}, and the impact impulse
+is the multiplier inside \fname{rabbit\_impact\_map}. \fname{gait\_forces.m}
+replays the trajectory and returns the peaks; \fname{hzd\_constraints.m} turns
+them into inequalities.
+
+\begin{center}
+\begin{tabular}{@{}llp{5.4cm}@{}}
+\toprule
+constraint & form (value) & what failure it prevents \\
+\midrule
+Vertical GRF   & $\min F_z \ge F_{z,\min}$ ($\ge 20$ N) &
+  ground can only \emph{push} (unilateral contact); $F_z\!\le\!0$ means the foot lifts / the model invents a pulling force \\
+Friction cone  & $\max|F_x/F_z| \le \mu$ ($0.4$) &
+  stance foot \emph{slipping} (well posed only where $F_z>0$) \\
+Joint torque   & $\max|u| \le u_{\max}$ ($120$ Nm) &
+  commanding torque the actuator cannot deliver \\
+Impact impulse & $|F_e| \le F_{e,\max}$ ($30$ Ns) &
+  a violent foot--strike (hardware damage, hard landing) \\
+Swing clearance& $h_f \ge h_{\min}$ ($0.1$ m, NIC3) &
+  scuffing / premature re--contact (a ``step in place''); ensures $S$ is hit once, at touchdown \\
+Dynamic constr.& EoM &
+  (free here --- we integrate the ODE, so it holds by construction) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Values do not transfer from the reference.} The thesis numbers
+($|u|\le 5$ Nm, $F_z\ge 200$ N, $F_e\le 15$ Ns) are for ATRIAS: \textbf{63 kg
+with 50:1 harmonic drives}, so its $5$ Nm \emph{motor} torque is $250$ Nm at the
+joint. RABBIT here is $\sim$30 kg with \textbf{no gear ratio} ($u$ is the joint
+torque directly), so the limits must be re--derived --- measure first
+(\fname{inspect\_solution} prints all four), then set bounds.
+
+\paragraph{Order matters --- a worked diagnosis.} Measured on the reference
+gait, the quantities were:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+quantity & measured & verdict \\
+\midrule
+peak $|u|$      & $257$ Nm      & high ($>u_{\max}$) \\
+mean $F_z$      & $+309$ N      & $\approx$ body weight, correct sign \\
+\textbf{min} $F_z$ & $\mathbf{-193}$ N & \warn{negative: the foot lifts off} \\
+$\max|F_x/F_z|$ & $255$         & artifact of $F_z\!\to\!0$ (not real slip) \\
+$|F_e|$         & $9.8$ Ns      & fine \\
+\bottomrule
+\end{tabular}
+\end{center}
+The instructive point: the enormous friction ratio is \emph{not} a friction
+problem. $|F_x/F_z|$ diverges wherever $F_z$ crosses zero, and here $F_z$ goes
+negative --- physically impossible, since the ground can only push. So the
+\emph{ground--reaction} constraint ($F_z>0$, foot in compression) is the root;
+the friction ratio only becomes meaningful once it holds (and
+\fname{gait\_forces} therefore samples $|F_x/F_z|$ only where $F_z>1$ N).
+Enabling friction first (before fixing $F_z$) made \code{fmincon} chase a
+divide--by--zero and diverge; enabling \emph{GRF first} is correct. Each
+constraint has its own toggle (\code{p.enforce\_grf}, \code{enforce\_friction},
+\code{enforce\_torque}, \code{enforce\_impulse}) precisely so they can be
+introduced one at a time, warm--started, in the physically sensible order.
+
+\paragraph{The constraints are coupled, not four independent knobs.} Two
+couplings are worth internalizing. First, \emph{GRF is upstream of friction}:
+the ratio $|F_x/F_z|$ diverges as $F_z\!\to\!0$, so friction is only well posed
+once $F_z>0$ is enforced --- the ordering is dictated by the math, not taste.
+Second, \emph{torque is upstream of almost everything}: a tighter torque budget
+caps joint accelerations, which caps how hard the robot throws its mass, which
+shrinks GRF spikes and friction demand. A violent gait therefore violates the
+whole table at once --- which is exactly what the reference seed does ($257$ Nm,
+$F_z$ changing sign, $\rho\!\approx\!129$). These are four views of one question:
+\emph{is this gait gentle enough to be real?}
+
+\paragraph{Caveat.} The reference gait violates almost every one of these by
+large margins \emph{and} is strongly unstable ($\rho\gg1$). Repairing it
+incrementally may not converge from such a pathological seed; a materially
+better initial gait, or the reduced 2--D zero--dynamics formulation, is the
+likely path to a gait that is simultaneously periodic, stable, and physically
+realizable.
+
+\paragraph{Synthesis: constraints as specification completeness.} Every
+constraint beyond the raw equations of motion was added because the optimizer
+found a loophole in an incomplete specification, and each loophole was a
+\emph{different} flavour of ``technically periodic'':
+\begin{enumerate}
+  \item periodic but \textbf{degenerate} (step in place) $\rightarrow$ step--length floor;
+  \item periodic but \textbf{unstable} (falls after two steps) $\rightarrow$ stability, $\rho<1$;
+  \item periodic but \textbf{unphysical} (foot lifts, slips, over--torque) $\rightarrow$ Table~3.1.
+\end{enumerate}
+The optimizer was never wrong; it did exactly what it was told, and each
+surprising result exposed a missing line in the specification. Table~3.1 is
+best read not as ``extra realism'' bolted on, but as \emph{the rest of the
+definition of walking} --- the part that is obvious to a human and invisible to
+\code{fmincon} until it is written down.
+
+% =====================================================================
 \section{Software architecture and data flow}
 % =====================================================================
 \begin{figure}[h]
@@ -401,8 +517,9 @@ file & role \\
 \fname{J\_st.m}, \fname{J\_sw.m} & Foot Jacobians ($2\times7$). \\
 \fname{Jdotdq\_st.m}, \fname{Jdotdq\_sw.m} & $\dot J\dot q$ terms ($2\times1$). \\
 \fname{input\_matrix.m} & Constant actuation map $B$. \\
-\fname{rabbit\_constrained\_dynamics.m} & Single--support forward dynamics (KKT solve), \code{[ddq,lambda]=...(q,dq,u)}. \\
-\fname{hzd\_closed\_loop\_ode.m} & Closed--loop swing RHS (B--spline + PD), augmented cost state. \\
+\fname{rabbit\_constrained\_dynamics.m} & Single--support forward dynamics (KKT solve), \code{[ddq,lambda]=...(q,dq,u)}; optional Baumgarte via a 4th \code{foot\_ref} arg. \\
+\fname{hzd\_control\_and\_dynamics.m} & Control law + constrained dynamics for one state; returns \code{[ddq,tau,lambda]} (lets torque/force be replayed post--sim). \\
+\fname{hzd\_closed\_loop\_ode.m} & Closed--loop swing RHS; wraps the above and appends the torque--cost integrand. \\
 \fname{rabbit\_ode.m} & Generic single--support RHS for an arbitrary controller. \\
 \warn{rabbit\_dynamics.m} & \warn{Broken}: calls nonexistent \code{D\_matrix/C\_vector/G\_vector}. \\
 \bottomrule
@@ -413,7 +530,7 @@ file & role \\
 \toprule file & role \\ \midrule \endhead
 \fname{rabbit\_impact\_event.m} & ODE event: swing foot reaches ground. \\
 \fname{impact\_event\_wrapper.m} & Same event for the augmented HZD state $\xi$. \\
-\fname{rabbit\_impact\_map.m} & Momentum--conserving velocity reset, \code{x\_plus=...(x\_minus)}. \\
+\fname{rabbit\_impact\_map.m} & Momentum--conserving velocity reset, \code{[x\_plus,impulse]=...(x\_minus)} (impulse is the optional 2nd output). \\
 \fname{relabel\_state.m} & Swap stance/swing joints and velocities. \\
 \fname{rabbit\_reset\_map.m} & Relabel + re--plant stance foot on ground. \\
 \bottomrule
@@ -442,6 +559,7 @@ file & role \\
 \fname{BSpline.m}, \fname{BSpline\_derivative.m} & Cox--de Boor basis and derivative. \\
 \fname{inspect\_solution.m} & Full diagnostic breakdown of a solution (incl. $\rho$). \\
 \fname{poincare\_stability.m} & Step--map Jacobian; returns spectral radius $\rho$ (NEC5). \\
+\fname{gait\_forces.m} & Replays a gait; returns peak torque, min/mean vertical GRF, friction ratio, impact impulse (Table 3.1). \\
 \fname{settle\_initial\_state.m} & Poincar\'e iteration (disabled by default). \\
 \bottomrule
 \end{longtable}
