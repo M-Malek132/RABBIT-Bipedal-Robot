@@ -9,6 +9,23 @@
 % fixed point (clean validation). To reach other speeds use build_gait_library.
 p.v_des = 0.355;                % [m/s]
 
+% ---- PHYSICAL CONSTRAINTS: enable ONE AT A TIME, re-solving each ----------
+% Order matters. The measured reference gait has the vertical GRF going
+% NEGATIVE (min ~ -193 N: the foot would have to be pulled down, i.e. it lifts
+% off), which ALSO makes the friction ratio |Fx/Fz| blow up at the Fz=0
+% crossing. So the ground-reaction constraint is the ROOT and must come first;
+% friction only becomes meaningful once Fz stays positive. Impulse (~10 Ns) and
+% mean GRF (~309 N) are already fine. Warm-start each phase from the previous:
+%   phase 1: min vertical GRF   (keep the foot in compression, Fz > 0)  <== NOW
+%   phase 2: + friction cone    (now well-defined)
+%   phase 3: + torque           (seed peaks ~257 Nm > u_max 120)
+%   phase 4: + impact impulse   (already ~10 Ns; likely free)
+%   (then p.enforce_stability for the final, hardest phase)
+p.enforce_grf      = true;      % <-- phase 1 (the root pathology)
+p.enforce_friction = false;
+p.enforce_torque   = false;
+p.enforce_impulse  = false;
+
 %% =========================================================
 % INITIAL STATE — natural post-impact start-of-step pose
 % (px pz qt q1 q2 q3 q4  dpx dpz dqt dq1 dq2 dq3 dq4)

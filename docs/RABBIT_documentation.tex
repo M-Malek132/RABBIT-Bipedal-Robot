@@ -252,8 +252,9 @@ Normalizing by $L_{\text{step}}$ removes the degenerate incentive to
   \item touchdown phase, $\theta(q_{\text{end}}) = \theta^{+}$ \hfill (1);
   \item \textbf{NEC1} average walking rate, $L_{\text{step}}/T_{\text{step}} = v_{\text{des}}$ \hfill (1).
 \end{itemize}
-Inequalities ($c\in\mathbb{R}^{3}$, $c\le 0$): no ground penetration; mid--step
-swing--foot clearance (NIC3); step--length floor.
+Inequalities ($c\in\mathbb{R}^{4}$, $c\le 0$): no ground penetration; mid--step
+swing--foot clearance (NIC3); step--length floor; and orbital stability
+(Section~\ref{sec:stability}, gated behind \code{p.enforce\_stability}).
 
 \paragraph{Solver} (\fname{hzd\_problem\_setup.m}). \code{fmincon} SQP with
 \emph{central} finite differences (the event--triggered \code{ode45} makes
@@ -265,8 +266,81 @@ steps.
 
 \paragraph{Diagnostics.} \fname{inspect\_solution.m} prints and returns a full
 breakdown of any $z$: the $\theta$ sweep, step length/duration, walking speed,
-cost, every constraint residual, the worst violation, and the within--step
-stance--foot drift.
+cost, every constraint residual, the worst violation, the within--step
+stance--foot drift, and the orbital--stability radius $\rho$ (below).
+
+% =====================================================================
+\section{Orbital stability: periodic is not the same as stable}
+\label{sec:stability}
+% =====================================================================
+This section is deliberately expanded for teaching, because it is the single
+most instructive point in the pipeline.
+
+\paragraph{The trap.} The periodicity equality makes $x_{\text{start}}$ a
+\emph{fixed point} of the step--to--step (Poincar\'e) map
+\begin{equation}
+  x_{\text{next}} = P(x_{\text{start}})
+      := \Delta_{\text{reset}}\big(\Delta_{\text{impact}}(\varphi_{\text{step}}(x_{\text{start}}))\big),
+  \label{eq:poincare}
+\end{equation}
+where $\varphi_{\text{step}}$ is one closed--loop swing phase. But \emph{a fixed
+point can be unstable.} Satisfying periodicity to machine precision guarantees a
+limit cycle \emph{exists}; it says nothing about whether the robot stays on it.
+
+\paragraph{The diagnosis.} Linearize \eqref{eq:poincare} about the fixed point,
+$A = \partial P/\partial x$, and look at its spectral radius
+\begin{equation}
+  \rho = \max_i |\lambda_i(A)|.
+\end{equation}
+The gait is orbitally (asymptotically) stable iff $\rho < 1$. This is
+Westervelt's stability requirement (informally, NEC5). For the reference seed
+gait obtained by enforcing periodicity \emph{alone}, the numbers are stark:
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+$\max|\text{periodicity}|$ & $\rho$ & open--loop $|\dot q|$ over 6 steps \\
+\midrule
+$0.007$ (excellent) & $\approx 3$ (unstable) &
+  $6 \to 6 \to 19 \to 891 \to 949 \to 440$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The orbit is a near--perfect fixed point that the robot falls off after two
+steps. Every downstream symptom we observed --- stance--foot drift growing
+across a step, Baumgarte constraint stabilization diverging, the Poincar\'e
+settling iteration blowing up, fragile speed continuation --- is the same
+instability seen from a different angle: an orbit with $\rho>1$ amplifies
+\emph{every} perturbation, numerical or physical.
+
+\paragraph{The remedy.} Add $\rho < 1$ as an optimization constraint.
+\fname{poincare\_stability.m} builds $A$ by central finite differences on the
+13 periodic states (index $2\!:\!14$; $p_x$ is the translation gauge and is
+excluded),
+\begin{equation}
+  A_{:,j} = \frac{P\!\left(x_{\text{start}} + h\,e_j\right) - P\!\left(x_{\text{start}} - h\,e_j\right)}{2h},
+  \qquad j = 1,\dots,13,
+\end{equation}
+and returns $\rho = \max_i|\lambda_i(A)|$. \fname{hzd\_constraints.m} then adds
+the inequality $\rho - \rho_{\max} \le 0$ (with $\rho_{\max}=0.95$).
+
+\paragraph{Cost and workflow.} Each $\rho$ evaluation costs $\approx 2\times 13 =
+26$ step simulations, and \code{fmincon} finite--differences the constraint over
+$38$ variables --- hundreds to thousands of simulations per iteration. The
+constraint is therefore \textbf{gated} behind \code{p.enforce\_stability}
+(default \code{false}). The recommended workflow is two--phase:
+\begin{enumerate}
+  \item solve a \emph{periodic} gait with stability off (fast);
+  \item turn \code{p.enforce\_stability = true} and re--solve
+        \emph{warm--started} from that gait to drive $\rho$ below~1.
+\end{enumerate}
+\fname{inspect\_solution.m} reports $\rho$ on every call regardless of the gate,
+so stability is always visible even when it is not being enforced.
+
+\paragraph{Analogy.} Just as the \emph{step--length floor} was the missing
+constraint that stopped the optimizer exploiting a degenerate ``step in place'',
+the \emph{stability bound} is the missing constraint that stops it returning a
+mathematically periodic but physically un--walkable orbit. In both cases the
+optimizer was doing exactly what it was told; the specification was incomplete.
 
 % =====================================================================
 \section{Software architecture and data flow}
@@ -366,7 +440,8 @@ file & role \\
 \fname{make\_coeffs.m} & Initial B--spline control points. \\
 \fname{bspline\_eval.m} & Evaluate a spline output and its $s$--derivative. \\
 \fname{BSpline.m}, \fname{BSpline\_derivative.m} & Cox--de Boor basis and derivative. \\
-\fname{inspect\_solution.m} & Full diagnostic breakdown of a solution. \\
+\fname{inspect\_solution.m} & Full diagnostic breakdown of a solution (incl. $\rho$). \\
+\fname{poincare\_stability.m} & Step--map Jacobian; returns spectral radius $\rho$ (NEC5). \\
 \fname{settle\_initial\_state.m} & Poincar\'e iteration (disabled by default). \\
 \bottomrule
 \end{longtable}
@@ -439,12 +514,25 @@ call functions that no longer exist. They are retained for reference only.
         \code{M} / \code{V} / \code{G}).
 \end{itemize}
 
-\paragraph{Open item: stance--foot constraint drift.}
+\paragraph{Open item: stance--foot constraint drift (a symptom).}
 The stance foot is held only by the acceleration--level contact constraint, so
-\code{ode45} permits slow numerical drift of the foot within a step.
-\fname{inspect\_solution.m} reports this drift. It is independent of the
-optimization and does not invalidate a converged gait; a projection or
-Baumgarte stabilization would remove it.
+\code{ode45} permits numerical drift of the foot within a step
+($\sim 0.1$--$0.3$~m; \fname{inspect\_solution.m} reports it). The natural fix
+is Baumgarte stabilization (\fname{rabbit\_constrained\_dynamics.m} supports it
+via an optional \code{foot\_ref}), but on the reference gait it \emph{diverged}
+rather than helping. That is not a flaw in Baumgarte: as
+Section~\ref{sec:stability} shows, the seed orbit has $\rho\approx 3$, so it
+amplifies the very corrections Baumgarte injects. The drift is thus best read as
+\emph{another symptom of orbital instability}; enforcing $\rho<1$ addresses the
+root cause, after which constraint stabilization becomes well behaved.
+
+\paragraph{Open item: enforcing stability is expensive.}
+The $\rho<1$ constraint is finite--difference heavy (Section~\ref{sec:stability}).
+It is usable as a warm--started final phase but slow for a from--scratch solve; a
+reduced (2--dimensional hybrid zero dynamics) stability condition, or an
+analytic Poincar\'e Jacobian, would make it cheap. This is the natural next step
+for the pipeline, alongside the CLF--QP controller route (which stabilizes an
+open--loop--unstable orbit with feedback instead of redesigning it).
 
 % =====================================================================
 \section*{References}

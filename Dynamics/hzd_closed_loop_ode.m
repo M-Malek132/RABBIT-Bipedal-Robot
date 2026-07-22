@@ -1,49 +1,18 @@
 function dxi = hzd_closed_loop_ode(t,xi,coeffs,theta_minus,theta_plus,p,foot_ref)
-    % foot_ref (optional 2x1): world-frame stance-foot pin location. When
-    % given, the constrained dynamics applies Baumgarte stabilization so the
-    % stance foot does not drift during the step. Omit for the old behaviour.
+    % Closed-loop swing-phase RHS. The control law and constrained dynamics
+    % now live in hzd_control_and_dynamics (so tau/lambda can be recomputed
+    % post-hoc); this wrapper only appends the running torque-cost integrand.
+    %
+    % foot_ref (optional 2x1): world-frame stance-foot pin location; enables
+    % Baumgarte stabilization in the constrained dynamics. Omit for the old
+    % (acceleration-level-only) behaviour.
     if nargin < 7, foot_ref = []; end
     nq = p.nq;
     x  = xi(1:2*nq);
     q  = x(1:nq);
     dq = x(nq+1:end);
 
-    theta     = theta_of_q(q);
-    s         = max(0, min(1, (theta - theta_minus) / (theta_plus - theta_minus)));
-    ds_dtheta = 1/(theta_plus - theta_minus);
-    dtheta_dt = dtheta_dq_of(q) * dq;
-    dtheta_dt = max(-100, min(100, dtheta_dt));   % debug safety net
-
-    act_idx = 4:7;
-    y  = q(act_idx);
-    dy = dq(act_idx);
-
-    yd  = zeros(p.nu,1);
-    dyd = zeros(p.nu,1);
-    for i = 1:p.nu
-        [b, db] = bspline_eval(coeffs(i,:), s, p);
-        yd(i)  = b;
-        dyd(i) = db * ds_dtheta * dtheta_dt;
-    end
-
-    e  = max(-10,  min(10,  y  - yd));   % debug safety net
-    de = max(-100, min(100, dy - dyd));  % debug safety net
-
-    tau = -p.Kp.*e - p.Kd.*de;
-    tau = max(-1000, min(1000, tau));    % debug safety net
-
-    % Baumgarte only if a pin is given AND gains exist and are nonzero.
-    % (Old saved p structs predate the baumgarte fields, so guard with isfield
-    % — this keeps previously saved results simulatable.)
-    use_baumgarte = ~isempty(foot_ref) && isfield(p,'baumgarte_beta') && ...
-                    (p.baumgarte_beta ~= 0 || p.baumgarte_alpha ~= 0);
-    if use_baumgarte
-        ddq = rabbit_constrained_dynamics(q, dq, tau, foot_ref, ...
-                                          p.baumgarte_alpha, p.baumgarte_beta);
-    else
-        ddq = rabbit_constrained_dynamics(q, dq, tau);
-    end
-    ddq = max(-1000, min(1000, ddq));    % debug safety net
+    [ddq, tau] = hzd_control_and_dynamics(q, dq, coeffs, theta_minus, theta_plus, p, foot_ref);
 
     dxi = [dq; ddq; sum(tau.^2)];
 end

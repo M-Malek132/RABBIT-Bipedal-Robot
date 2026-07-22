@@ -43,6 +43,42 @@ function [p, lb, ub, options] = hzd_problem_setup()
     % seed gait; callers override p.v_des for continuation.
     p.v_des = 0.355;                % [m/s]
 
+    % ORBITAL STABILITY (Westervelt NEC5). When enforce_stability is true, the
+    % optimizer additionally requires the step-to-step Poincare map's spectral
+    % radius rho <= rho_max (< 1). This is what makes a gait actually walkable
+    % rather than merely periodic, but it is EXPENSIVE (~26 step sims per
+    % constraint eval, finite-differenced by fmincon) -- keep it OFF for fast
+    % periodic solves and turn it ON for a warm-started stabilizing phase.
+    p.enforce_stability = false;
+    p.rho_max           = 0.95;     % stability margin (spectral radius bound)
+
+    % PHYSICAL REALIZABILITY (thesis Table 3.1). Each per-constraint toggle
+    % below adds one requirement: bounded joint torque, friction cone, a
+    % minimum vertical ground reaction force (foot stays loaded), and a
+    % bounded impact impulse (rules out slamming down / landing on a locked
+    % knee). Values are set for THIS robot -- RABBIT is ~30 kg (weight ~294 N)
+    % with NO gear ratio (u is the JOINT torque), so the thesis ATRIAS numbers
+    % (63 kg, 50:1 drives) do NOT transfer. Measured on the reference gait:
+    % peak |u| ~ 80 Nm, friction ratio ~ 0.5 (> 0.4, slips!), mean GRF ~ 2000 N
+    % (~7x body weight), impulse ~ 1e4 Ns (violent / near-singular landing) --
+    % i.e. that gait is physically pathological and cannot satisfy these; a
+    % realistic gait must be re-found. Gated because gait_forces adds a sim.
+    % Per-constraint toggles so they can be enabled ONE AT A TIME (each is a
+    % re-design of the gait, so incremental is far more robust than all-at-once).
+    p.enforce_torque   = false;
+    p.enforce_friction = false;
+    p.enforce_grf      = false;
+    p.enforce_impulse  = false;
+    p.u_max        = 120;           % max |joint torque| [Nm]
+    p.mu_max       = 0.4;           % friction cone |F_x/F_z| (thesis value)
+    p.grf_min      = 20;            % min vertical stance GRF [N] -- gentle
+                                    % phase-1 floor to keep the foot in
+                                    % compression (Fz>0). Tighten toward the
+                                    % thesis-scaled ~95 N once it converges.
+    p.impulse_max  = 30;            % max impact impulse |F_e| [Ns]
+    % (swing-foot clearance is p.swing_clearance_min above; raise it to the
+    %  thesis 0.1 m when enforcing physical realizability.)
+
     %% ---- VARIABLE BOUNDS ----
     % Keep the robot in a sane configuration range (no self-collision / absurd
     % poses). CP = B-spline control points; x0 = initial state.

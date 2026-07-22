@@ -43,11 +43,36 @@ function report = inspect_solution(z, p)
     report.ground_c        = c(1);
     report.clearance_c     = c(2);
     report.step_length_c   = c(3);
+    report.stability_c     = c(4);
+    report.torque_c        = c(5);
+    report.friction_c      = c(6);
+    report.grf_c           = c(7);
+    report.impulse_c       = c(8);
     report.periodicity     = ceq(1:13);
     report.foot_height     = ceq(14);
     report.foot_velocity   = ceq(15:16);
     report.theta_end       = ceq(17);
     report.velocity_ceq    = ceq(18);
+
+    % ORBITAL STABILITY: spectral radius of the step-to-step Poincare map.
+    % rho < 1 => the gait is attracting (walkable); rho > 1 => it falls after a
+    % few steps. Computed here as a DIAGNOSTIC regardless of p.enforce_stability
+    % (this is ~26 step sims; acceptable for a one-off inspection).
+    if status > 0
+        report.rho = poincare_stability(coeffs, x_start, p);
+    else
+        report.rho = NaN;
+    end
+
+    % PHYSICAL QUANTITIES for the Table 3.1 constraints (torque, GRF, friction,
+    % impact impulse). Reported only -- not yet enforced. Use these to pick
+    % RABBIT-appropriate limits (the thesis values are ATRIAS-specific).
+    if status > 0
+        report.forces = gait_forces(coeffs, x_start, p);
+    else
+        report.forces = struct('peak_torque_max',NaN,'min_vertical_grf',NaN, ...
+            'mean_vertical_grf',NaN,'max_friction_ratio',NaN,'impact_impulse',NaN);
+    end
 
     fprintf('\n=== Solution Inspection ===\n');
     if status < 0
@@ -71,6 +96,30 @@ function report = inspect_solution(z, p)
     fprintf('  (min swing-foot height mid-step = %+.6f m, need >= %.3f)\n', swing_clearance, p.swing_clearance_min);
     fprintf('step length        (<=0 wanted): %+.6f  %s\n', c(3), ternary(c(3) <= 0, '[OK]', '[VIOLATED]'));
     fprintf('  (L_step = %+.4f m, need >= %.3f)\n', L_step, p.step_length_min);
+    fprintf('STABILITY rho (Poincare):   %.4f   %s\n', report.rho, ...
+            ternary(report.rho < 1, '[STABLE, <1]', '[UNSTABLE, >=1 -- falls over]'));
+    if isfield(p,'enforce_stability') && p.enforce_stability
+        fprintf('  stability inequality (<=0 wanted): %+.6f  %s\n', c(4), ...
+                ternary(c(4) <= 0, '[OK]', '[VIOLATED]'));
+    else
+        fprintf('  (stability NOT enforced in the solve; p.enforce_stability = false)\n');
+    end
+
+    % --- Physical quantities (Table 3.1); each enforced independently -------
+    Fq = report.forces;
+    ef_t = isfield(p,'enforce_torque')   && p.enforce_torque;
+    ef_f = isfield(p,'enforce_friction') && p.enforce_friction;
+    ef_g = isfield(p,'enforce_grf')      && p.enforce_grf;
+    ef_i = isfield(p,'enforce_impulse')  && p.enforce_impulse;
+    fprintf('\n--- physical quantities (Table 3.1;  * = enforced this solve) ---\n');
+    fprintf('%s peak joint torque |u|:  %8.3f Nm   c=%+.3f %s\n', ...
+            star(ef_t), Fq.peak_torque_max, c(5), verdict(ef_t, c(5)));
+    fprintf('%s max friction |Fx/Fz|:   %8.3f      c=%+.3f %s\n', ...
+            star(ef_f), Fq.max_friction_ratio, c(6), verdict(ef_f, c(6)));
+    fprintf('%s min vertical GRF F_z:   %8.1f N    c=%+.3f %s  (mean %.1f N, weight ~294 N)\n', ...
+            star(ef_g), Fq.min_vertical_grf, c(7), verdict(ef_g, c(7)), Fq.mean_vertical_grf);
+    fprintf('%s impact impulse |F_e|:   %8.3f Ns   c=%+.3f %s\n', ...
+            star(ef_i), Fq.impact_impulse, c(8), verdict(ef_i, c(8)));
 
     fprintf('\nperiodicity ceq (want ~0), state idx 2:14 = [pz qt q1 q2 q3 q4  dpx dpz dqt dq1 dq2 dq3 dq4]:\n');
     labels = {'pz','qt','q1','q2','q3','q4','dpx','dpz','dqt','dq1','dq2','dq3','dq4'};
@@ -87,7 +136,8 @@ function report = inspect_solution(z, p)
     fprintf('\nlargest single violation: ');
     all_viol = [max(0, c(:)); abs(report.periodicity(:)); abs(report.foot_height); ...
                 abs(report.foot_velocity(:)); abs(report.theta_end); abs(report.velocity_ceq)];
-    all_names = [{'ground_c','swing_clearance','step_length_c'}, labels, ...
+    all_names = [{'ground_c','swing_clearance','step_length_c','stability_c', ...
+                  'torque_c','friction_c','grf_c','impulse_c'}, labels, ...
                  {'foot_height','foot_vel_1','foot_vel_2','theta_end','velocity'}];
     [worst_val, worst_idx] = max(all_viol);
     fprintf('%s = %.4f\n\n', all_names{worst_idx}, worst_val);
@@ -95,4 +145,20 @@ end
 
 function out = ternary(cond, a, b)
     if cond, out = a; else, out = b; end
+end
+
+function s = star(enforced)
+    if enforced, s = '*'; else, s = ' '; end
+end
+
+function s = verdict(enforced, cval)
+% Verdict tag for a physical inequality: only meaningful when enforced
+% (when disabled the inequality is a placeholder -1).
+    if ~enforced
+        s = '';
+    elseif cval <= 0
+        s = '[OK]';
+    else
+        s = '[VIOLATED]';
+    end
 end

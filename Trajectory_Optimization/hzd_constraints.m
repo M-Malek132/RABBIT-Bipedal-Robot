@@ -15,7 +15,7 @@ function [c, ceq] = hzd_constraints(z, p)
         % gets divided by that magnitude, and genuine violations of ~1 then
         % look like ~1e-3 and are falsely reported as "constraints satisfied".
         ceq = 10 * ones(2*nq+4, 1);   % matches size computed below
-        c   = 10 * ones(3,1);         % matches the 3 inequalities below
+        c   = 10 * ones(8,1);         % matches the 8 inequalities below
         return;
     end
 
@@ -56,7 +56,45 @@ function [c, ceq] = hzd_constraints(z, p)
     %     the robot must actually travel. Without this the optimizer collapses
     %     to a degenerate "step in place" (L_step ~ 0.015 m, swing foot
     %     scuffing) because a tiny step costs little torque.
+    %  4) ORBITAL STABILITY (Westervelt NEC5): the step-to-step Poincare map's
+    %     spectral radius must be < 1, else the periodic orbit is not
+    %     attracting and the robot falls after a few steps. This is EXPENSIVE
+    %     (~26 extra step simulations per evaluation, and fmincon then finite-
+    %     differences it), so it is GATED behind p.enforce_stability -- leave
+    %     it off for fast periodic-gait solves, enable it for a (warm-started)
+    %     final phase that drives the gait to stability. When disabled the
+    %     inequality is set to a trivially-satisfied value so c keeps length 4.
+    if isfield(p,'enforce_stability') && p.enforce_stability
+        rho    = poincare_stability(coeffs, x_start, p);
+        c_stab = rho - p.rho_max;
+    else
+        c_stab = -1;
+    end
+
+    %  5-8) PHYSICAL REALIZABILITY (thesis Table 3.1). Each is INDEPENDENTLY
+    %       gated so they can be enabled one at a time (friction first, etc.).
+    %       gait_forces is one extra sim, computed only if any is on. Disabled
+    %       inequalities are set to -1 so c keeps length 8.
+    ef_t = isfield(p,'enforce_torque')   && p.enforce_torque;
+    ef_f = isfield(p,'enforce_friction') && p.enforce_friction;
+    ef_g = isfield(p,'enforce_grf')      && p.enforce_grf;
+    ef_i = isfield(p,'enforce_impulse')  && p.enforce_impulse;
+    if ef_t || ef_f || ef_g || ef_i
+        F = gait_forces(coeffs, x_start, p);
+        if ef_t, c_torque  = F.peak_torque_max    - p.u_max;       else, c_torque  = -1; end
+        if ef_f, c_frict   = F.max_friction_ratio - p.mu_max;      else, c_frict   = -1; end
+        if ef_g, c_grf     = p.grf_min - F.min_vertical_grf;       else, c_grf     = -1; end
+        if ef_i, c_impulse = F.impact_impulse     - p.impulse_max; else, c_impulse = -1; end
+    else
+        c_torque = -1;  c_frict = -1;  c_grf = -1;  c_impulse = -1;
+    end
+
     c = [ max_penetration - p.ground_tol
           p.swing_clearance_min - swing_clearance
-          p.step_length_min - L_step ];
+          p.step_length_min - L_step
+          c_stab
+          c_torque
+          c_frict
+          c_grf
+          c_impulse ];
 end

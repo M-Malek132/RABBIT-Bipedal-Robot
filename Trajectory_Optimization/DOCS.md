@@ -41,8 +41,30 @@ state) with `fmincon` SQP, following the Hybrid Zero Dynamics method.
 
 | file | signature | role |
 |------|-----------|------|
-| `inspect_solution.m` | `report = inspect_solution(z, p)` | prints and returns a full breakdown of a solution: θ sweep, step length/duration, **walking speed**, cost, every constraint residual, worst violation, and **stance-foot drift** within a step. Use it on any `z_opt`. |
-| `settle_initial_state.m` | `[x_settled, hist] = settle_initial_state(coeffs, x0, p, nIter)` | Poincaré/fixed-point iteration on the step map. **Disabled by default** (`n_settle = 0`) — it only converges near a stable orbit and otherwise diverges. Kept for future polishing of an already-near-periodic gait. |
+| `inspect_solution.m` | `report = inspect_solution(z, p)` | prints and returns a full breakdown of a solution: θ sweep, step length/duration, **walking speed**, cost, every constraint residual, worst violation, **stance-foot drift**, and the **stability `rho`** (see below). Use it on any `z_opt`. |
+| `poincare_stability.m` | `[rho, eigvals, A] = poincare_stability(coeffs, x_start, p)` | orbital stability of a gait: builds the step-to-step **Poincaré map** Jacobian `A` (13×13, central differences on states 2:14) and returns its **spectral radius `rho`**. `rho < 1` ⇒ attracting/**walkable**; `rho ≥ 1` ⇒ periodic but the robot **falls after a few steps**. ~26 step sims per call. |
+| `settle_initial_state.m` | `[x_settled, hist] = settle_initial_state(coeffs, x0, p, nIter)` | Poincaré/fixed-point iteration on the step map. **Disabled by default** (`n_settle = 0`) — it only converges for a *stable* orbit (`rho < 1`) and otherwise diverges, which is exactly what it did on the (unstable) hand-built guess. |
+
+### Periodic vs. stable — the NEC5 lesson (teaching note)
+
+A gait that satisfies the periodicity equality is a **fixed point** of the
+step-to-step map `P: x_start → reset(impact(simulate(x_start)))` — but a fixed
+point can be **unstable**. The reference seed gait has `max|periodicity| ≈
+0.007` (a near-perfect fixed point) yet Poincaré spectral radius `rho ≈ 3`:
+simulate it open-loop and `|dq|` grows `6 → 6 → 19 → 891 → …` over successive
+steps — it falls over.
+
+This is **Westervelt's NEC5**: a periodic orbit must also be *attracting*
+(`rho < 1`). It is the gait analogue of the earlier "step in place"
+degeneracy — a missing constraint the optimizer happily exploits. Enabling
+`p.enforce_stability` adds the inequality `rho ≤ rho_max` (< 1) so the solver
+produces gaits that actually walk.
+
+**Cost / workflow.** The stability inequality is **gated** (off by default)
+because each evaluation is ~26 step simulations and `fmincon`
+finite-differences it, i.e. hundreds–thousands of sims per iteration.
+Recommended: solve a periodic gait *without* it (fast), then a **warm-started
+final phase** with `p.enforce_stability = true` to drive `rho` below 1.
 
 ## Non-code
 
