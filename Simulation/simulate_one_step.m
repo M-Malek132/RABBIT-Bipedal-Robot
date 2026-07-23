@@ -19,7 +19,9 @@ options = odeset(...
 ode_fun = @(t, x) rabbit_ode(t, x, controller);
 
 %% Integration
-% Note: Using 0.8 as a hard time limit for a single step
+% Hard time limit of 10 s per step; ode45 normally stops much earlier when
+% rabbit_impact_event fires (swing-foot height = 0). Reaching 10 s means the
+% foot never landed -- the caller should treat that as a failed step.
 [t_out, x_out, te, xe, ie] = ode45(ode_fun, [0 10], x0, options);
 
 %% Validation

@@ -12,8 +12,11 @@ function [ddq,lambda] = rabbit_constrained_dynamics(q,dq,u,foot_ref,alpha,beta)
 %       the world-frame stance-foot position where the foot should stay, i.e.
 %       P_st at the start of the step). The constraint becomes
 %           c_ddot + 2*alpha*c_dot + beta^2*c = 0,   c = P_st(q) - foot_ref,
-%       so position/velocity violations decay (critically damped when
-%       alpha == beta) instead of accumulating. alpha,beta default to 20.
+%       so position/velocity violations decay instead of accumulating.
+%       Defaults: alpha = 20, beta = 10 (overdamped; set alpha == beta for
+%       critical damping). NOTE the pipeline runs with Baumgarte OFF
+%       (p.baumgarte_alpha = p.baumgarte_beta = 0), so these defaults are only
+%       reached if a caller passes foot_ref but omits the gains.
 %
 %   Passing foot_ref = [] (or omitting it) reproduces the original
 %   acceleration-only behaviour, so existing callers are unaffected.

@@ -21,11 +21,14 @@ function [x_end, total_torque_sq, max_penetration, status, swing_clearance, T_st
     T_step          = sol.x(end) - sol.x(1);   % step duration (for avg walking rate)
 
     % STATUS: valid only if the swing foot actually triggered the impact
-    % event (as opposed to running out of T_max with the foot never
-    % landing), and the result contains no NaNs.
+    % event (as opposed to running out of T_max with the foot never landing),
+    % and the result is finite. We check ~isfinite (not just isnan) so a
+    % divergent step that blows up to +/-Inf -- e.g. once the debug clamps were
+    % removed from hzd_control_and_dynamics -- is also caught as a failed step
+    % rather than propagating a garbage-but-finite state downstream.
     impacted = isfield(sol,'ie') && ~isempty(sol.ie);
-    hit_nan  = any(isnan(xi_end));
-    if impacted && ~hit_nan
+    hit_bad  = ~all(isfinite(xi_end));
+    if impacted && ~hit_bad
         status = 1;
     else
         status = -1;

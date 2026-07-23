@@ -15,11 +15,18 @@ function [ddq, tau, lambda] = hzd_control_and_dynamics(q, dq, coeffs, theta_minu
 
     if nargin < 7, foot_ref = []; end
 
+    % NOTE: this function no longer clamps theta_dot / e / de / tau / ddq to
+    % "debug safety net" bounds. Those clamps silently saturated the outputs at
+    % ad-hoc magnitudes (+/-100, +/-10, +/-1000), which never bind on a healthy
+    % gait but could hand the ODE/optimizer a physically WRONG-but-finite ddq on
+    % a divergent evaluation, hiding the failure. Divergent states are now left
+    % to blow up naturally; simulate_hzd_gait flags any non-finite result as a
+    % failed step (status < 0), so failures are visible instead of masked.
+
     theta     = theta_of_q(q);
     s         = max(0, min(1, (theta - theta_minus) / (theta_plus - theta_minus)));
     ds_dtheta = 1/(theta_plus - theta_minus);
-    dtheta_dt = dtheta_dq_of(q) * dq;
-    dtheta_dt = max(-100, min(100, dtheta_dt));   % debug safety net
+    dtheta_dt = dtheta_dq_of(q) * dq;                % theta_dot = c*dq
 
     act_idx = 4:7;
     y  = q(act_idx);
@@ -30,14 +37,13 @@ function [ddq, tau, lambda] = hzd_control_and_dynamics(q, dq, coeffs, theta_minu
     for i = 1:p.nu
         [b, db] = bspline_eval(coeffs(i,:), s, p);
         yd(i)  = b;
-        dyd(i) = db * ds_dtheta * dtheta_dt;
+        dyd(i) = db * ds_dtheta * dtheta_dt;         % d(yd)/dt via chain rule
     end
 
-    e  = max(-10,  min(10,  y  - yd));   % debug safety net
-    de = max(-100, min(100, dy - dyd));  % debug safety net
+    e  = y  - yd;    % virtual-constraint output error
+    de = dy - dyd;   % and its time derivative
 
-    tau = -p.Kp.*e - p.Kd.*de;
-    tau = max(-1000, min(1000, tau));    % debug safety net
+    tau = -p.Kp.*e - p.Kd.*de;   % fixed-gain PD virtual-constraint law
 
     % Baumgarte only if a pin is given AND gains exist and are nonzero.
     use_baumgarte = ~isempty(foot_ref) && isfield(p,'baumgarte_beta') && ...
@@ -48,5 +54,4 @@ function [ddq, tau, lambda] = hzd_control_and_dynamics(q, dq, coeffs, theta_minu
     else
         [ddq, lambda] = rabbit_constrained_dynamics(q, dq, tau);
     end
-    ddq = max(-1000, min(1000, ddq));    % debug safety net
 end
