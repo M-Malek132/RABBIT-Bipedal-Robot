@@ -15,13 +15,22 @@ function [ddq, tau, lambda] = hzd_control_and_dynamics(q, dq, coeffs, theta_minu
 
     if nargin < 7, foot_ref = []; end
 
-    % NOTE: this function no longer clamps theta_dot / e / de / tau / ddq to
-    % "debug safety net" bounds. Those clamps silently saturated the outputs at
-    % ad-hoc magnitudes (+/-100, +/-10, +/-1000), which never bind on a healthy
-    % gait but could hand the ODE/optimizer a physically WRONG-but-finite ddq on
-    % a divergent evaluation, hiding the failure. Divergent states are now left
-    % to blow up naturally; simulate_hzd_gait flags any non-finite result as a
-    % failed step (status < 0), so failures are visible instead of masked.
+    % NOTE on the removed "debug safety net" clamps: the theta_dot/e/de/tau
+    % clamps (+/-100, +/-10, +/-100, +/-1000) were removed -- measured over the
+    % reference gait their peaks are 2.4 / 1.2 / 12.2 / 238, so they never bind
+    % and removing them is a numerical no-op that stops a divergent evaluation
+    % from being silently saturated into a wrong-but-finite value.
+    %
+    % The ddq clamp below is DIFFERENT and is KEPT: peak |ddq| on the reference
+    % gait is ~2657 rad/s^2 (swing hip/knee at step start, s~0), so it DOES bind
+    % over roughly the first ~13% of the step. This is real, well-conditioned
+    % dynamics (cond(KKT)~6e2), not a singularity -- the reference gait genuinely
+    % commands very large swing accelerations. The saved gait library was
+    % optimized against these clamped dynamics (removing the clamp breaks its
+    % periodicity: 7.5e-3 -> 0.35), so the clamp is load-bearing. It should be
+    % retired by re-optimizing the gaits under a torque/GRF limit that bounds the
+    % accelerations physically; until then, leaving it keeps the library valid.
+    % See Results/ warm-start seed and hzd_problem_setup p.enforce_torque.
 
     theta     = theta_of_q(q);
     s         = max(0, min(1, (theta - theta_minus) / (theta_plus - theta_minus)));
@@ -53,5 +62,13 @@ function [ddq, tau, lambda] = hzd_control_and_dynamics(q, dq, coeffs, theta_minu
                                           p.baumgarte_alpha, p.baumgarte_beta);
     else
         [ddq, lambda] = rabbit_constrained_dynamics(q, dq, tau);
+    end
+
+    % LOAD-BEARING clamp (see NOTE at top), toggled by p.clamp_ddq so a
+    % re-optimization can search under the TRUE (unclamped) dynamics. Absent or
+    % true => clamp ON, so saved p-structs and the existing gait library keep
+    % their behaviour; set p.clamp_ddq = false to optimize a clamp-free gait.
+    if ~isfield(p,'clamp_ddq') || p.clamp_ddq
+        ddq = max(-1000, min(1000, ddq));
     end
 end
