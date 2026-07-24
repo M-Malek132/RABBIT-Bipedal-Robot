@@ -283,6 +283,10 @@ the point of use — a summary:
 E. R. Westervelt, J. W. Grizzle, C. Chevallereau, J. H. Choi, B. Morris,
 *Feedback Control of Dynamic Bipedal Robot Locomotion*, CRC Press, 2007.
 
+See [docs/REFERENCES.md](docs/REFERENCES.md) for a curated reading list (HZD,
+direct collocation, Poincaré stability, CLF-QP) mapped to the modules each
+resource explains.
+
 ---
 
 ## Author
