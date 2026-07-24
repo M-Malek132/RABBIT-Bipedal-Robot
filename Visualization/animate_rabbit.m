@@ -1,89 +1,94 @@
-function animate_rabbit(x_traj, params)
+function animate_rabbit(x_traj)
+    % ANIMATE_RABBIT Visualizes the RABBIT trajectory, manages camera tracking,
+    % renders environment/stepping stones, and generates a GIF of the simulation.
     
-    figure('Color','w');
-    axis equal; grid on; hold on;
-    xlabel('X'); ylabel('Z');
-    title('RABBIT 5-Link Walker');
-    view(2);
+    if isempty(x_traj) || any(isnan(x_traj(:)))
+        error('Animation aborted: trajectory is empty or contains NaNs.');
+    end
 
-<<<<<<< HEAD
-    filename = 'Results/rabbit_animation.gif';
-=======
-    % Create 'result' folder if it doesn't exist
+    %======================================================================
+    % 1. Setup Environment & Configuration
+    %======================================================================
+    % Load configuration for stones (if configuration function exists)
+    try
+        cfg = config('get');
+        stones = cfg.stones;
+    catch
+        stones = []; % Fallback if stepping stones config is not found
+    end
+    
+    % Setup Result Folder
     result_folder = 'Results';
     if ~exist(result_folder, 'dir')
         mkdir(result_folder);
-        fprintf('Created folder: %s\n', result_folder);
     end
-
-    % Save GIF in the result folder
     filename = fullfile(result_folder, 'rabbit_animation.gif');
 
->>>>>>> Trajectory-Optimization
+    % Figure Initialization
+    figure('Color', 'w', 'Name', 'RABBIT Bipedal Walker');
+    clf;
+    axis equal; grid on; hold on;
+    xlabel('X [m]'); ylabel('Z [m]');
+    title('RABBIT 5-Link Walker Simulation');
+    view(2);
 
-    %==============================
-    % Initialize Plot Handles
-    %==============================
-    % Ground
-    plot([-100 100], [0 0], 'k', 'LineWidth', 2);
-    
-    % Initialize empty lines for robot parts
-    h_stance_leg = plot(NaN, NaN, 'b', 'LineWidth', 4);
-    h_swing_leg  = plot(NaN, NaN, 'r', 'LineWidth', 4);
-    h_torso      = plot(NaN, NaN, 'g', 'LineWidth', 5);
-    
-    % Initialize joints
-    h_hip         = plot(NaN, NaN, 'ko', 'MarkerSize', 10, 'MarkerFaceColor', 'k');
-    h_stance_knee = plot(NaN, NaN, 'ko', 'MarkerSize', 8,  'MarkerFaceColor', 'k');
-    h_swing_knee  = plot(NaN, NaN, 'ko', 'MarkerSize', 8,  'MarkerFaceColor', 'k');
-    h_stance_foot = plot(NaN, NaN, 'ks', 'MarkerSize', 8,  'MarkerFaceColor', 'b');
-    h_swing_foot  = plot(NaN, NaN, 'ks', 'MarkerSize', 8,  'MarkerFaceColor', 'r');
+    %======================================================================
+    % 2. Initialize Environment Geometry
+    %======================================================================
+    % Draw Ground or Stepping Stones
+    if isempty(stones)
+        plot([-100 100], [0 0], 'k', 'LineWidth', 2);
+    else
+        for i = 1:size(stones, 1)
+            patch([stones(i,1) stones(i,2) stones(i,2) stones(i,1)], ...
+                  [0 0 -0.1 -0.1], [0.6 0.6 0.6], 'EdgeColor', 'k', 'LineWidth', 1.5);
+        end
+    end
 
-    p = packParameters(params);
+    %======================================================================
+    % 3. Initialize Graphics Handles
+    %======================================================================
+    % Robot Links
+    handles.stance_leg = plot(NaN, NaN, 'b', 'LineWidth', 4);
+    handles.swing_leg  = plot(NaN, NaN, 'r', 'LineWidth', 4);
+    handles.torso      = plot(NaN, NaN, 'g', 'LineWidth', 5);
     
-    % Downsample data to speed up animation and GIF generation
-    % Adjust this number if it's still too slow or too fast
-    skip_frames = 10; 
+    % Robot Joints
+    handles.hip         = plot(NaN, NaN, 'ko', 'MarkerSize', 10, 'MarkerFaceColor', 'k');
+    handles.stance_knee = plot(NaN, NaN, 'ko', 'MarkerSize', 8,  'MarkerFaceColor', 'k');
+    handles.swing_knee  = plot(NaN, NaN, 'ko', 'MarkerSize', 8,  'MarkerFaceColor', 'k');
+    handles.stance_foot = plot(NaN, NaN, 'ks', 'MarkerSize', 8,  'MarkerFaceColor', 'b');
+    handles.swing_foot  = plot(NaN, NaN, 'ks', 'MarkerSize', 8,  'MarkerFaceColor', 'r');
+
+    %======================================================================
+    % 4. Animation and GIF Generation Loop
+    %======================================================================
+    % Transpose trajectory if it is oriented vertically (states as rows)
+    if size(x_traj, 1) ~= 14
+        x_traj = x_traj';
+    end
+    
+    skip_frames = 5; 
     frame_indices = 1 : skip_frames : size(x_traj, 2);
     
     for idx = 1:length(frame_indices)
         k = frame_indices(idx);
-        
-        % States & Kinematics
         q = x_traj(1:7, k);
         px = q(1);
-        [stance_foot, swing_foot, hip, stance_knee, swing_knee, torso_top] = rabbit_kinematics(q, p);
-
-        %==============================
-        % Update Plot Data Efficiently
-        %==============================
-        set(h_stance_leg, 'XData', [hip(1), stance_knee(1), stance_foot(1)], ...
-                          'YData', [hip(2), stance_knee(2), stance_foot(2)]);
-                      
-        set(h_swing_leg,  'XData', [hip(1), swing_knee(1), swing_foot(1)], ...
-                          'YData', [hip(2), swing_knee(2), swing_foot(2)]);
-                      
-        set(h_torso,      'XData', [hip(1), torso_top(1)], ...
-                          'YData', [hip(2), torso_top(2)]);
-
-        set(h_hip,         'XData', hip(1),         'YData', hip(2));
-        set(h_stance_knee, 'XData', stance_knee(1), 'YData', stance_knee(2));
-        set(h_swing_knee,  'XData', swing_knee(1),  'YData', swing_knee(2));
-        set(h_stance_foot, 'XData', stance_foot(1), 'YData', stance_foot(2));
-        set(h_swing_foot,  'XData', swing_foot(1),  'YData', swing_foot(2));
-
-        % Camera tracking
+        
+        % Update Link & Joint Graphics positions
+        update_rabbit_frame(q, handles);
+        
+        % Dynamic Camera Tracking
         xlim([px - 1.5, px + 1.5]);
-        ylim([-0.1, 1.8]);
-
+        ylim([-0.2, 1.8]);
         drawnow limitrate;
-
-        % Capture frame for GIF
+        
+        % Capture and save GIF frame
         frame = getframe(gcf);
         img = frame2im(frame);
         [A, map] = rgb2ind(img, 256);
-
-        % Write GIF
+        
         if idx == 1
             imwrite(A, map, filename, 'gif', 'LoopCount', Inf, 'DelayTime', 0.03);
         else
@@ -91,5 +96,46 @@ function animate_rabbit(x_traj, params)
         end
     end
     
-    fprintf('Animation saved to: %s\n', filename);
+    fprintf('Animation saved to:\n%s\n', filename);
+end
+
+%==========================================================================
+% Helper Functions
+%==========================================================================
+function update_rabbit_frame(q, handles)
+    % Retrieves points and updates plotting coordinates for the robot body
+    [stance_foot, swing_foot, hip, stance_knee, swing_knee, torso_top] = rabbit_points(q);
+    
+    % Update Stance Leg (hip -> knee -> foot)
+    set(handles.stance_leg, 'XData', [hip(1), stance_knee(1), stance_foot(1)], ...
+                            'YData', [hip(2), stance_knee(2), stance_foot(2)]);
+                        
+    % Update Swing Leg (hip -> knee -> foot)
+    set(handles.swing_leg,  'XData', [hip(1), swing_knee(1), swing_foot(1)], ...
+                            'YData', [hip(2), swing_knee(2), swing_foot(2)]);
+                        
+    % Update Torso
+    set(handles.torso,      'XData', [hip(1), torso_top(1)], ...
+                            'YData', [hip(2), torso_top(2)]);
+                        
+    % Update Joints & End-Effectors
+    set(handles.hip,         'XData', hip(1),         'YData', hip(2));
+    set(handles.stance_knee, 'XData', stance_knee(1), 'YData', stance_knee(2));
+    set(handles.swing_knee,  'XData', swing_knee(1),  'YData', swing_knee(2));
+    set(handles.stance_foot, 'XData', stance_foot(1), 'YData', stance_foot(2));
+    set(handles.swing_foot,  'XData', swing_foot(1),  'YData', swing_foot(2));
+end
+
+function [stance_foot, swing_foot, hip, stance_knee, swing_knee, torso_top] = rabbit_points(q)
+    % Thin adapter around the SHARED kinematics helper so the body-point
+    % geometry is defined in exactly one place (Utilities/get_body_points.m).
+    % This used to duplicate the Tt/T2/T4/P_st/P_sw kinematics verbatim; the two
+    % copies could silently drift, so this now just unpacks get_body_points.
+    pts = get_body_points(q);
+    stance_foot = pts.stance_foot;
+    swing_foot  = pts.swing_foot;
+    hip         = pts.hip;
+    stance_knee = pts.stance_knee;
+    swing_knee  = pts.swing_knee;
+    torso_top   = pts.torso_top;
 end

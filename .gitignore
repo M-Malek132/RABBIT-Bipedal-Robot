@@ -1,3 +1,7 @@
-touch .gitignore
-nano .gitignore
+# macOS Finder metadata
+.DS_Store
 
+# Simulink / MATLAB generated build cache and autosaves
+*.slxc
+slprj/
+*.asv

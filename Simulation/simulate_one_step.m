@@ -1,146 +1,45 @@
-function [t_out, x_out, impact_info] = simulate_one_step( ...
-    x0, ...
-    params, ...
-    controller)
+function [t_out, x_out] = simulate_one_step(x0, controller)
+% SIMULATE_ONE_STEP Simulates one continuous walking step of the RABBIT robot.
 
-% =========================================================
-% SIMULATE_ONE_STEP
-%
-% Simulates one continuous walking step of the
-% RABBIT robot until impact occurs.
-%
-% INPUTS:
-%   x0          : initial state [q; dq]
-%   params      : robot parameter structure
-%   controller  : optional controller function handle
-%
-% OUTPUTS:
-%   t_out       : simulation time vector
-%   x_out       : state trajectory
-%   impact_info : impact event information
-%
-% =========================================================
-
-%% --------------------------------------------------------
-% Input Handling
-% ---------------------------------------------------------
-
-if nargin < 3
-    controller = [];
+%% Input Handling
+arguments
+    x0 (:, 1) double {mustBeNonempty, mustBeFinite}
+    controller = []
 end
 
-fprintf('\nStarting single-step simulation...\n');
-
-%% --------------------------------------------------------
-% Simulation Settings
-% ---------------------------------------------------------
-
-tspan = [0 0.8];
-
+%% Solver Configuration
+% Increased tolerance and restricted max step for better convergence
 options = odeset(...
-    'RelTol', 1e-2, ...       % default 1e-3, but check yours
-    'AbsTol', 1e-2, ...       % loosen if too tight
-    'MaxStep', 0.05, ...      % cap step size to 10ms
-    'Events', @(t,x) rabbit_impact_event(t, x, params));
+    'RelTol', 1e-6, ...       
+    'AbsTol', 1e-6, ...       
+    'MaxStep', 0.01, ...      
+    'Events', @rabbit_impact_event);
 
-%% --------------------------------------------------------
-% ODE Function
-% ---------------------------------------------------------
+% Define ODE dynamics
+ode_fun = @(t, x) rabbit_ode(t, x, controller);
 
-ode_fun = @(t,x) rabbit_ode( ...
-    t, ...
-    x, ...
-    params, ...
-    controller);
+%% Integration
+% Hard time limit of 10 s per step; ode45 normally stops much earlier when
+% rabbit_impact_event fires (swing-foot height = 0). Reaching 10 s means the
+% foot never landed -- the caller should treat that as a failed step.
+[t_out, x_out, te, xe, ie] = ode45(ode_fun, [0 10], x0, options);
 
-%% --------------------------------------------------------
-% Integrate Dynamics
-% ---------------------------------------------------------
-
-try
-
-    [t_out, x_out, te, xe, ie] = ode45( ...
-        ode_fun, ...
-        tspan, ...
-        x0, ...
-        options);
-
-catch ME
-    global CURRENT_STEP
-    fprintf('Integration failed at step %d: %s\n', CURRENT_STEP, ME.message);
-    fprintf('Initial state for this step:\n');
-    disp(x0);
-    rethrow(ME);
+%% Validation
+if isempty(t_out) || any(isnan(x_out), 'all')
+    error('Simulation failed: Trajectory is empty or contains NaNs.');
 end
 
-%% --------------------------------------------------------
-% Validate Output
-% ---------------------------------------------------------
-
-if isempty(t_out)
-    error('Empty trajectory returned from ODE solver.');
+%% Diagnostics
+check_stability(x_out);
 end
 
-if any(isnan(x_out(:)))
-    error('NaN detected during integration.');
+function check_stability(x_out)
+    % Helper to check for physically unrealistic values
+    n = size(x_out, 2) / 2;
+    if any(abs(x_out(:, 1:n)) > 2*pi, 'all') % Example limit: 2*pi radians
+        warning('Unlikely joint angles detected (> 360 degrees).');
+    end
+    if any(abs(x_out(:, n+1:end)) > 50, 'all') % Example limit: 50 rad/s
+        warning('High joint velocities detected.');
+    end
 end
-
-%% --------------------------------------------------------
-% Impact Information
-% ---------------------------------------------------------
-
-impact_info = struct();
-
-if isempty(te)
-
-    fprintf('No impact detected.\n');
-
-    impact_info.detected = false;
-    impact_info.time     = [];
-    impact_info.state    = [];
-    impact_info.index    = [];
-
-else
-
-    fprintf('Impact detected at t = %.4f sec\n', te(end));
-
-    impact_info.detected = true;
-    impact_info.time     = te(end);
-    impact_info.state    = xe(end,:)';
-    impact_info.index    = ie(end);
-
-end
-
-%% --------------------------------------------------------
-% Trajectory Diagnostics
-% ---------------------------------------------------------
-
-fprintf('Simulation duration : %.4f sec\n', t_out(end));
-fprintf('Trajectory samples  : %d\n', length(t_out));
-
-%% --------------------------------------------------------
-% Optional Stability Check
-% ---------------------------------------------------------
-
-n = size(x_out,2)/2;
-
-q  = x_out(:,1:n);
-dq = x_out(:,n+1:end);
-
-if any(abs(q(:)) > 10)
-
-    warning('Large joint angles detected.');
-
-end
-
-if any(abs(dq(:)) > 100)
-
-    warning('Large joint velocities detected.');
-
-end
-
-fprintf('Single-step simulation completed.\n');
-
-end
-
-

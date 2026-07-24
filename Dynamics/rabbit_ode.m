@@ -1,7 +1,5 @@
-function dx = rabbit_ode(t, x, param, controller)
+function dx = rabbit_ode(t, x, controller)
 
-% convert struct → numeric vector for use in low-level functions
-p = packParameters(param);
 
 % split state
 q  = x(1:7);
@@ -11,11 +9,11 @@ dq = x(8:14);
 if isempty(controller)
     u = zeros(4,1);           % e.g., 4 joint torques
 else
-    u = controller(t, x, param);
+    u = controller(x);
 end
 
 % call constrained dynamics
-ddq = rabbit_constrained_dynamics(q, dq, u, p);
+ddq = rabbit_constrained_dynamics(q, dq, u);
 
 % assemble state derivative
 dx = [dq; ddq];
