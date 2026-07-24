@@ -1,4 +1,15 @@
 function main_demo()
+%MAIN_DEMO  Legacy stepping-stone walking demo  (NON-RUNNABLE REFERENCE).
+%
+% ==> NON-RUNNABLE. This predates the HZD pipeline and calls interfaces that no
+%     longer exist: make_initial_state with 3 outputs (it returns 1),
+%     simulate_n_steps with 4 args (it takes 3), and
+%     animate_rabbit_stepping_stones (does not exist). Kept for reference only.
+%
+%     Working entry point:
+%       Trajectory_Optimization/rabbit_hzd_trajectory_optimization.m
+%     See README "Broken legacy entry points".
+
 clc;
 clear;
 close all;

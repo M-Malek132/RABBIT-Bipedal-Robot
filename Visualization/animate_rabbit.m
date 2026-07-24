@@ -127,17 +127,15 @@ function update_rabbit_frame(q, handles)
 end
 
 function [stance_foot, swing_foot, hip, stance_knee, swing_knee, torso_top] = rabbit_points(q)
-    % Wrapper for kinematic position functions generated from your dynamic model
-    stance_foot = P_st(q);
-    swing_foot  = P_sw(q);
-
-    pos_hip = Tt(q)* [0 0 0 1]';
-    P_torso = Tt(q)* [0 -0.75 0 1]';
-    P_knee_st = T2(q)* [0 0 0 1]';
-    P_knee_sw = T4(q)* [0 0 0 1]';
-
-    hip         = [pos_hip(1,1);   pos_hip(3,1)];
-    stance_knee = [P_knee_st(1,1);   P_knee_st(3,1)];
-    swing_knee  = [P_knee_sw(1,1);   P_knee_sw(3,1)];
-    torso_top   = [P_torso(1,1);   P_torso(3,1)];
+    % Thin adapter around the SHARED kinematics helper so the body-point
+    % geometry is defined in exactly one place (Utilities/get_body_points.m).
+    % This used to duplicate the Tt/T2/T4/P_st/P_sw kinematics verbatim; the two
+    % copies could silently drift, so this now just unpacks get_body_points.
+    pts = get_body_points(q);
+    stance_foot = pts.stance_foot;
+    swing_foot  = pts.swing_foot;
+    hip         = pts.hip;
+    stance_knee = pts.stance_knee;
+    swing_knee  = pts.swing_knee;
+    torso_top   = pts.torso_top;
 end

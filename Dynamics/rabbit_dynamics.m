@@ -1,5 +1,15 @@
 function ddq = rabbit_dynamics(q,dq,u,param)
-%RABBIT_DYNAMICS
+%RABBIT_DYNAMICS  Unconstrained forward dynamics  (NON-RUNNABLE REFERENCE).
+%
+% ==> NON-RUNNABLE. This predates the current dynamics layer and still calls
+%     D_matrix / C_vector / G_vector, which DO NOT EXIST in the repo (the real
+%     generated functions are M / V / G). It is kept only to show the plain
+%     unconstrained-EoM form. For the working code use:
+%       * Dynamics/rabbit_constrained_dynamics.m -- single-support (foot pinned)
+%         forward dynamics actually run by the simulator/optimizer, and
+%       * Dynamics/col_dynamics.m (Collocation) -- EoM with an explicit contact
+%         force. See README "Broken legacy entry points".
+%
 % Computes unconstrained forward dynamics of the RABBIT robot
 %
 % Equation of motion:

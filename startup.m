@@ -24,7 +24,14 @@ set(0, 'DefaultFigureColor', 'w', ...
        'DefaultLineLineWidth', 1.5);
 
 %% 4. Verify Critical Functions
-required = {'rabbit_dynamics', 'simulate_one_step', 'animate_rabbit', 'rabbit_controller'};
+% These are the ACTUAL HZD-pipeline entry points. The old legacy demo helpers
+% (rabbit_dynamics / rabbit_controller / main_demo) are intentionally NOT checked
+% here: they still call functions that no longer exist, yet `which` finds the
+% files and would report a misleading [OK]. See README "Broken legacy entry
+% points".
+required = {'simulate_hzd_gait', 'hzd_constraints', 'hzd_cost', ...
+            'rabbit_impact_map', 'rabbit_reset_map', 'theta_of_q', ...
+            'animate_hzd_result'};
 
 fprintf('\nVerifying Dependencies:\n');
 for i = 1:length(required)

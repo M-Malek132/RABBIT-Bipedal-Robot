@@ -5,7 +5,7 @@ function [rho, eigvals, A] = poincare_stability(coeffs, x_start, p, h)
 %   [rho, eigvals, A] = poincare_stability(coeffs, x_start, p, h)
 %
 % One walking step defines the Poincare (step-to-step) map
-%       x_next = P(x_start) = reset( impact( simulate_one_step(x_start) ) ).
+%       x_next = P(x_start) = reset( impact( simulate_hzd_gait(x_start) ) ).
 % A periodic gait is a FIXED POINT of P (that is what the periodicity
 % equality enforces). The gait is orbitally STABLE iff every eigenvalue of
 % the map's Jacobian A = dP/dx at the fixed point lies strictly inside the

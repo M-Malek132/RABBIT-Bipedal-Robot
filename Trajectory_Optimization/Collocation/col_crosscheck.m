@@ -138,6 +138,9 @@ function [t, x, status] = sim_step(coeffs, x_start, p)
     t = sol.x(:);
     x = sol.y(1:2*nq, :).';
     impacted = isfield(sol,'ie') && ~isempty(sol.ie);
-    status = (impacted && ~any(isnan(x(end,:)))) * 1 + ...
-             (~(impacted && ~any(isnan(x(end,:))))) * -1;
+    if impacted && ~any(isnan(x(end,:)))
+        status = 1;    % valid step: impact fired and the final state is finite
+    else
+        status = -1;   % failed step: no impact, or NaNs in the trajectory
+    end
 end

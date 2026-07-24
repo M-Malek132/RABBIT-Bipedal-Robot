@@ -16,19 +16,22 @@ p.v_des = 0.355;                % [m/s]
 % gait already found under PD (warm start below), not for a cold solve.
 % p.controller = 'clfqp';
 
-% ---- PHYSICAL CONSTRAINTS: enable ONE AT A TIME, re-solving each ----------
-% Order matters. The measured reference gait has the vertical GRF going
-% NEGATIVE (min ~ -193 N: the foot would have to be pulled down, i.e. it lifts
-% off), which ALSO makes the friction ratio |Fx/Fz| blow up at the Fz=0
-% crossing. So the ground-reaction constraint is the ROOT and must come first;
-% friction only becomes meaningful once Fz stays positive. Impulse (~10 Ns) and
-% mean GRF (~309 N) are already fine. Warm-start each phase from the previous:
-%   phase 1: min vertical GRF   (keep the foot in compression, Fz > 0)  <== NOW
-%   phase 2: + friction cone    (now well-defined)
-%   phase 3: + torque           (seed peaks ~257 Nm > u_max 120)
-%   phase 4: + impact impulse   (already ~10 Ns; likely free)
+% ---- PHYSICAL CONSTRAINTS (thesis Table 3.1) ------------------------------
+% All four are enabled together here for a COMBINED solve, warm-started (below)
+% from a gait that already handles them. If this combined solve STALLS or fails
+% to converge, back off and enable them ONE AT A TIME, re-solving and warm-
+% starting each phase from the previous converged gait -- incremental is far
+% more robust than all-at-once when the starting gait is infeasible.
+%
+% Recommended incremental order (why): the raw reference gait has the vertical
+% GRF going NEGATIVE (min ~ -193 N: the foot would have to be pulled down, i.e.
+% it lifts off), which ALSO makes the friction ratio |Fx/Fz| blow up at the
+% Fz=0 crossing. So the ground-reaction constraint is the ROOT and must come
+% first; friction only becomes meaningful once Fz stays positive. Torque (seed
+% peaks ~257 Nm > u_max 120) and impact impulse (~10 Ns, already fine) follow.
+%   GRF  ->  + friction  ->  + torque  ->  + impulse
 %   (then p.enforce_stability for the final, hardest phase)
-p.enforce_grf      = true;      % <-- phase 1 (the root pathology)
+p.enforce_grf      = true;
 p.enforce_friction = true;
 p.enforce_torque   = true;
 p.enforce_impulse  = true;
