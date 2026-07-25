@@ -22,7 +22,12 @@ function col_verify_seed(result_file, N)
     if nargin < 2 || isempty(N), N = 15; end
     if nargin < 1 || isempty(result_file)
         d = dir(fullfile(root,'Results','hzd_result_*.mat'));
-        [~,i] = max([d.datenum]);
+        assert(~isempty(d), 'No Results/hzd_result_*.mat; pass a file explicitly.');
+        % Newest by NAME (the hzd_result_YYYY-MM-DD_HH-MM-SS stamp sorts
+        % chronologically), not by mtime: a fresh clone/worktree gives every
+        % file the same mtime, so max([d.datenum]) would pick arbitrarily.
+        [~,ord] = sort({d.name});
+        i = ord(end);
         result_file = fullfile(d(i).folder, d(i).name);
     end
     fprintf('Seed gait : %s\nNodes N   : %d\n\n', result_file, N);
