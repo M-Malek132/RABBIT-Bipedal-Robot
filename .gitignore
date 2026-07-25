@@ -5,3 +5,10 @@
 *.slxc
 slprj/
 *.asv
+
+# LaTeX build artifacts (the .tex, docs/figures/ and the built .pdf are tracked)
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
