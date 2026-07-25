@@ -91,12 +91,17 @@ silently drops the `(dy_d/ds)ṡ` term from `ẏ`. A polynomial evaluated a whis
 outside `[0,1]` is perfectly well behaved.
 
 **Bézier vs B-spline.** A clamped B-spline of degree M with M+1 control points
-*is* the degree-M Bézier curve, and `ch3_test_vc` asserts the values agree to
-1e-16. Bézier is the default because its derivatives are analytic and
-degree-independent. The inherited `BSpline_derivative.m` is self-consistent at
-degree 3 (what the existing pipeline uses) but **wrong at degree 5**, drifting
-up to 0.4 from a finite difference of its own curve near `s = 1` — and
-`L_f²y` depends directly on `dy_d/ds`.
+*is* the degree-M Bézier curve, and `ch3_test_vc` asserts both values and
+derivatives agree. Bézier is the default because its derivatives are
+closed-form and it provides an **analytic second derivative**; the B-spline
+path central-differences `d²y_d/ds²`, which `L_f²y` depends on directly.
+
+> Building this package surfaced a latent bug in the inherited
+> `BSpline_derivative.m`: correct at degree 3 (the only degree the existing
+> pipeline calls) but **wrong at degree 5**, drifting up to 0.4 from a finite
+> difference of its own curve. Its recursion loop range shrank with degree and
+> silently dropped the top basis functions. Fixed, with
+> `Test/test_bspline_derivative.m` validating degrees 2–5.
 
 **The collocation solve runs under pure feedforward.** The gait is designed
 *on* the zero dynamics surface `Z = {η = 0}`, where any feedback term

@@ -39,50 +39,39 @@ pass = report('bezier d2yd/ds2 vs FD',  e2, 1e-5, pass);
 
 %% 3. Bezier == clamped B-spline of matching degree
 % A clamped B-spline of degree M with exactly M+1 control points IS the
-% degree-M Bezier curve, so the two backends must describe the same curve.
-% We assert that on the VALUES, which is the property that actually defines
-% the curves.
+% degree-M Bezier curve, so the two backends must agree on the values AND on
+% the derivatives -- they are the same curve computed two different ways.
+%
+% The derivative half of this assertion used to fail: BSpline_derivative was
+% correct at degree 3 but wrong at degree 5 (its recursion range shrank with
+% degree and dropped the top basis functions), disagreeing by up to 1.9 here.
+% That is fixed, so the strong form of the check is back on.
 pb = p;                     pb.basis = 'bezier';
 ps = ch3_params('basis','bspline','bsp_deg',p.bez_deg);
 eb = 0; ebd = 0;
 for s = 0:0.05:1
-    ya = ch3_yd(alpha, s, pb);
-    yc = ch3_yd(alpha, s, ps);
-    eb = max(eb, norm(ya - yc, inf));
-
-    % Bezier's analytic slope must match a finite difference of the B-SPLINE
-    % value -- i.e. of the same curve computed by the other backend. This is
-    % the cross-backend derivative check, and it deliberately does NOT call
-    % BSpline_derivative (see the note below).
-    h  = 1e-6;
-    sm = min(max(s-h,0),1); sp = min(max(s+h,0),1);
-    [~, da] = ch3_bezier(alpha, s);
-    dnum = (ch3_yd(alpha, sp, ps) - ch3_yd(alpha, sm, ps)) / (sp - sm);
-    if sp > sm && s > 0.02 && s < 0.98
-        ebd = max(ebd, norm(da - dnum, inf));
-    end
+    [ya, da] = ch3_yd(alpha, s, pb);
+    [yc, dc] = ch3_yd(alpha, s, ps);
+    eb  = max(eb,  norm(ya - yc, inf));
+    ebd = max(ebd, norm(da - dc, inf));
 end
-pass = report('bezier == bspline (value)', eb,  1e-10, pass);
-pass = report('bezier slope vs bspline FD', ebd, 1e-5, pass);
+pass = report('bezier == bspline (value)',  eb,  1e-10, pass);
+pass = report('bezier == bspline (dy/ds)', ebd, 1e-10, pass);
 
-%% 3b. BSpline_derivative self-consistency, at the degree the repo uses
-% KNOWN LIMITATION of the inherited Trajectory_Optimization/BSpline_derivative.m:
-% its analytic recurrence agrees with a finite difference of its own curve at
-% degree 3 (the degree the existing pipeline runs, p.bsp_deg = 3) but NOT at
-% degree 5, where the clamped knot vector collapses to the Bezier one and the
-% interior recurrence mis-indexes -- the error grows to ~0.4 near s = 1.
-% That is why 'bezier' is the default basis here: its derivatives are analytic
-% and degree-independent. We assert only the degree-3 behaviour, which is what
-% the inherited code is actually relied upon for.
+%% 3b. BSpline_derivative self-consistency across degrees
+% Regression guard for the bug above: the analytic derivative must match a
+% central difference of BSpline's own curve at EVERY degree, not just 3.
 a1 = alpha(1,:); n = numel(a1)-1;
-e3 = 0;
-for s = 0.05:0.05:0.95
-    d_ana = a1 * BSpline_derivative(n, 3, s).';
-    h = 1e-7;
-    d_fd  = (a1*BSpline(n,3,s+h).' - a1*BSpline(n,3,s-h).')/(2*h);
-    e3 = max(e3, abs(d_ana - d_fd));
+for deg = [3 5]
+    ed = 0;
+    for s = 0.05:0.05:0.95
+        d_ana = a1 * BSpline_derivative(n, deg, s).';
+        h = 1e-7;
+        d_fd  = (a1*BSpline(n,deg,s+h).' - a1*BSpline(n,deg,s-h).')/(2*h);
+        ed = max(ed, abs(d_ana - d_fd));
+    end
+    pass = report(sprintf('BSpline_derivative @ deg %d', deg), ed, 1e-6, pass);
 end
-pass = report('BSpline_derivative @ deg 3', e3, 1e-6, pass);
 
 %% test states: pick poses at mid-phase so the phase clamp is never active
 x0 = [ +0.0000; -0.9310; +0.2999; -0.7934; +0.6869; -0.6318; +0.9810; ...

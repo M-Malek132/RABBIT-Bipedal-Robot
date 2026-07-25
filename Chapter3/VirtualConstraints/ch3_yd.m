@@ -17,15 +17,16 @@ function [yd, dyd, d2yd] = ch3_yd(alpha, s, p)
 % p.basis='bspline' with p.bsp_deg = size(alpha,2)-1 therefore reproduces the
 % Bezier VALUES to machine precision, and ch3_test_vc asserts that.
 %
-% CAVEAT ON THE B-SPLINE DERIVATIVE.  The inherited BSpline_derivative.m is
-% self-consistent at degree 3 -- the degree the existing pipeline runs -- but
-% its interior recurrence mis-indexes at degree 5, where the clamped knot
-% vector collapses to the Bezier one; the analytic slope then disagrees with a
-% finite difference of its own curve by up to ~0.4 near s = 1 (measured, see
-% ch3_test_vc section 3b).  This is the main reason 'bezier' is the default:
-% Lf^2 y depends directly on dyd/ds and d2yd/ds2, so a wrong slope would go
-% straight into the feedforward torque.  Use 'bspline' for value cross-checks,
-% and only at bsp_deg = 3.
+% HISTORY.  BSpline_derivative.m used to be correct at degree 3 -- the degree
+% the existing pipeline runs -- but wrong at degree 5, disagreeing with a
+% finite difference of its own curve by up to ~0.4 near s = 1, because its
+% recursion loop range shrank with degree and dropped the top basis functions.
+% That is fixed (see Test/test_bspline_derivative.m), so both bases now agree
+% on values AND derivatives at every degree, which ch3_test_vc asserts.
+%
+% 'bezier' remains the default anyway: its derivatives are closed-form rather
+% than recursive, and it supplies an ANALYTIC second derivative. The B-spline
+% path still central-differences d2yd/ds2, and Lf^2 y depends on it directly.
 %
 % Inputs
 %   alpha : ny x n_ctrl coefficient matrix (one ROW per output)
