@@ -1,10 +1,24 @@
-function animate_rabbit(x_traj)
+function animate_rabbit(x_traj, opts)
     % ANIMATE_RABBIT Visualizes the RABBIT trajectory, manages camera tracking,
     % renders environment/stepping stones, and generates a GIF of the simulation.
-    
+    %
+    %   animate_rabbit(x_traj)          % 14xN or Nx14 trajectory
+    %   animate_rabbit(x_traj, opts)
+    %
+    % opts is an optional struct; any subset of the fields below. The defaults
+    % reproduce the historical single-argument behaviour exactly, so existing
+    % callers (animate_hzd_result) are unaffected.
+    %   .gif_file  output GIF path      (default Results/rabbit_animation.gif)
+    %   .skip      draw every skip-th column of x_traj  (default 5)
+    %   .delay     GIF frame delay [s]  (default 0.03)
+    %   .title     axes title
+    %   .name      figure window name
+
     if isempty(x_traj) || any(isnan(x_traj(:)))
         error('Animation aborted: trajectory is empty or contains NaNs.');
     end
+
+    if nargin < 2 || isempty(opts), opts = struct(); end
 
     %======================================================================
     % 1. Setup Environment & Configuration
@@ -17,19 +31,26 @@ function animate_rabbit(x_traj)
         stones = []; % Fallback if stepping stones config is not found
     end
     
-    % Setup Result Folder
-    result_folder = 'Results';
-    if ~exist(result_folder, 'dir')
+    % Setup Result Folder. The default is anchored at the REPO ROOT, not the
+    % cwd: 'Results' used to be a relative path tested with exist(...,'dir'),
+    % which also searches the MATLAB path -- so from any cwd other than the repo
+    % root that test passed on the repo's own Results/, mkdir was skipped, and
+    % imwrite then failed with "Unable to open file ... for writing".
+    % isfolder() looks only at the filesystem, so it cannot be fooled that way.
+    default_gif = fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
+                           'Results', 'rabbit_animation.gif');
+    filename = getfielddef(opts, 'gif_file', default_gif);
+    result_folder = fileparts(filename);
+    if ~isempty(result_folder) && ~isfolder(result_folder)
         mkdir(result_folder);
     end
-    filename = fullfile(result_folder, 'rabbit_animation.gif');
 
     % Figure Initialization
-    figure('Color', 'w', 'Name', 'RABBIT Bipedal Walker');
+    figure('Color', 'w', 'Name', getfielddef(opts,'name','RABBIT Bipedal Walker'));
     clf;
     axis equal; grid on; hold on;
     xlabel('X [m]'); ylabel('Z [m]');
-    title('RABBIT 5-Link Walker Simulation');
+    title(getfielddef(opts, 'title', 'RABBIT 5-Link Walker Simulation'));
     view(2);
 
     %======================================================================
@@ -68,9 +89,10 @@ function animate_rabbit(x_traj)
         x_traj = x_traj';
     end
     
-    skip_frames = 5; 
+    skip_frames = max(1, round(getfielddef(opts, 'skip',  5)));
+    delay_time  =        getfielddef(opts, 'delay', 0.03);
     frame_indices = 1 : skip_frames : size(x_traj, 2);
-    
+
     for idx = 1:length(frame_indices)
         k = frame_indices(idx);
         q = x_traj(1:7, k);
@@ -90,13 +112,18 @@ function animate_rabbit(x_traj)
         [A, map] = rgb2ind(img, 256);
         
         if idx == 1
-            imwrite(A, map, filename, 'gif', 'LoopCount', Inf, 'DelayTime', 0.03);
+            imwrite(A, map, filename, 'gif', 'LoopCount', Inf, 'DelayTime', delay_time);
         else
-            imwrite(A, map, filename, 'gif', 'WriteMode', 'append', 'DelayTime', 0.03);
+            imwrite(A, map, filename, 'gif', 'WriteMode', 'append', 'DelayTime', delay_time);
         end
     end
-    
+
     fprintf('Animation saved to:\n%s\n', filename);
+end
+
+function v = getfielddef(s, f, d)
+    % Field of s if present and non-empty, else the default d.
+    if isfield(s,f) && ~isempty(s.(f)), v = s.(f); else, v = d; end
 end
 
 %==========================================================================
