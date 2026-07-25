@@ -23,7 +23,12 @@ function [rho, eigvals, x_start, coeffs] = col_poincare(col_file, controller)
     if nargin < 2 || isempty(controller), controller = 'pd'; end
     if nargin < 1 || isempty(col_file)
         d = dir(fullfile(root,'Results','col_result_*.mat'));
-        [~,i] = max([d.datenum]);
+        assert(~isempty(d), 'No Results/col_result_*.mat; run rabbit_hzd_collocation first.');
+        % Newest by NAME (the col_result_YYYY-MM-DD_HH-MM-SS stamp sorts
+        % chronologically), not by mtime: a fresh clone/worktree gives every
+        % file the same mtime, so max([d.datenum]) would pick arbitrarily.
+        [~,ord] = sort({d.name});
+        i = ord(end);
         col_file = fullfile(d(i).folder, d(i).name);
     elseif ~isfile(col_file)
         col_file = fullfile(root,'Results', col_file);

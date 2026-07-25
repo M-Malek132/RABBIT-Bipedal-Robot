@@ -23,7 +23,11 @@ function test_clf_qp(result_file)
     if nargin < 1 || isempty(result_file)
         d = dir(fullfile(root, 'Results', 'hzd_result_*.mat'));
         assert(~isempty(d), 'No Results/hzd_result_*.mat found; pass a file explicitly.');
-        [~, newest] = max([d.datenum]);
+        % Newest by NAME (the hzd_result_YYYY-MM-DD_HH-MM-SS stamp sorts
+        % chronologically), not by mtime: a fresh clone/worktree gives every
+        % file the same mtime, so max([d.datenum]) would pick arbitrarily.
+        [~, ord] = sort({d.name});
+        newest = ord(end);
         result_file = fullfile(d(newest).folder, d(newest).name);
     end
     fprintf('Loading gait: %s\n', result_file);

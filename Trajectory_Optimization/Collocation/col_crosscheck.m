@@ -30,7 +30,11 @@ function R = col_crosscheck(col_file, controller, do_plot)
     if nargin < 1 || isempty(col_file)
         d = dir(fullfile(root,'Results','col_result_*.mat'));
         assert(~isempty(d), 'No Results/col_result_*.mat; run rabbit_hzd_collocation first.');
-        [~,i] = max([d.datenum]);
+        % Newest by NAME (the col_result_YYYY-MM-DD_HH-MM-SS stamp sorts
+        % chronologically), not by mtime: a fresh clone/worktree gives every
+        % file the same mtime, so max([d.datenum]) would pick arbitrarily.
+        [~,ord] = sort({d.name});
+        i = ord(end);
         col_file = fullfile(d(i).folder, d(i).name);
     end
     fprintf('Collocation gait : %s\ncontroller       : %s\n', col_file, controller);
