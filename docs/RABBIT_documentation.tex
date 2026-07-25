@@ -17,6 +17,8 @@
 \usepackage{listings}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\usepackage{graphicx}
+\graphicspath{{figures/}}
 \usepackage[hidelinks]{hyperref}
 
 % ---- convenience macros --------------------------------------------
@@ -52,8 +54,9 @@ underactuated biped. The centrepiece is a working Hybrid Zero Dynamics (HZD)
 gait--optimization pipeline that produces dynamically feasible, periodic walking
 gaits and animates them. We cover the robot model, the continuous and hybrid
 dynamics, the HZD control formulation, the nonlinear program solved with
-\code{fmincon}, the software architecture and data flow, a per--folder file
-reference, and reproducibility notes. Deviations between the documented and the
+\code{fmincon} in both of its transcriptions --- single shooting and
+Hermite--Simpson direct collocation --- the software architecture and data
+flow, a per--folder file reference, and reproducibility notes. Deviations between the documented and the
 as--built code (broken legacy entry points, orphaned files) are flagged
 explicitly.
 \end{abstract}
@@ -274,6 +277,100 @@ cost, every constraint residual, the worst violation, the within--step
 stance--foot drift, and the orbital--stability radius $\rho$ (below).
 
 % =====================================================================
+\section{Direct collocation}
+\label{sec:collocation}
+% =====================================================================
+Everything above transcribes the gait problem by \emph{single shooting}: the
+decision variables are the B\'ezier coefficients and one initial state, and the
+dynamics are satisfied implicitly because \code{ode45} integrates them.
+\fname{Trajectory\_Optimization/Collocation/} implements the alternative
+transcription --- \emph{Hermite--Simpson direct collocation} --- which matches
+the thesis method. There is no \code{ode45} in the optimization loop at all.
+
+\paragraph{What changes.} The trajectory itself becomes a decision variable.
+For $N$ nodes the vector $z$ concatenates
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+block & size & meaning \\
+\midrule
+$X$      & $2n_q \times N$      & node states $[q;\dot q]$ \\
+$U$      & $n_u \times N$       & node joint torques \\
+$\Lambda$& $2 \times N$         & node stance--foot contact forces $[F_x;F_z]$ \\
+\code{coeffs} & $n_u \times n_c$ & B\'ezier virtual--constraint parameters \\
+$T$      & $1$                  & step duration \\
+\bottomrule
+\end{tabular}
+\end{center}
+(\fname{col\_pack.m} / \fname{col\_unpack.m}). With the defaults $n_q=7$,
+$n_u=4$, $n_c=6$, $N=20$ that is $280+80+40+24+1 = 425$ variables, versus the
+$38$ of the shooting formulation. The dynamics are then imposed as
+\emph{equality constraints} --- the Hermite--Simpson defects between
+consecutive nodes --- rather than being integrated. The virtual constraints
+$y = q_{4:7} - y_d(s,\code{coeffs}) = 0$ are enforced at \emph{every} node, so
+the solution lives on the hybrid zero--dynamics manifold by construction and
+\code{coeffs} still parametrizes it.
+
+\paragraph{The trade.} Collocation buys a much better conditioned problem: no
+event--triggered integrator inside the finite differences, so the Jacobian is
+sparse, exact in structure, and free of the integration noise that forced
+central differences in the shooting setup. It pays for this with an order of
+magnitude more variables and with a solution that is only \emph{as feasible as
+its defect tolerance} --- which motivates the cross--check below.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig_gait_stickfigure.png}
+\caption{One converged collocation step
+(\fname{col\_result\_2026-07-23\_00-45-04.mat}, $N=20$, $T=1.046$~s), sampled at
+seven nodes and offset horizontally for legibility. Blue is the stance leg, red
+the swing leg, green the torso; opacity increases through the step. The stance
+foot stays planted while the swing leg advances and re--strikes ahead of it.}
+\label{fig:stick}
+\end{figure}
+
+\paragraph{Warm starting (\fname{rabbit\_hzd\_collocation.m}).} The driver
+accepts either kind of saved gait and does the right thing with each:
+\begin{itemize}
+  \item a \emph{collocation} result (\fname{col\_result\_*.mat}, identified by
+        carrying an \code{N} field) has its $z$ reused directly --- $N$ must
+        match;
+  \item a \emph{shooting/PD} result (\fname{hzd\_result\_*.mat}) is simulated
+        for one step and resampled onto the $N$ nodes by
+        \fname{col\_seed\_from\_pd.m}.
+\end{itemize}
+This is what makes the ``one constraint at a time'' workflow practical: enable
+one physical constraint, re--solve warm--started from the last converged
+collocation gait, repeat. \fname{col\_verify\_seed.m} reports the norm of every
+equality block on a seed \emph{without solving}, which separates a genuine
+transcription bug from a merely hard NLP.
+
+\paragraph{Cross--checking the result (\fname{col\_crosscheck.m}).} A
+collocation solution is an \textbf{open--loop} trajectory. It satisfies the
+defect constraints, but nothing in the transcription guarantees that the
+shooting simulator, driven by an actual feedback law, reproduces it. The
+cross--check extracts \code{coeffs} and the node--1 state, simulates one step
+under \code{p.controller} (\code{'pd'} or \code{'clfqp'}), and overlays the two
+(Figure~\ref{fig:crosscheck}).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig_col_vs_closedloop.png}
+\caption{Collocation reference (black) versus the PD closed--loop simulation
+(red dashed) over one step, on a normalized phase axis. Tracking is close ---
+$0.026$~rad rms, $0.140$~rad max, the largest errors at the stance knee just
+after impact --- so the open--loop trajectory really is realizable by the
+feedback law. Note this says nothing about what happens on the \emph{next}
+step; see Figure~\ref{fig:limitcycle}.}
+\label{fig:crosscheck}
+\end{figure}
+
+\paragraph{Stability of a collocation gait (\fname{col\_poincare.m}).} Same
+Poincar\'e machinery as Section~\ref{sec:stability}, fed from a
+\fname{col\_result\_*.mat}. Use \code{'pd'}: the CLF--QP law solves a QP per
+ODE step, and $\rho$ costs $\approx 26$ step simulations.
+
+% =====================================================================
 \section{Orbital stability: periodic is not the same as stable}
 \label{sec:stability}
 % =====================================================================
@@ -315,6 +412,22 @@ across a step, Baumgarte constraint stabilization diverging, the Poincar\'e
 settling iteration blowing up, fragile speed continuation --- is the same
 instability seen from a different angle: an orbit with $\rho>1$ amplifies
 \emph{every} perturbation, numerical or physical.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig_limit_cycle.png}
+\caption{What $\rho>1$ looks like. Phase portraits of the four actuated joints
+over consecutive PD closed--loop steps, started from the collocation gait's
+node--1 state. Circles mark where each step \emph{begins}: on an orbitally
+stable limit cycle they would coincide, and instead step~2 starts visibly away
+from step~1 --- most starkly at the swing hip, which restarts with
+$\approx 12.7$~rad/s where step~1 began near zero. Only two steps are drawn
+because the third leaves the physical range entirely ($|q|$ reaching several
+hundred radians), the same blow--up tabulated above. Compare
+Figure~\ref{fig:crosscheck}: a \emph{single} step tracks its reference well,
+which is exactly why one--step agreement is not evidence of a walkable gait.}
+\label{fig:limitcycle}
+\end{figure}
 
 \paragraph{The remedy.} Add $\rho < 1$ as an optimization constraint.
 \fname{poincare\_stability.m} builds $A$ by central finite differences on the
@@ -424,6 +537,22 @@ divide--by--zero and diverge; enabling \emph{GRF first} is correct. Each
 constraint has its own toggle (\code{p.enforce\_grf}, \code{enforce\_friction},
 \code{enforce\_torque}, \code{enforce\_impulse}) precisely so they can be
 introduced one at a time, warm--started, in the physically sensible order.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig_joint_torque.png}
+\caption{A gait caught \emph{mid--way} through that one--at--a--time workflow.
+The saved collocation result has \code{enforce\_grf} and \code{enforce\_impulse}
+on but \code{enforce\_torque} still \textbf{off}, and the lower panel shows the
+consequence: exactly one of the $80$ node torques leaves the $\pm120$~Nm box
+(circled) --- the stance knee at the first node, at $-139.0$~Nm, a $16\%$
+overshoot. With the toggle off this is not a solver failure but an
+\emph{unconstrained} quantity, and it is precisely what enabling
+\code{enforce\_torque} on the next warm--started solve is there to remove. The
+remaining $79$ nodes sit well inside the box, which is why the violation is
+easy to miss without plotting it.}
+\label{fig:torque}
+\end{figure}
 
 \paragraph{The constraints are coupled, not four independent knobs.} Two
 couplings are worth internalizing. First, \emph{GRF is upstream of friction}:
@@ -564,6 +693,22 @@ file & role \\
 \bottomrule
 \end{longtable}
 
+\subsection*{Trajectory\_Optimization/Collocation/ (Section~\ref{sec:collocation})}
+\begin{longtable}{@{}L{4.7cm} L{9.5cm}@{}}
+\toprule file & role \\ \midrule \endhead
+\fname{rabbit\_hzd\_collocation.m} & \textbf{Entry point}: Hermite--Simpson collocation solve, warm--started from a PD or collocation gait. \\
+\fname{col\_problem\_setup.m} & Extends $p$ with the node count $N$ and the collocation--vector bounds. \\
+\fname{col\_pack.m}, \fname{col\_unpack.m} & Assemble / split $z = [X;U;\Lambda;\code{coeffs};T]$. \\
+\fname{col\_dynamics.m} & Constrained EoM evaluated at a node (state, torque, contact force). \\
+\fname{col\_cost.m} & Objective on the node torques. \\
+\fname{col\_constraints.m} & Hermite--Simpson defects, virtual constraints at every node, foot pinning, periodicity. \\
+\fname{col\_seed\_from\_pd.m} & Simulate a PD gait and resample it onto $N$ nodes to build $z_0$. \\
+\fname{col\_verify\_seed.m} & Report every equality--block norm on a seed \emph{without} solving (transcription sanity check). \\
+\fname{col\_crosscheck.m} & Open--loop collocation trajectory vs.\ a closed--loop sim (Figure~\ref{fig:crosscheck}). \\
+\fname{col\_poincare.m} & Spectral radius $\rho$ of a collocation gait under \code{'pd'} or \code{'clfqp'}. \\
+\bottomrule
+\end{longtable}
+
 \subsection*{Simulation/, Utilities/, Visualization/}
 \begin{longtable}{@{}L{4.7cm} L{9.5cm}@{}}
 \toprule file & role \\ \midrule \endhead
@@ -604,7 +749,34 @@ file & role \\
         \code{2026-07-20\_12-06-36} result is the reference periodic gait
         ($\approx 0.355\,$m/s) used as the warm--start seed.
         \fname{build\_gait\_library.m} writes
-        \fname{gait\_library\_<timestamp>.mat}.
+        \fname{gait\_library\_<timestamp>.mat}. Collocation solves
+        (Section~\ref{sec:collocation}) write
+        \fname{Results/col\_result\_<timestamp>.mat}, which additionally carry
+        \code{N} --- that field is how \fname{rabbit\_hzd\_collocation.m} tells
+        a collocation warm start from a PD one.
+  \item \textbf{Default result selection is by filename, not mtime.} Every
+        entry point that resolves a default \fname{Results/*.mat} ---
+        \fname{rabbit\_hzd\_collocation}, \fname{col\_crosscheck},
+        \fname{col\_poincare}, \fname{col\_verify\_seed},
+        \fname{Test/test\_clf\_qp} --- picks
+        \code{max} of \code{sort(\{d.name\})}, \emph{not} \code{max([d.datenum])}.
+        The timestamp embedded in the filename is zero--padded, so a
+        lexicographic sort is chronological, whereas filesystem mtime is not
+        checkout--invariant: a fresh \code{git clone} or \code{git worktree add}
+        stamps every checked--out file with the same time, and an mtime
+        \code{max} then breaks the tie arbitrarily --- in practice returning the
+        \emph{oldest} gait. Selecting by mtime therefore silently seeds a solve
+        from a stale result and makes the outcome depend on which checkout it
+        runs in.
+  \item \textbf{Figures.} The result figures in this document
+        (Figures~\ref{fig:stick}, \ref{fig:crosscheck}, \ref{fig:torque},
+        \ref{fig:limitcycle}) are not hand--drawn: they are produced by
+        \fname{Visualization/make\_doc\_figures.m} from the newest
+        \fname{Results/col\_result\_*.mat} --- here
+        \fname{col\_result\_2026-07-23\_00-45-04.mat} --- into
+        \fname{docs/figures/}. After the reference gait changes, re--run that
+        script and recompile (\code{pdflatex} twice, for the cross--references)
+        so the figures and the prose cannot drift apart.
   \item \textbf{Nondeterminism.} \fname{make\_random\_initial\_state.m} uses
         \code{randn} with no seed. The HZD pipeline instead uses a hard--coded
         $x_0$, so its results are reproducible. Add \code{rng(seed)} before

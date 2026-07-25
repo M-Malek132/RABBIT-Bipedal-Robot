@@ -46,7 +46,17 @@ function [z_opt, fval, exitflag, p] = rabbit_hzd_collocation(N, warm_start_file,
     % ---- resolve warm-start file ----------------------------------------
     if nargin < 2 || isempty(warm_start_file)
         d = dir(fullfile(root,'Results','hzd_result_*.mat'));
-        [~,i] = max([d.datenum]);
+        assert(~isempty(d), 'No Results/hzd_result_*.mat; pass a file explicitly.');
+        % Newest by NAME, not by mtime. The filename embeds a zero-padded
+        % hzd_result_YYYY-MM-DD_HH-MM-SS stamp, so a lexicographic sort IS
+        % chronological. Filesystem mtime is not: a fresh `git clone` or
+        % `git worktree add` stamps every checked-out file with the same
+        % time, and max([d.datenum]) then breaks the tie arbitrarily (in
+        % practice picking the FIRST, i.e. the OLDEST gait) -- silently
+        % seeding the solve from a stale result and making the outcome
+        % depend on which checkout you happen to be in.
+        [~,ord] = sort({d.name});
+        i = ord(end);
         warm_start_file = fullfile(d(i).folder, d(i).name);
     elseif ~isfile(warm_start_file)
         warm_start_file = fullfile(root,'Results', warm_start_file);
