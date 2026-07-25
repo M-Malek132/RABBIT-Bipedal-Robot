@@ -1,0 +1,167 @@
+# Chapter 3 — Hybrid Walking Pipeline
+
+A from-scratch implementation of the Chapter 3 pipeline for the RABBIT planar
+five-link biped:
+
+> hybrid model → virtual constraints with a phase variable → offline
+> optimization for α → I/O linearization → RES-CLF → online QP that enforces
+> stability *and* physical limits
+
+Everything here is new code. The only things reused from the surrounding repo
+are the **robot model itself** — the symbolically generated `M, V, G, J_st,
+J_sw, Jdotdq_*, P_st, P_sw, T1–T4, Tt` in `Dynamics/` — and the **B-spline
+evaluator** (`Trajectory_Optimization/BSpline.m`), which is kept as a
+cross-check on the Bézier basis.
+
+---
+
+## Quick start
+
+```matlab
+startup                 % from the repo root; adds Chapter3/ to the path
+ch3_test_all            % verify every stage (a few minutes)
+out = ch3_main;         % solve a gait end to end and report on it
+```
+
+To look at a solved gait:
+
+```matlab
+ch3_plot_gait(out.z_opt, out.p, 'Results/ch3_gait.png');
+ch3_compare_controllers(out.z_opt, out.p);
+```
+
+> **Long solves and this MATLAB install.** Solves here have been observed to
+> die mid-run from crashes inside MATLAB's own add-on registry and worker
+> threads — unrelated to this code, but fatal to the process. `ch3_col_solve`
+> therefore checkpoints `z` every `p.checkpoint_every` iterations to
+> `p.checkpoint_file`. If a run dies, load the checkpoint and carry on; nothing
+> is lost but the last few iterations. Running `matlab -nojvm` avoids one of
+> the two observed crash paths.
+
+---
+
+## The eight stages, and where each one lives
+
+| # | Stage | Files |
+|---|-------|-------|
+| 1 | **Hybrid model** `ẋ = f + gu`, `x⁺ = Δ(x⁻)` | `Model/ch3_control_affine.m`, `ch3_guard.m`, `ch3_impact.m`, `ch3_relabel.m` |
+| 2 | **Virtual constraints** `y = y₀(q) − y_d(s(q),α)` | `VirtualConstraints/ch3_phase.m`, `ch3_bezier.m`, `ch3_yd.m`, `ch3_outputs.m` |
+| 3 | **Offline optimization** for α | `Optimization/ch3_col_*.m`, `ch3_seed.m` |
+| 4 | **I/O linearization** `ÿ = L_f²y + L_gL_fy·u` | `Control/ch3_io_lin.m` |
+| 5 | **PD baseline** | `Control/ch3_ctrl_pd.m` |
+| 6 | **RES-CLF** | `Control/ch3_res_clf.m`, `ch3_clf_eval.m` |
+| 7 | **CLF-QP** | `Control/ch3_ctrl_clf_qp.m` (`constrained = false`) |
+| 8 | **Constrained CLF-QP** | `Control/ch3_ctrl_clf_qp.m` (`constrained = true`) |
+
+Supporting: `Simulation/` (`ch3_ode_rhs`, `ch3_step`, `ch3_simulate`),
+`Analysis/` (`ch3_report`, `ch3_forces`, `ch3_poincare`, `ch3_plot_gait`,
+`ch3_compare_controllers`), `Test/`, and `ch3_params.m` — the single source of
+truth for every knob.
+
+### Why the code order differs from the chapter's
+
+The chapter presents optimization (3) before I/O linearization (4). The code
+cannot: the collocation transcription uses `u_ff`, the feedforward produced by
+the I/O linearization, as its input. So stage 4 is built first and stage 3
+depends on it. `ch3_main` runs them in dependency order.
+
+---
+
+## Design decisions worth knowing
+
+**The control-affine split is exact, not finite-differenced.** The single-
+support KKT system has the same left-hand matrix for every input, so
+`ch3_control_affine` does one factorization with five right-hand sides and
+recovers `ddq = ddq_drift + ddq_in·u` and `λ = lam_drift + lam_in·u` exactly.
+This is what makes `L_gL_fy` exact and, in stage 8, lets the friction cone and
+the minimum normal force be genuine linear constraints on `u` rather than
+approximations.
+
+**The phase variable is linear in q.** `θ = q_t + q₁ + q₂/2 = c·q` is the
+absolute stance leg angle. The geometric `atan2` form is *exactly* this
+expression for every physical pose (both links are 0.5 m) but wraps at ±π; the
+linear form is the same function with the branch cut removed, and its gradient
+is a constant row. That constant `ds/dq` is why `L_f²y` has only one curvature
+term.
+
+**The phase clamp has a margin.** It engages outside `[−0.5, 1.5]`, not at
+`[0,1]`. Clamping hard at the endpoints zeroes `ds/dq` at `s = 0` — the start
+of *every* step, where floating point puts `s` on either side of zero — which
+silently drops the `(dy_d/ds)ṡ` term from `ẏ`. A polynomial evaluated a whisker
+outside `[0,1]` is perfectly well behaved.
+
+**Bézier vs B-spline.** A clamped B-spline of degree M with M+1 control points
+*is* the degree-M Bézier curve, and `ch3_test_vc` asserts the values agree to
+1e-16. Bézier is the default because its derivatives are analytic and
+degree-independent. The inherited `BSpline_derivative.m` is self-consistent at
+degree 3 (what the existing pipeline uses) but **wrong at degree 5**, drifting
+up to 0.4 from a finite difference of its own curve near `s = 1` — and
+`L_f²y` depends directly on `dy_d/ds`.
+
+**The collocation solve runs under pure feedforward.** The gait is designed
+*on* the zero dynamics surface `Z = {η = 0}`, where any feedback term
+multiplies zero. `p.controller` selects what *runs* the gait, not what designs
+it.
+
+**Each controller is judged against its own certificate.** The stage-7
+min-norm law is built from the CARE `P` and satisfies that rate by
+construction — measured, it rides its bound at a ratio of exactly 1.0000. PD
+does *not* inherit that rate; its matching certificate is the Lyapunov
+equation `AᵀP + PA = −Q` with `A = [0 I; −K_p −K_d]`, which is the form the
+chapter writes. Measured against the CARE certificate instead, PD transiently
+exceeds the bound by 3.5× before converging further overall. Pairing them the
+wrong way is a category error, not a bug.
+
+---
+
+## The trap: small defects do not mean a real trajectory
+
+**Read `ch3_col_verify` before trusting any collocation result.**
+
+Small Hermite–Simpson defects mean the *discrete* equations are satisfied. They
+do not mean the nodes approximate a solution of the ODE. On a mesh too coarse
+for the dynamics, the optimizer will happily find a **spurious discrete
+solution**. Measured here, on a fully converged N = 15 solve:
+
+```
+interval-1 defect                      7.18e-07
+|x₂(collocation) − x₂(true flow)|      3.68e-02      ← five orders worse
+```
+
+The tell was `max|η| = 0.41` at the interior nodes when node 1 satisfied
+`η = 0` to 5e-7. Since `u_ff` makes `ÿ = 0` *exactly*, `η` can only drift
+through discretization error — so large `η` with a small node-1 residual is a
+mesh diagnostic, not a modelling error. The accelerations reached 81 rad/s²,
+so `dq` moved by ~2.3 within one `h = 0.072 s` interval; Hermite–Simpson's
+truncation error had no chance. The forward simulation disagreed with the
+collocation (T: 1.00 s vs 0.72 s), which is how it surfaced.
+
+`ch3_report` runs this check automatically and prints **REJECT** when it
+fails. The cure is mesh refinement — `ch3_col_remesh` moves a solution to a
+finer mesh, warm-starting from the coarse one.
+
+## Periodic is not stable
+
+The periodicity equality makes the start state a *fixed point* of the
+step-to-step map. A fixed point can repel. `ch3_poincare` returns the spectral
+radius ρ of that map's Jacobian: **ρ < 1 attracts (walks), ρ ≥ 1 repels
+(falls)**, no matter how small the periodicity residual is. It costs 26 step
+simulations, which is why it is a post-hoc diagnostic rather than a constraint.
+
+## Table 3.1 limits — measure first
+
+The thesis limits are **ATRIAS** numbers: 63 kg with 50:1 harmonic drives, so
+its "|u| ≤ 5 Nm" is *motor* torque, 250 Nm at the joint. RABBIT is ~30 kg and
+**direct drive** — `u` here *is* joint torque. Copying the numbers across
+produces an infeasible problem and a solver that fails for reasons that look
+like bugs.
+
+Every limit in `ch3_report` is printed with its **measured** value whether or
+not it is enforced, and `[E]` marks the enforced ones. The workflow is: solve
+with all of them off, read the measured ranges, then enable them **one at a
+time, warm-starting each phase**, in this order:
+
+> **GRF → friction → torque → impulse**
+
+GRF comes first because friction is `|F_x|/F_z`: enabling it while `F_z` still
+crosses zero sets the optimizer chasing a division by zero.
