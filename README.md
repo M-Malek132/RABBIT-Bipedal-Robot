@@ -84,6 +84,26 @@ a **discrete** impact when the swing foot strikes the ground.
 
 ---
 
+## Two pipelines in this repo
+
+| | `Trajectory_Optimization/` (original) | `Chapter3/` (thesis pipeline) |
+|---|---|---|
+| virtual constraints | clamped cubic **B-spline** | **Bézier**, analytic derivatives |
+| solver | single shooting (`ode45` in the loop) + collocation | direct collocation only |
+| control | PD, optional CLF-QP | I/O linearization → PD → RES-CLF → CLF-QP → **constrained** CLF-QP |
+| entry point | `rabbit_hzd_trajectory_optimization.m` | `Chapter3/ch3_main.m` |
+
+`Chapter3/` is a from-scratch implementation of the Chapter 3 method. It reuses
+**only** the generated robot model in `Dynamics/` and the B-spline evaluator;
+everything else — hybrid model wrapper, virtual constraints, optimization,
+controllers, simulation, analysis — is independent code with its own test
+suite (`Chapter3/Test/ch3_test_all.m`). See
+[Chapter3/README.md](Chapter3/README.md).
+
+The two are independent and can be cross-checked against each other.
+
+---
+
 ## Quick start — the HZD gait pipeline (this is the working entry point)
 
 ```matlab
