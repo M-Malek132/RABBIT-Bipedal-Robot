@@ -108,6 +108,27 @@ path central-differences `d²y_d/ds²`, which `L_f²y` depends on directly.
 multiplies zero. `p.controller` selects what *runs* the gait, not what designs
 it.
 
+**The constrained CLF-QP must be run as sampled data, not continuous
+feedback.** Its `u(x)` is only *piecewise* smooth — the QP's active set changes
+as torque bounds engage and disengage, and `u` kinks at every switch. An
+adaptive explicit solver reads each kink as a failed error test and shrinks its
+step without bound. This does not merely slow the simulation, it stalls it:
+measured, **51 908 RHS evaluations advanced 0.0015 s of a 0.3009 s step** (0.5%),
+with `h` collapsed to ~3e-8.
+
+Setting `p.control_dt > 0` solves the QP once per control period and holds it,
+so within a period the integrand is the smooth `f + g·u` with `u` constant.
+The same step then completes in **1.6 s**. This is also the more faithful model
+— the chapter's own framing is a QP solved "well above 1 kHz", which is a
+sampled controller, not a continuous-time law. `ch3_compare_controllers` samples
+*all three* controllers at 1 kHz, since a continuously-evaluated controller
+would otherwise enjoy an advantage no digital implementation of it has.
+
+`ch3_test_simulation` validates the hold against the continuous rollout of the
+same controller, and checks the property that actually distinguishes a correct
+zero-order hold from one that is merely close: the error must be **first order
+in the period**. Measured halving ratios are 1.99 and 1.99.
+
 **Each controller is judged against its own certificate.** The stage-7
 min-norm law is built from the CARE `P` and satisfies that rate by
 construction — measured, it rides its bound at a ratio of exactly 1.0000. PD
@@ -170,3 +191,57 @@ time, warm-starting each phase**, in this order:
 
 GRF comes first because friction is `|F_x|/F_z`: enabling it while `F_z` still
 crosses zero sets the optimizer chasing a division by zero.
+
+---
+
+## The reference gait
+
+`Results/ch3_reference_gait.mat` (`z_opt`, `p`, `R`, `C`) — a periodic,
+mesh-verified, **stable** gait, found with NEC1 disabled:
+
+| quantity | value |
+|---|---|
+| walking speed | 1.174 m/s |
+| step length / duration | 0.353 m / 0.301 s |
+| periodicity through Δ | 8.1e-07 |
+| mesh verification | 6.8e-04 (tol 1e-03) ✓ |
+| max \|η\| over nodes | 2.1e-04 |
+| stance-foot drift | 8.7e-07 m |
+| **Poincaré ρ** | **0.760 → stable** |
+
+The forward simulation reproduces the collocation exactly — step length 0.353
+and duration 0.301 on all six steps — which is the cross-check that matters.
+All four Table 3.1 quantities pass *without being enforced*: torque 109 Nm,
+impulse 12.8 Ns, friction 0.194, min GRF 166 N.
+
+> **NEC1 was the blocker.** Pinning `L_step/T_step = v_des` while the gait shape
+> was still far from periodic over-constrained the problem, and the solve
+> stalled on spurious discrete solutions. Dropping it and letting the speed
+> float converged to a genuine trajectory within 120 iterations. Speed is then
+> recovered by continuation, not imposed from the start.
+
+## The stage-8 payoff, measured
+
+`ch3_compare_controllers` runs that one gait under all three laws at 1 kHz,
+with a torque box of 65.5 Nm — deliberately *below* the 109 Nm the gait needs,
+so it genuinely binds:
+
+| controller | peak \|u\| | over box | max \|η\| | max δ |
+|---|---|---|---|---|
+| `iolin_pd` | 109.6 | 44.2 | 1.77e-02 | 0 |
+| `clfqp` | 203.3 | 137.8 | 2.77 | 0 |
+| `clfqp_con` | **65.5** | **0.0** | 17.4 | 71.5 |
+
+Only the constrained QP holds the box, and it does so *by construction*. Two
+things are worth reading carefully:
+
+- **The unconstrained CLF-QP is the worst of the three here.** It asks for the
+  least-norm `μ` that certifies the rate at each instant, which leaves no margin
+  — under sampling that error compounds, and the demanded torque nearly doubles.
+  Minimum-norm is not the same as well-behaved.
+- **δ = 71.5 is the point, not a wart.** It is the controller reporting that it
+  could not meet the convergence rate inside the actuator limit. Per Remark 3.2
+  the exponential guarantee holds only while δ = 0, so this is the theory's
+  boundary being crossed visibly — `max |η|` growing to 17.4 is the price.
+  A PD law has no comparable mechanism: it saturates and voids its guarantee
+  silently.

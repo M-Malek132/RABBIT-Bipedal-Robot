@@ -18,12 +18,17 @@ function ch3_test_all()
 %   ch3_test_collocation  pack/unpack; seed quality; degrees of freedom; and
 %                         the Hermite-Simpson order of accuracy under mesh
 %                         refinement.
+%   ch3_test_simulation   the zero-order-hold integrator against the continuous
+%                         rollout of the same controller, checking that the
+%                         sampling error is first order in the period.
 %
 % Runs in a few minutes. Anything that fails prints the measured error and its
 % tolerance, so the size of the discrepancy is visible rather than just a name.
 
-suites = {@ch3_test_model, @ch3_test_vc, @ch3_test_control, @ch3_test_collocation};
-names  = {'model', 'virtual constraints', 'controllers', 'collocation'};
+suites = {@ch3_test_model, @ch3_test_vc, @ch3_test_control, ...
+          @ch3_test_collocation, @ch3_test_simulation};
+names  = {'model', 'virtual constraints', 'controllers', 'collocation', ...
+          'simulation'};
 
 fprintf('\n############ CHAPTER 3 TEST SUITE ############\n');
 t0 = tic;
