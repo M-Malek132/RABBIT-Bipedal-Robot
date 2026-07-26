@@ -195,6 +195,23 @@ p.guard_min_time = 0.05;        % ignore guard crossings before this [s], so
                                 % the step does not terminate on the swing
                                 % foot still being at z=0 at t=0
 
+% CONTROL SAMPLE PERIOD [s].  0 = evaluate the feedback continuously, i.e. let
+% ode45 call the controller at every stage of every RK step.
+%
+% Set this NONZERO for the constrained CLF-QP.  That controller is only
+% piecewise smooth in x: the QP's active set changes as torque bounds engage
+% and disengage, and u(x) kinks at every switch. An adaptive explicit solver
+% treats each kink as a failed error test and shrinks h to resolve it, which is
+% not a slow simulation but a stalled one -- measured here at 51908 RHS
+% evaluations to advance 0.0015 s of a 0.3009 s step, with h collapsed to ~3e-8.
+%
+% Holding u over a fixed period removes the kinks from the integrand entirely
+% (within a period the RHS is the smooth f + g u with u a constant) and is also
+% what the hardware actually does -- the chapter's own framing is a QP solved
+% "well above 1 kHz", not a continuous-time control law. So this is the more
+% faithful model as well as the tractable one.
+p.control_dt = 0;
+
 %% -------------------------------------------------------------- overrides
 for k = 1:2:numel(varargin)
     field = varargin{k};

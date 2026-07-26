@@ -68,6 +68,17 @@ fprintf(' %-11s %6s %10s %10s %10s %10s %8s\n', ...
         'controller', 'steps', 'peak |u|', 'over box', 'max|eta|', 'max delta', 'QP fail');
 fprintf('%s\n', repmat('-',1,74));
 
+% Sample ALL THREE at the same fixed rate. Two reasons, and the second is the
+% one that matters: it is the only fair comparison (a controller evaluated
+% continuously gets an advantage no digital implementation of it would have),
+% and the constrained QP is only piecewise smooth in x, so evaluating it inside
+% an adaptive solver stalls the integration outright rather than merely slowing
+% it -- see the note on p.control_dt in ch3_params.
+if ~isfield(p, 'control_dt') || p.control_dt <= 0
+    p.control_dt = 1e-3;                     % 1 kHz, per the chapter's framing
+end
+fprintf(' all controllers sampled at %.0f Hz (zero-order hold)\n', 1/p.control_dt);
+
 for i = 1:numel(names)
     pc = p;
     pc.controller = names{i};

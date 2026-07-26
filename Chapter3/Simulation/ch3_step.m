@@ -42,17 +42,22 @@ opts = odeset('RelTol',   p.ode_reltol, ...
 
 T_cap = p.T_max * 2;      % hard cap so a non-striking gait cannot run forever
 
-sol = ode45(@(t,x) ch3_ode_rhs(t, x, alpha, p), [0 T_cap], x0(:), opts);
-
-t = sol.x;
-X = sol.y;
+if isfield(p, 'control_dt') && p.control_dt > 0
+    [t, X, fired] = integrate_zoh(x0, alpha, p, T_cap, opts);
+    sol = [];             % see note in integrate_zoh on dense output
+else
+    sol   = ode45(@(t,x) ch3_ode_rhs(t, x, alpha, p), [0 T_cap], x0(:), opts);
+    t     = sol.x;
+    X     = sol.y;
+    fired = ~isempty(sol.ie);
+end
 
 out = struct();
 out.t     = t;
 out.x     = X;
 out.x_end = X(:, end);
 out.T     = t(end);
-out.ok    = ~isempty(sol.ie);
+out.ok    = fired;
 out.sol   = sol;
 
 % stance-foot position at the start, swing-foot position at strike: their
@@ -63,6 +68,56 @@ out.L_step  = foot_sw_end(1) - foot_st_0(1);
 
 [out.x_next, out.impulse] = ch3_impact(out.x_end, p);
 
+end
+
+% ---------------------------------------------------------------------------
+function [t_all, X_all, fired] = integrate_zoh(x0, alpha, p, T_cap, opts)
+%INTEGRATE_ZOH  Sampled-data integration: one control solve per period.
+%
+% The controller is evaluated ONCE at the start of each period of length
+% p.control_dt and then held, so inside a period the integrand is the smooth
+% f(x) + g(x) u with u a fixed vector. ode45 therefore sees no active-set
+% kinks and takes full steps; the guard is still checked continuously, since
+% opts carries the same Events function.
+%
+% DENSE OUTPUT.  Each period produces its own ode45 solution, so there is no
+% single struct deval can interpolate. ch3_step returns out.sol = [] here.
+% The only consumer of out.sol is ch3_col_seed, which seeds from a PD rollout
+% (p.control_dt = 0) and so never takes this branch -- but a caller that needs
+% dense output under sampling should resample out.t / out.x instead.
+
+dt    = p.control_dt;
+t_all = 0;
+X_all = x0(:);
+tk    = 0;
+xk    = x0(:);
+fired = false;
+
+while tk < T_cap - eps(T_cap)
+    u  = ch3_control(xk, alpha, p);          % one QP solve for this period
+    te = min(tk + dt, T_cap);
+
+    s = ode45(@(~, x) zoh_rhs(x, u, p), [tk te], xk, opts);
+
+    % ode45 returns at least the endpoints; drop the duplicated start point.
+    t_all = [t_all, s.x(2:end)];             %#ok<AGROW>
+    X_all = [X_all, s.y(:, 2:end)];          %#ok<AGROW>
+
+    tk = s.x(end);
+    xk = s.y(:, end);
+
+    if ~isempty(s.ie)
+        fired = true;
+        return;
+    end
+end
+end
+
+% ---------------------------------------------------------------------------
+function xdot = zoh_rhs(x, u, p)
+%ZOH_RHS  Plant only: the control is already decided for this period.
+[f, g] = ch3_control_affine(x, p);
+xdot   = f + g*u;
 end
 
 % ---------------------------------------------------------------------------
