@@ -129,6 +129,27 @@ p.clf_slack_penalty = 1e6;      % "p" multiplying delta^2 in stage 8
 p.v_des        = 0.35;          % NEC1 average walking rate [m/s]
 p.step_len_min = 0.15;          % floor on step length, kills "step in place"
 
+% TORSO PITCH BOX [rad].  Unlike the rails in ch3_col_bounds this one is a
+% design requirement, not a guard against bad arithmetic.
+%
+% qt is UNACTUATED (p.iact = 4:7), so pitching the torso costs the objective
+% nothing directly, and leaning shifts gravity load off the actuators. Nothing
+% else in the problem mentions qt either: it enters only through
+% theta = qt + q1 + q2/2, which pins one LINEAR COMBINATION of the pose, not
+% the pose -- a large negative qt is freely offset by a large positive q2/2.
+% Left at +-1 rad the optimizer duly spends that freedom: the first reference
+% gait solved here walks with the torso pitched 46 deg BACKWARD for the whole
+% step (qt in [-0.870, -0.806], a 3.6 deg variation), knees at 73-108 deg of
+% flexion, at 1.17 m/s. It is periodic, mesh-verified and stable -- and it
+% looks nothing like walking.
+%
+% Tighten this to force an upright torso, and tighten it INCREMENTALLY with
+% warm starts, exactly like the Table 3.1 limits: clamping straight to upright
+% from a leaning solution moves every node at once. Expect J to rise; an
+% upright gait genuinely costs more torque, which is the honest answer rather
+% than a regression.
+p.qt_range     = [-1.0 1.0];    % [qt_min qt_max]
+
 % Gate on the NEC1 speed equality. Turn it OFF for the first solve: getting a
 % periodic gait at all is the hard part, and pinning the speed simultaneously
 % is what makes a cold solve stall (see ch3_col_constraints). Then turn it on
