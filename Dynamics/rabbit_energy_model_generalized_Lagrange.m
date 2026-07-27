@@ -6,13 +6,13 @@ clc;clear;close all
 
 X = sym('theta',[7 1],'real');
 
-x = X(1);   z = X(2);   qt = X(3);   q1 = X(4);  q2 = X(5);     q3 = X(6);  q4 = X(7);
+x = X(1);   y = X(2);   qt = X(3);   q1 = X(4);  q2 = X(5);     q3 = X(6);  q4 = X(7);
 
 % Transformation Matrixs
 % forward
 T_wt = [cos(qt)       -sin(qt)           0     x;
             0                   0                  1     0;
-            -sin(qt)        -cos(qt)          0     -z;
+            -sin(qt)        -cos(qt)          0     -y;
             0                   0                  0     1];
 
 T_t1 = [cos(q1)      -sin(q1)        0     0;
