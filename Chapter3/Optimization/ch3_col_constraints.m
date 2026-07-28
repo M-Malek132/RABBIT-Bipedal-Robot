@@ -45,7 +45,7 @@ function [c, ceq] = ch3_col_constraints(z, p)
 %   5  friction cone          |Fx| <= mu_s Fz        (gated)
 %   6  minimum normal force    Fz  >= Fz_min         (gated)
 %   7  impact impulse        ||I|| <= impulse_max    (gated)
-%   8  reserved / spare, held at -1
+%   8  hip-height band   |h_hip - hip_h| <= hip_h_tol   (gated)
 %
 %   GATED CONSTRAINTS ARE HELD AT -1, NOT REMOVED.  A disabled inequality is
 %   trivially satisfied but still present, so c has a constant length and
@@ -146,6 +146,29 @@ end
 % 7. impact impulse magnitude
 if p.limits.enable.impulse
     c(7) = norm(E.impulse) - p.limits.impulse_max;
+end
+
+% 8. hip-height band: |h_hip - hip_h| <= hip_h_tol, over nodes AND midpoints.
+%    pz is DOWN-positive, so world height is -pz and the torso base IS the hip
+%    (ch3_body_points takes it from the same transform) -- the height reads
+%    straight off row 2, no forward kinematics. Midpoints are included for the
+%    reason the torque check includes them: a Hermite-Simpson midpoint is a
+%    real point of the trajectory and can leave a band both its neighbours
+%    stay inside.
+%
+%    ONE BAND DOES TWO JOBS. Its CENTRE sets how tall the robot stands, which
+%    is what takes the crouch out; its WIDTH caps the vertical travel of the
+%    hip, which is what stops the gait bouncing. Pinning only the mean would
+%    leave the bob free; capping only the bob would let the optimizer keep the
+%    crouch it already prefers, since a low hip buys knee torque cheaply.
+%
+%    Like qt_range this is a DESIGN REQUIREMENT, not a physical limit, and it
+%    fights the objective the same way: expect J to rise. Tighten it the way
+%    the Table 3.1 limits are tightened -- incrementally, warm-starting each
+%    stage (ch3_posture_march), never straight to the target.
+if p.limits.enable.height
+    h_hip = -[X(2,:), E.xm(2,:)];
+    c(8)  = max(abs(h_hip - p.limits.hip_h)) - p.limits.hip_h_tol;
 end
 
 end

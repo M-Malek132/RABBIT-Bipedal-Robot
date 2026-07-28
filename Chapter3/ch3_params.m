@@ -148,7 +148,19 @@ p.step_len_min = 0.15;          % floor on step length, kills "step in place"
 % from a leaning solution moves every node at once. Expect J to rise; an
 % upright gait genuinely costs more torque, which is the honest answer rather
 % than a regression.
-p.qt_range     = [-1.0 1.0];    % [qt_min qt_max]
+%
+% SIGN: qt < 0 leans the torso BACKWARD, qt > 0 leans it FORWARD.  The box is
+% what picks the lean, not a preference term in the cost -- with the load
+% argument above pushing qt monotonically negative, the optimizer parks on
+% whichever bound is lower and stays there. So the LOWER bound is the design
+% knob: a solve given [-0.30 0.45] settles at -0.300, dead on the bound.
+% Asking for a forward lean therefore means a box that is entirely positive,
+% e.g. [0.08 0.25] for the ~5 deg lean of human walking; a box that merely
+% straddles zero will still come back leaning backward.
+%
+% The default stays wide because a COLD solve needs it wide -- same reasoning
+% as enforce_nec1 below. Reach a leaning target with ch3_posture_march.
+p.qt_range     = [-1.0 1.0];    % [qt_min qt_max]  (see SIGN above)
 
 % Gate on the NEC1 speed equality. Turn it OFF for the first solve: getting a
 % periodic gait at all is the hard part, and pinning the speed simultaneously
@@ -169,11 +181,36 @@ p.limits.mu_s        = 0.4;     % |Fx| <= mu_s * Fz                 [-]
 p.limits.Fz_min      = 50;      % Fz >= Fz_min (foot stays loaded)  [N]
 p.limits.clearance   = 0.05;    % swing-foot height at mid-step     [m]
 
+% HIP-HEIGHT BAND [m].  Like qt_range, a design requirement rather than a
+% hardware limit -- and gated for the same reason the others are.
+%
+% The hip is the torso base, so its world height is -pz, and NOTHING in the
+% problem otherwise mentions pz: it is not in theta, not actuated, and a lower
+% hip buys knee torque cheaply (a bent knee has a shorter gravity moment arm).
+% Left free the optimizer duly crouches -- the upright-torso gait solved here
+% walks with the hip at 0.855 m and the stance knee at 54-64 deg of flexion,
+% i.e. a permanent half-squat that is periodic, stable, and does not look like
+% walking.
+%
+% The band's CENTRE is the standing height, its WIDTH the tolerated bob.  Legs
+% are two 0.5 m links, so 1.0 m is full extension and hip_h is best read as a
+% fraction of that: 0.90 leaves 10% of knee bend, which is about where human
+% walking sits. Do not push it past ~0.95 -- the leg straightens, the stance
+% knee approaches its singularity, and the KKT solve in ch3_col_dynamics loses
+% conditioning.
+%
+% Enable it the way the Table 3.1 limits are enabled: warm-started, one stage
+% at a time, marching the centre from whatever the current gait measures.
+% ch3_posture_march does this.
+p.limits.hip_h       = 0.90;    % centre of the hip-height band      [m]
+p.limits.hip_h_tol   = 0.02;    % half-width (so 4 cm of bob total)  [m]
+
 p.limits.enable = struct('torque',  false, ...
                          'impulse', false, ...
                          'friction',false, ...
                          'grf',     false, ...
-                         'clearance', true);
+                         'clearance', true, ...
+                         'height',  false);
 
 %% ------------------------------------------------------- direct collocation
 % Node count is the main cost/accuracy dial. Every fmincon gradient costs

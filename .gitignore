@@ -12,3 +12,7 @@ slprj/
 *.out
 *.toc
 *.synctex.gz
+
+# Collocation solver checkpoints (transient warm-start scratch; ch3_main
+# deletes them on success, but an interrupted solve leaves them behind)
+Results/*_ckpt.mat

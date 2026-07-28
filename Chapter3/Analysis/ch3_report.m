@@ -86,6 +86,18 @@ R.impulse     = norm(E.impulse);
 R.clearance   = E.sw_h(max(2, min(N-1, round((N+1)/2))));
 R.sw_h_min    = min(E.sw_h(2:N-1));
 
+% --- posture: torso pitch and hip height ---------------------------------
+% Over nodes AND midpoints, matching what ch3_col_constraints actually
+% bounds -- reporting nodes only would under-report both ranges.
+qt_all  =  [X(3,:), E.xm(3,:)];
+hip_all = -[X(2,:), E.xm(2,:)];     % pz is DOWN-positive; height = -pz
+R.qt_lo   = min(qt_all);
+R.qt_hi   = max(qt_all);
+R.hip_lo  = min(hip_all);
+R.hip_hi  = max(hip_all);
+R.hip_bob = R.hip_hi - R.hip_lo;
+R.hip_dev = max(abs(hip_all - p.limits.hip_h));
+
 % --- zero dynamics drift across the step ---------------------------------
 eta_max = 0;
 for k = 1:N
@@ -144,12 +156,24 @@ fprintf('   theta sweep                  %.4f -> %.4f   (target %.4f -> %.4f)\n'
         R.theta_sweep(1), R.theta_sweep(2), p.theta_minus, p.theta_plus);
 fprintf('   cost  int||u||^2 / L_step    %.4f      (int||u||^2 = %.4f)\n', R.cost, R.int_u2);
 
+fprintf('\n POSTURE   (design requirements, not Table 3.1)\n');
+fprintf('   torso pitch qt               %+.4f .. %+.4f rad  (%+.1f .. %+.1f deg)\n', ...
+        R.qt_lo, R.qt_hi, rad2deg(R.qt_lo), rad2deg(R.qt_hi));
+fprintf('     box                        [%+.3f %+.3f]  -> leaning %s\n', ...
+        p.qt_range(1), p.qt_range(2), ...
+        ternary(R.qt_hi < 0, 'BACKWARD', ternary(R.qt_lo > 0, 'FORWARD', 'through vertical')));
+fprintf('   hip height                   %.4f .. %.4f m   (bob %.4f m)\n', ...
+        R.hip_lo, R.hip_hi, R.hip_bob);
+fprintf('     leg extension              %.1f%% .. %.1f%% of the 1.0 m leg\n', ...
+        100*R.hip_lo, 100*R.hip_hi);
+
 fprintf('\n PHYSICAL REALIZABILITY  (Table 3.1)   [E] = enforced this solve\n');
 prow('peak |torque|',      R.torque_max, p.limits.u_max,       '<=', 'Nm', p.limits.enable.torque);
 prow('impact impulse',     R.impulse,    p.limits.impulse_max, '<=', 'Ns', p.limits.enable.impulse);
 prow('friction demanded',  R.mu_max,     p.limits.mu_s,        '<=', '-',  p.limits.enable.friction);
 prow('min vertical GRF',   R.Fz_min,     p.limits.Fz_min,      '>=', 'N',  p.limits.enable.grf);
 prow('mid-step clearance', R.clearance,  p.limits.clearance,   '>=', 'm',  p.limits.enable.clearance);
+prow('hip-height dev',     R.hip_dev,    p.limits.hip_h_tol,   '<=', 'm',  p.limits.enable.height);
 fprintf('   (max Fz %.1f N, min swing-foot height over the step %.4f m)\n', R.Fz_max, R.sw_h_min);
 
 fprintf('\n TRAJECTORY VALIDITY  (nodes vs a tight rollout -- read this FIRST)\n');
