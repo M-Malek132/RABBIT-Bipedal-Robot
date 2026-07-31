@@ -125,6 +125,21 @@ if o.plot
     out.figs = figs;
 end
 
+%% --- save, BEFORE the animation -----------------------------------------
+% Ordering is deliberate. The sweeps above cost minutes; the animation below
+% renders hundreds of frames through getframe, and a renderer that dies takes
+% the whole MATLAB process with it rather than raising something the try/catch
+% could hold. Saving first makes the expensive numerical results durable no
+% matter what the graphics stack does -- measured the hard way, on a run that
+% completed every sweep and every figure and then died mid-GIF with nothing
+% written.
+if o.save
+    out.file = fullfile(results_dir, sprintf('ch4_result_%s.mat', stamp));
+    R = rmfield(out, 'figs'); %#ok<NASGU>
+    save(out.file, '-struct', 'R');
+    fprintf(' Saved: %s\n', out.file);
+end
+
 %% --- (5) animation -------------------------------------------------------
 % One GIF per perturbation, each showing every controller on the SAME robot at
 % the same instant. The tables say the baseline "completed 1 step"; this is
@@ -140,19 +155,16 @@ if o.animate
             ch4_animate(x0, alpha, pa, o.anim_controllers, o.n_steps + 1, gif);
             out.gifs{end+1} = gif;
         catch err
-            % An animation failure must not lose the numerical results that
-            % just took minutes to produce.
             fprintf(' ch4_animate skipped for scale %.2f: %s\n', s, err.message);
         end
     end
-end
 
-%% --- save ----------------------------------------------------------------
-if o.save
-    out.file = fullfile(results_dir, sprintf('ch4_result_%s.mat', stamp));
-    R = rmfield(out, 'figs'); %#ok<NASGU>
-    save(out.file, '-struct', 'R');
-    fprintf(' Saved: %s\n', out.file);
+    % Record which GIFs actually got written. Cheap append rather than a second
+    % full write of the trajectory data.
+    if o.save && ~isempty(out.gifs)
+        gifs = out.gifs; %#ok<NASGU>
+        save(out.file, 'gifs', '-append');
+    end
 end
 
 fprintf('==========================================\n\n');
