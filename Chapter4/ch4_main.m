@@ -13,6 +13,7 @@ function out = ch4_main(varargin)
 %   (2) robust CLF-QP sweep                 ch4_compare_controllers Section 4.1.4
 %   (3) L1 adaptive sweep                   ch4_compare_controllers Section 4.2.4
 %   (4) figures                             ch4_plot_uncertainty
+%   (5) animation                           ch4_animate
 %
 % STEP 1 IS NOT OPTIONAL AND IT COMES FIRST FOR A REASON. The robust
 % controller's guarantee is conditional on Delta1max, Delta2max actually
@@ -28,18 +29,24 @@ function out = ch4_main(varargin)
 %   'n_steps'   steps per run (default 3, matching the chapter's figures)
 %   'plot'      draw and save figures (default true)
 %   'save'      write a .mat of everything (default true)
+%   'animate'   write comparison GIFs (default true)
+%   'anim_scales'      mass scales to animate (default [1.5 0.7])
+%   'anim_controllers' who to race (default clfqp / rclfqp_con / l1)
 %   any ch4_params field, including dotted nested names, e.g.
 %   ch4_main('l1.omega_c', 100, 'rclf.delta2_model', 'matrix')
 %
 % Output
-%   out : struct .p .x0 .alpha .meta .bounds .robust .l1 .figs .file
+%   out : struct .p .x0 .alpha .meta .bounds .robust .l1 .figs .gifs .file
 %
 % See also CH4_PARAMS, CH4_LOAD_GAIT, CH4_COMPARE_CONTROLLERS, CH4_REPORT.
 
 %% --- split our own options from ch4_params overrides --------------------
-own = {'gait','presets','n_steps','plot','save'};
+own = {'gait','presets','n_steps','plot','save','animate', ...
+       'anim_scales','anim_controllers'};
 o   = struct('gait', '', 'presets', {{'robust','l1'}}, 'n_steps', 3, ...
-             'plot', true, 'save', true);
+             'plot', true, 'save', true, 'animate', true, ...
+             'anim_scales', [1.5 0.7], ...
+             'anim_controllers', {{'clfqp','rclfqp_con','l1'}});
 
 pv = {};
 for k = 1:2:numel(varargin)
@@ -92,7 +99,7 @@ if ~(covered_1 && covered_2)
 end
 
 out = struct('p', p, 'x0', x0, 'alpha', alpha, 'meta', meta, 'bounds', B, ...
-             'robust', [], 'l1', [], 'figs', [], 'file', '');
+             'robust', [], 'l1', [], 'figs', [], 'gifs', {{}}, 'file', '');
 
 %% --- (2)(3) the sweeps ---------------------------------------------------
 copts = struct('n_steps', o.n_steps, 'store_traj', true, 'verbose', true);
@@ -116,6 +123,28 @@ if o.plot
         figs = [figs, ch4_plot_uncertainty(out.l1, p, d)];
     end
     out.figs = figs;
+end
+
+%% --- (5) animation -------------------------------------------------------
+% One GIF per perturbation, each showing every controller on the SAME robot at
+% the same instant. The tables say the baseline "completed 1 step"; this is
+% where you see what that means.
+if o.animate
+    out.gifs = {};
+    for s = o.anim_scales
+        pa = p;
+        pa.uncertainty.mass_scale = s;
+        gif = fullfile(results_dir, ...
+                       sprintf('ch4_walk_%s_scale%03.0f.gif', stamp, s*100));
+        try
+            ch4_animate(x0, alpha, pa, o.anim_controllers, o.n_steps + 1, gif);
+            out.gifs{end+1} = gif;
+        catch err
+            % An animation failure must not lose the numerical results that
+            % just took minutes to produce.
+            fprintf(' ch4_animate skipped for scale %.2f: %s\n', s, err.message);
+        end
+    end
 end
 
 %% --- save ----------------------------------------------------------------

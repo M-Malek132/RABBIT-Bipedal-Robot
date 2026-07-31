@@ -242,6 +242,7 @@ Pipeline:
 | 2 | `ch4_compare_controllers(..., 'robust')` | §4.1.4 |
 | 3 | `ch4_compare_controllers(..., 'l1')` | §4.2.4 |
 | 4 | `ch4_plot_uncertainty` | Figs 4.2–4.10 |
+| 5 | `ch4_animate` | — |
 
 Stage 1 is not optional and comes first: a robust controller run outside its own
 bound is not a robust controller, it is an aggressive one.
@@ -250,6 +251,33 @@ bound is not a robust controller, it is an aggressive one.
 ch4_main('presets', {'l1'}, 'n_steps', 5)
 ch4_main('rclf.delta2_model', 'matrix')     % nested fields take dotted names
 ch4_main('l1.omega_c', 100, 'l1.Gamma', 1e5)
+ch4_main('animate', false)                  % skip the GIFs
+```
+
+### The animation
+
+[`ch4_animate`](../Chapter4/Analysis/ch4_animate.m) runs several controllers on
+**the same perturbed robot** and draws them side by side, synchronized in time.
+This is the picture the tables cannot give you: "completed 1 step" and
+"completed 3 steps" are two numbers, but one panel frozen on the floor while the
+next two keep walking is the actual result.
+
+Synchronizing takes a little work and the details matter. The runs have
+different solver grids *and* different durations, so each is interpolated onto
+one common clock; a run that has already ended freezes at its last pose, drawn
+washed out and labelled `STOPPED at <t>`. Interpolation touches `q` only and
+only for drawing — nothing feeds back into a simulation, and an early-ending run
+is marked rather than extrapolated. Each panel also reports live `‖η‖`, because
+two stick figures look similar for a while before one of them falls, and the
+tracking error separates them well before that.
+
+`ch4_main` writes one GIF per mass scale in `anim_scales` (default 1.5 and 0.7).
+Standalone:
+
+```matlab
+[x0, alpha, p] = ch4_load_gait();
+p.uncertainty.mass_scale = 1.5;
+ch4_animate(x0, alpha, p, {'clfqp','rclfqp_con','l1'}, 4, 'Results/ch4_walk.gif')
 ```
 
 ### Reading the comparison table
@@ -394,6 +422,7 @@ Chapter4/
     ch4_report.m            one controller vs one perturbed model
     ch4_compare_controllers.m   the §4.1.4 / §4.2.4 sweeps
     ch4_plot_uncertainty.m  Figs 4.2, 4.3, 4.4, 4.6, 4.8, 4.9, 4.10
+    ch4_animate.m           controllers racing on one perturbed robot
   Test/
     ch4_test_model.m        true-vs-nominal split and the Δ terms
     ch4_test_rclf.m         the robust guarantee, sampled over the ball
