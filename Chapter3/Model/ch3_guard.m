@@ -11,9 +11,9 @@ function [h, dh_dq] = ch3_guard(x, p)
 % z = 0.  h > 0 above ground, h < 0 penetrating.  The impact fires on the
 % DOWNWARD crossing h: + -> -.
 %
-% Sign trap worth restating: pz in the generalized coordinates is stored
-% DOWN-positive, so world height is -pz.  P_sw already returns world-frame
-% up-positive coordinates, so read the height off P_sw and never off pz.
+% Sign trap worth restating: y in the generalized coordinates is stored
+% DOWN-positive, so world height is -y.  P_sw already returns world-frame
+% up-positive coordinates, so read the height off P_sw and never off y.
 %
 % Inputs
 %   x : 14x1 state

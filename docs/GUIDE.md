@@ -55,11 +55,11 @@ The next three sections unpack exactly these.
 RABBIT has **7 generalized coordinates** (planar, 5 links):
 
 ```
-q = [ px, pz, qt,  q1, q2,  q3, q4 ]'
+q = [ px, y, qt,  q1, q2,  q3, q4 ]'
       └ floating base ┘ └stance┘ └swing┘
 ```
 
-- `px, pz` — torso base position, `qt` — torso pitch. **Unactuated** (no motor
+- `px, y` — torso base position, `qt` — torso pitch. **Unactuated** (no motor
   attaches the torso to the world).
 - `q1,q2` — stance hip & knee, `q3,q4` — swing hip & knee. **Actuated** (4 motors).
 
@@ -70,10 +70,10 @@ torso is what makes walking hard and interesting, and it is what the "zero
 dynamics" in HZD refers to.
 
 > ⚠️ **The sign trap that has bitten everyone.** World-frame Z is **up-positive**
-> (ground = 0). But `pz` is stored **down-positive**. So world hip height is
-> `−pz`. Every kinematic helper (`P_st`, `P_sw`, `Tt`, `get_body_points`) already
+> (ground = 0). But `y` is stored **down-positive**. So world hip height is
+> `−y`. Every kinematic helper (`P_st`, `P_sw`, `Tt`, `get_body_points`) already
 > returns **world-frame up-positive** heights — trust them, and never hand-roll a
-> height from `pz`.
+> height from `y`.
 
 ### The two-phase cycle
 
@@ -115,7 +115,7 @@ order (`rabbit_reset_map(rabbit_impact_map(x_end))`):
    **velocities** jump, via another KKT solve that conserves momentum while
    forcing the new contact point's velocity to zero.
 2. **Reset map** (`rabbit_reset_map.m`) — the foot that just landed *is* the new
-   stance foot, so we **relabel** legs (swap `q1,q2 ↔ q3,q4`) and shift `pz` so
+   stance foot, so we **relabel** legs (swap `q1,q2 ↔ q3,q4`) and shift `y` so
    the new stance foot sits exactly on the ground. `px` is deliberately **not**
    reset — it accumulates so the robot walks forward in the world.
 
@@ -467,8 +467,8 @@ warm-starting each solve from the previous converged gait (continuation).
    deliberately does *not* dependency-check the legacy files, because `which`
    would falsely report them `[OK]`.)
 
-2. **Mixing the two Z conventions.** World Z up-positive vs `pz` down-positive
-   (§2). Always get heights from the kinematic helpers, never from `pz` directly.
+2. **Mixing the two Z conventions.** World Z up-positive vs `y` down-positive
+   (§2). Always get heights from the kinematic helpers, never from `y` directly.
 
 3. **Assuming periodic means stable (§7).** The most common conceptual error. A
    converged gait with tiny periodicity residual can still have `rho ≫ 1` and fall
@@ -539,7 +539,7 @@ Each folder's `DOCS.md` is the authoritative file-by-file reference.
 | **Virtual constraint** | A commanded relationship `q(4:7) = yd(s)` that a feedback law drives to hold. The *outputs* `y = q(4:7) − yd(s)` are zeroed. |
 | **Phase variable `θ`** | The "gait clock": `θ = qt + q1 + 0.5·q2`, an absolute stance-leg angle, **linear in `q`**. Normalized to `s = (θ−θ⁻)/(θ⁺−θ⁻) ∈ [0,1]`. |
 | **Underactuation** | Fewer actuators (4) than DOF (7). The unactuated torso is the reason walking is nontrivial and the source of the "zero dynamics." |
-| **Floating base** | `(px, pz, qt)` — the torso's unactuated position/orientation in the world. |
+| **Floating base** | `(px, y, qt)` — the torso's unactuated position/orientation in the world. |
 | **Single support / swing phase** | The continuous phase: one foot pinned, the other swinging. |
 | **Impact map** | Instantaneous, momentum-conserving velocity reset when the swing foot strikes (`q` continuous, `dq` jumps). |
 | **Reset map** | Post-impact relabeling of stance/swing legs + vertical re-plant. |

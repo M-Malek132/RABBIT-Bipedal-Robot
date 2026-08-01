@@ -28,8 +28,8 @@ function p = ch3_params(varargin)
 p = struct();
 
 %% ------------------------------------------------------------------ model
-% Generalized coordinates q = [px pz qt q1 q2 q3 q4]'
-%   px,pz  torso base position   (pz is DOWN-positive; world height = -pz)
+% Generalized coordinates q = [px y qt q1 q2 q3 q4]'
+%   px,y   torso base position   (y is DOWN-positive; world height = -y)
 %   qt     torso pitch
 %   q1,q2  stance hip, knee      (actuated)
 %   q3,q4  swing  hip, knee      (actuated)

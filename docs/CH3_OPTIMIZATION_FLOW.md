@@ -5,13 +5,59 @@ coefficients `alpha`. Everything here lives in
 [`Chapter3/Optimization/`](../Chapter3/Optimization); the reference manual for
 the pipeline as a whole is [`Chapter3/README.md`](../Chapter3/README.md).
 
-There are **two nested flows**, and conflating them is what makes the code hard
-to read the first time:
+Section 0 places stage 3 within the chapter as a whole. Everything after it is
+about stage 3 itself, where there are **two nested flows** — and conflating them
+is what makes the code hard to read the first time:
 
 1. the **outer workflow** — the sequence of solves you run to get from a
    hand-tuned pose to a verified, periodic, stable gait;
 2. the **inner evaluation** — what happens on each of the thousands of function
    evaluations `fmincon` makes inside one of those solves.
+
+---
+
+## 0. Where stage 3 sits
+
+The chapter's eight stages are not eight steps. They are a **shared foundation
+of three**, then **two flows that never meet at runtime**, then a verdict.
+
+![Chapter 3 pipeline: a shared foundation of stages 1, 2 and 4 feeds two
+separate flows -- an offline optimization that runs once, and an online control
+loop that runs every timestep. The two meet only at
+verification.](figures/ch3_pipeline_flow.svg)
+
+The three grey boxes across the top are stages 1, 2 and 4; the left column is
+stage 3; the right column is stages 5-8.
+
+**The foundation is shared, not duplicated.** Stages 1, 2 and 4 are pure
+functions of the state — no decisions, no search. `ch3_io_lin` closes the chain
+in two lines, calling stage 1 and stage 2 and joining them. The optimizer and
+the robot call *the same code*, so there is no separate "planning model" that
+can silently drift from the "control model".
+
+**Only `alpha` crosses between the flows.** The decision vector is 235 numbers
+at `N = 15`, but 210 of those are node states that exist purely to make the
+dynamics algebraic inside `fmincon`. What the robot carries away is 24 numbers.
+
+**`T` does not cross.** Note the runtime signature — `ch3_control(x, alpha, p)`
+— and that `ch3_ode_rhs(~, x, alpha, p)` discards time entirely. The gait *has*
+a duration (0.3009 s for the shipped reference gait), and the controller never
+knows it. `T` is an output of the design, not an input to the control. This is
+the phase variable of stage 2 cashing out at the architectural level: the robot
+is not replaying a plan on a clock, it is obeying four joint relationships
+indexed by its own leg angle, which is exactly why a disturbance re-indexes the
+gait instead of desynchronising it.
+
+**The offline flow does not use the online controller.** The solve runs under
+`p.controller = 'ff'`, pure feedforward. The gait is designed *on* the zero
+dynamics surface `Z = {eta = 0}`, where any feedback term multiplies zero. So
+`p.controller` selects what **runs** a gait, never what **designs** it.
+
+**The two flows meet only at verification.** `ch3_report` runs the forward
+simulation and compares it against the collocation — on the reference gait,
+step length 0.353 m and duration 0.301 s on all six steps, two independent
+computations agreeing. Then `ch3_poincare` returns the spectral radius, because
+periodicity is a property of the solve and stability is not (§5).
 
 ---
 

@@ -16,7 +16,7 @@ function [x_plus, impulse] = ch3_impact(x_minus, p)
 %
 %   2. RELABEL.  The landed foot becomes stance, so leg indices swap.
 %
-%   3. RE-PLANT.  pz is shifted so the NEW stance foot sits exactly at z = 0,
+%   3. RE-PLANT.  y is shifted so the NEW stance foot sits exactly at z = 0,
 %      absorbing the small residual foot height left by the event tolerance.
 %
 % ORDER MATTERS.  The impact uses the PRE-relabel swing Jacobian J_sw.
@@ -61,8 +61,8 @@ x_post = [q; dq_plus];           % q unchanged through impact
 x_rel = ch3_relabel(x_post, p);
 
 % --- 3. re-plant the new stance foot on the ground ------------------------
-% foot_z = -pz - (joint terms), so driving foot_z to zero needs
-%   pz_new = pz + foot_z.
+% foot_z = -y - (joint terms), so driving foot_z to zero needs
+%   y_new = y + foot_z.
 foot   = P_st(x_rel(1:nq));
 x_plus = x_rel;
 x_plus(2) = x_plus(2) + foot(2);
