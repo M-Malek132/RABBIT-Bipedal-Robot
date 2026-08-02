@@ -403,6 +403,10 @@ halves do not fare equally:
         ($5.76\times10^{-3} \to 1.01\times10^{-4}$).
 \end{itemize}
 
+The docstring has since been corrected accordingly: it now states the
+profile--slope mechanism, records that knee angle barely matters, and notes that
+the \code{pinv} fallback has never been observed to fire.
+
 % ---------------------------------------------------------------------
 \subsection{\code{ch3\_impact}: the same matrix, a different meaning}
 % ---------------------------------------------------------------------
@@ -622,9 +626,10 @@ stencil holds interior accuracy all the way to $s=1$. Regenerate with
         The field is assigned and never read anywhere in the codebase.
         \emph{Corrected to $30$.}
   \item The \code{ch3\_io\_lin} knee--lock attribution discussed in
-        Section~\ref{sec:core}. \warn{Still open} --- the comment is left as
-        written pending a decision on the wording; the measurements are recorded
-        above.
+        Section~\ref{sec:core}. \emph{Corrected} --- the docstring now states
+        the profile--slope mechanism the measurements support, drops the
+        knee--lock claim they contradict, and records that the \code{pinv} path
+        has never been observed to fire.
 \end{itemize}
 
 % =====================================================================

@@ -25,10 +25,24 @@ function [Lf2y, LgLfy, u_ff, info] = ch3_io_lin(x, alpha, p)
 % Every controller in stages 5-8 differs ONLY in how it picks mu.
 %
 % WHEN THE DECOUPLING MATRIX IS SINGULAR.  LgLfy = Jy*ddq_in loses rank where
-% the choice of outputs stops being independent of the inputs -- in practice
-% near knee lock, or if dyd/ds drives Jy toward a rank-deficient combination.
-% info.rcond reports the conditioning; callers that must not fail (the ODE
-% right-hand side) should check it rather than discovering a NaN downstream.
+% the choice of outputs stops being independent of the inputs.  MEASURED, what
+% drives that is the PROFILE SLOPE, not the pose: dyd/ds enters Jy directly via
+% Jy = H - dyd*ds_dq, and stretching alpha about alpha_0 by 100x degrades rcond
+% from 5.8e-03 to 1.0e-04.
+%
+% Knee angle barely matters, contrary to what this comment used to claim.
+% Driving the stance knee to full extension leaves rcond flat (7.0e-03 at
+% q2 = 0, against 5.8e-03 at the gait's own 1.35), and a 121x121 grid over BOTH
+% knees across (-pi,pi) bottoms out at rcond 2.1e-07 -- at deep double FLEXION,
+% (q2,q4) = (2.13,1.87), not at lock.
+%
+% The pinv fallback below has never been observed to fire: over the reference
+% gait rcond stays in [5.6e-03, 8.3e-03], and across 20000 random states
+% spanning the full +-pi joint box the worst value is 8.0e-06, still five orders
+% above the threshold.  It is genuinely defensive, not a path the pipeline
+% relies on.  info.rcond reports the conditioning; callers that must not fail
+% (the ODE right-hand side) should check it rather than discovering a NaN
+% downstream.
 %
 % Inputs
 %   x     : 14x1 state

@@ -293,7 +293,10 @@ conditioning monotonically:
 
 A 100× steeper profile costs about 1.75 orders of magnitude of `rcond`. So
 `dy_d/ds` really is the term that drives `Jy` toward rank deficiency; the knee
-attribution appears to be a plausible guess rather than a measurement.
+attribution appears to have been a plausible guess rather than a measurement.
+**The docstring has been corrected** to state the profile-slope mechanism, to
+record that knee angle barely matters, and to note that the `pinv` fallback has
+never been observed to fire.
 
 ---
 
@@ -436,9 +439,10 @@ Two documentation defects found while verifying, neither affecting behaviour:
   actual total mass of **30 kg** (10 torso + 4×5 links, confirmed by `M(1,1)`).
   The field is assigned and never read anywhere in the codebase.
   **Corrected to 30.**
-- The `ch3_io_lin` knee-lock attribution, discussed above. **Still open** — the
-  comment is left as written pending a decision on the wording; the measurements
-  stand above.
+- The `ch3_io_lin` knee-lock attribution, discussed above. **Corrected** — the
+  docstring now states the profile-slope mechanism the measurements support,
+  drops the knee-lock claim they contradict, and records that the `pinv` path
+  has never been observed to fire.
 
 Separately, verifying the smoothness of [`ch3_yd`](../Chapter3/VirtualConstraints/ch3_yd.m)
 turned up two real defects in the B-spline branch, **both fixed**: the clamp
