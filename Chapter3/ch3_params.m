@@ -177,9 +177,97 @@ p.enforce_nec1 = true;
 p.limits = struct();
 p.limits.u_max       = 120;     % |u_i| <= u_max                    [Nm]
 p.limits.impulse_max = 15;      % ||impact impulse||_2 <= impulse_max [Ns]
-p.limits.mu_s        = 0.4;     % |Fx| <= mu_s * Fz                 [-]
-p.limits.Fz_min      = 50;      % Fz >= Fz_min (foot stays loaded)  [N]
+p.limits.mu_s        = 0.4;     % |Fx| <= mu_s * Fz     NIC2        [-]
+p.limits.Fz_min      = 50;      % Fz >= Fz_min          NIC1        [N]
 p.limits.clearance   = 0.05;    % swing-foot height at mid-step     [m]
+
+%% -------------------------------- Section 6.3.4 constraint set (NIC / NEC)
+% The book's numbered constraints, in its own order. ch3_col_constraints maps
+% each to a row and says which hypothesis it discharges. Everything here is
+% gated for the same measure-then-tighten reason the Table 3.1 limits are.
+%
+% NIC1 = grf (Fz_min above), NIC2 = friction (mu_s above) -- both already had
+% homes, so they keep their existing knobs rather than gaining duplicates.
+
+% NIC3 -- "swing leg end height to ensure S intersects Z (ONLY) at the end of
+% the step". Two separate requirements hide in that sentence:
+%
+%   (a) the swing foot is STRICTLY above the ground during the step, so the
+%       guard cannot fire early. A margin, not >= 0: at exactly zero the guard
+%       is grazed and the step can terminate anywhere.
+%   (b) the crossing at the end is TRANSVERSAL -- the foot is genuinely moving
+%       down when it strikes. Without this, "height = 0" at node N is satisfied
+%       by a foot that touches and rises, which is a tangency, not a strike,
+%       and the Poincare map is not even locally well defined there.
+%
+% The margin cannot be applied at the two ENDS of the step: the foot is at
+% height zero at node 1 by construction (it just impacted) and at node N by the
+% guard equality, so a margin there is infeasible by definition. See
+% ch3_col_constraints for exactly which nodes and midpoints it covers.
+% MEASURED: the reference gait's worst interior clearance is 0.0029 m and it
+% strikes at -3.88 m/s. Note how small that clearance is next to the 0.19 m it
+% reaches at mid-step -- the binding points are right next to the endpoints,
+% which is why the margin here is millimetres and p.limits.clearance, the
+% mid-step style constraint, is centimetres. They are not the same knob.
+p.limits.sw_clear_min   = 1e-3; % strict swing-foot clearance, interior  [m]
+p.limits.sw_strike_rate = 0.05; % foot must be descending at strike    [m/s]
+
+% NEC2 -- vertical component of the post-impact swing-leg velocity is positive.
+% After relabeling the new swing leg is the OLD STANCE leg, so this is the
+% condition that the trailing foot actually lifts off.
+%
+% MEASURED: the reference gait lifts off at 0.0495 m/s -- positive, but only
+% just, and two orders below its own 3.88 m/s strike rate. The default is set
+% an order of magnitude below that so it reads as what it is, a strict-
+% positivity margin, rather than as a hidden style requirement that the one
+% gait in the repo happens to fail by 1%. Raise it if you want a gait that
+% picks its trailing foot up decisively.
+p.limits.liftoff_rate   = 0.01; % d/dt(new swing-foot height) at t=0+  [m/s]
+
+% NEC3 -- validity of the impact. The rigid plastic impact model is only
+% meaningful if the impulse it predicts is one the ground can actually apply:
+% compressive (the floor cannot pull the foot down) and inside the friction
+% cone (no slip during the collision). Same mu_s as NIC2.
+%
+% MEASURED, AND IT FAILS: the reference gait's impulse is mostly HORIZONTAL
+% where a walking impact should be mostly vertical, giving |Ix|/Iz = 1.35
+% against mu_s = 0.4. The impact map imposes J_sw dq+ = 0, "the foot sticks";
+% at that ratio it would not stick, it would skid. The continuous-phase
+% friction (NIC2) is a comfortable 0.194, so this is invisible unless the
+% impulse is checked separately -- exactly why the book lists NEC3 apart from
+% NIC2. Enabling this gate changes the gait; it is not a cosmetic limit.
+%
+% READ THAT NUMBER ON A FINE MESH.  At N = 21 the same gait measures 2.44 with
+% Iz = 4.86 Ns; at N = 41 it measures 1.35 with Iz = 8.34 Ns. The N = 21 gait
+% PASSES ch3_col_verify (6.75e-04 against tol 1e-03), so this is not a spurious
+% discrete solution -- it is a real trajectory whose IMPULSE is nonetheless 80%
+% wrong. ch3_col_verify bounds max|X_node - X_true| over the step; the impulse
+% is Lambda(q_N) v_foot(x_N), evaluated at ONE endpoint, and Iz is small enough
+% that a 7e-04 state error swamps it. Every Table 3.1 quantity is an extremum
+% over the whole step and survives a coarse mesh; NEC3 is the one constraint in
+% the set that does not. Refine before believing it, and before laddering to
+% it -- a ladder calibrated on the coarse number never becomes active.
+p.limits.impulse_z_min  = 0;    % Iz >= this (compressive)              [Ns]
+
+% The impulse cone gets its OWN coefficient, empty meaning "use mu_s". Not
+% because the physics differ -- it is the same floor -- but because a gait that
+% starts 6x outside the cone has to be MARCHED in, and marching p.limits.mu_s
+% would silently drag the continuous-phase constraint (NIC2) along with it.
+% ch3_impact_march steps this down from whatever the gait measures to mu_s.
+p.limits.mu_s_impact    = [];   % |Ix| <= this * Iz; [] -> p.limits.mu_s   [-]
+
+% HH6 -- theta strictly monotonic. Also what makes s a legitimate clock and
+% carries the forward-progression content of HGW6.
+% MEASURED: the reference gait's slowest thetadot over the step is 1.25 rad/s.
+p.limits.thetadot_min   = 0.10; % thetadot >= this over the step      [rad/s]
+
+% HH2 -- decoupling matrix invertible on Z, as a floor on its SMALLEST SINGULAR
+% VALUE rather than on rcond or a determinant. det is scale-blind (it can stay
+% large while one direction collapses) and rcond is a norm ratio; sigma_min is
+% the actual distance to a singular matrix, which is the quantity the
+% hypothesis is about.
+% MEASURED: the reference gait's worst sigma_min over the step is 0.114.
+p.limits.dec_min        = 1e-3; % sigma_min(LgLf y) >= this
 
 % HIP-HEIGHT BAND [m].  Like qt_range, a design requirement rather than a
 % hardware limit -- and gated for the same reason the others are.
@@ -207,10 +295,54 @@ p.limits.hip_h_tol   = 0.02;    % half-width (so 4 cm of bob total)  [m]
 
 p.limits.enable = struct('torque',  false, ...
                          'impulse', false, ...
-                         'friction',false, ...
-                         'grf',     false, ...
+                         'friction',false, ...   % NIC2
+                         'grf',     false, ...   % NIC1
                          'clearance', true, ...
-                         'height',  false);
+                         'height',  false, ...
+                         'swing_clear', false, ...  % NIC3
+                         'liftoff',     false, ...  % NEC2
+                         'impact',      false, ...  % NEC3
+                         'hzd',         false, ...  % NEC4 + NEC5
+                         'phase_mono',  false, ...  % HH6
+                         'decoupling',  false);     % HH2
+
+%% -------------------------------------------- hybrid zero dynamics (NEC4/5)
+% Grid for the quadratures in ch3_zero_dynamics. Two sizes on purpose:
+%
+%   hzd_grid        used for REPORTING. Accuracy matters, cost does not.
+%   hzd_grid_solve  used INSIDE the constraints when enable.hzd is on.
+%
+% The quadratures converge at O(h^2): delta_zero^2 on the reference gait reads
+% 0.76156 / 0.76028 / 0.75996 / 0.759875 at 41 / 81 / 161 / 321 points. So 41 is
+% already three digits -- ample for a constraint whose job is to keep delta^2
+% away from 1 -- while the report can afford 161.
+%
+% WHY enable.hzd DEFAULTS TO FALSE -- MEASURED. fmincon finite-differences the
+% constraints over every decision variable, and each evaluation of
+% ch3_zero_dynamics costs n_grid points of about four 7x7 solves each. On the
+% reference gait (319 variables) one constraint evaluation goes from 0.003 s to
+% 0.241 s when this gate is on, so one gradient goes from about 1 s to about
+% 77 s -- a 80x tax on every fmincon iteration. The intended workflow is the
+% one the Table 3.1 limits already use: solve without it, read the measured
+% delta_zero^2 and zeta*_2 off ch3_report, and only enforce if they are close
+% to their boundaries.
+%
+% AND NOTE WHAT ALREADY ENFORCES IT. This transcription imposes periodicity
+% through Delta DIRECTLY, so a converged solve is already at the fixed point --
+% NEC4 and NEC5 are then a CHECK on the fixed point it found, not the mechanism
+% that finds one. The book needs them as constraints because its optimization
+% parametrizes alpha alone and never propagates a full state; here they earn
+% their keep as a stability certificate, and as constraints only when you want
+% to steer a solve away from a marginally stable orbit.
+p.hzd_grid       = 161;
+p.hzd_grid_solve = 41;
+
+% Margins turning the book's two STRICT inequalities into closed constraints.
+% An optimizer cannot satisfy a strict inequality; without a margin it parks on
+% delta^2 = 1 exactly, which is neutral stability reported as success.
+p.hzd_tol = struct('delta_margin', 1e-3, ...   % delta^2 <= 1 - this
+                   'delta_min',    1e-8, ...   % delta^2 >= this
+                   'zeta_margin',  1e-6);      % zeta* clears V_max/delta^2 by this
 
 %% ------------------------------------------------------- direct collocation
 % Node count is the main cost/accuracy dial. Every fmincon gradient costs

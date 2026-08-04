@@ -120,5 +120,26 @@ if ~strcmp(state, 'iter'), return; end
 if mod(ov.iteration, p.checkpoint_every) ~= 0, return; end
 ck = struct('z', z, 'iteration', ov.iteration, 'fval', ov.fval, ...
             'feasibility', ov.constrviolation, 'p', p); %#ok<NASGU>
-save(p.checkpoint_file, '-struct', 'ck');
+
+% A FAILED CHECKPOINT MUST NOT KILL THE SOLVE.  fmincon propagates any error
+% thrown by an OutputFcn straight out of the solver, so an unwritable path
+% destroys the very run the checkpoint exists to protect -- and it does so
+% silently late, at the first multiple of checkpoint_every rather than at
+% setup. This is not hypothetical: results carry the p that produced them, so a
+% warm start from a saved .mat inherits ITS checkpoint path, which routinely
+% points at a scratch directory from a session that no longer exists.
+% Warn once and keep solving; a run without checkpoints still finishes.
+persistent warned
+try
+    save(p.checkpoint_file, '-struct', 'ck');
+catch err
+    if isempty(warned)
+        warning('ch3_col_solve:checkpointFailed', ...
+                ['Could not write the checkpoint to "%s" (%s).\n' ...
+                 'Continuing without checkpoints. Set p.checkpoint_file to a ' ...
+                 'writable path, or '''' to disable it.'], ...
+                p.checkpoint_file, err.message);
+        warned = true;
+    end
+end
 end

@@ -21,14 +21,19 @@ function ch3_test_all()
 %   ch3_test_simulation   the zero-order-hold integrator against the continuous
 %                         rollout of the same controller, checking that the
 %                         sampling error is first order in the period.
+%   ch3_test_hzd          the Section 6.3.4 constraint set: the reduction to
+%                         the scalar zero dynamics against the full 14-state
+%                         model, the conserved (1/2)sigma^2 + V_zero along a
+%                         real rollout, and delta_zero^2 against the Poincare
+%                         spectral radius from 26 independent simulations.
 %
 % Runs in a few minutes. Anything that fails prints the measured error and its
 % tolerance, so the size of the discrepancy is visible rather than just a name.
 
 suites = {@ch3_test_model, @ch3_test_vc, @ch3_test_control, ...
-          @ch3_test_collocation, @ch3_test_simulation};
+          @ch3_test_collocation, @ch3_test_simulation, @ch3_test_hzd};
 names  = {'model', 'virtual constraints', 'controllers', 'collocation', ...
-          'simulation'};
+          'simulation', 'hybrid zero dynamics'};
 
 fprintf('\n############ CHAPTER 3 TEST SUITE ############\n');
 t0 = tic;

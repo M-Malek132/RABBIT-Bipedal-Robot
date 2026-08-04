@@ -32,6 +32,13 @@ xdot = [dq; ddq];
 
 if nargout > 2
     aux = info.aux;
+    % Carried through so ch3_col_eval can form the decoupling matrix
+    % LgLf y = Jy * ddq_in without a second ch3_outputs call per node. HH2 is
+    % checked on its smallest singular value, so it needs the matrix itself,
+    % not just the u_ff that came out of inverting it.
+    aux.Jy    = info.o.Jy;
+    aux.LgLfy = info.o.Jy * info.aux.ddq_in;
+    aux.rcond = info.rcond;
 end
 
 end
