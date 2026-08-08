@@ -117,7 +117,7 @@ p.Kd  = eye(p.ny) *  20;
 %           The literal form written in Chapter 3.  Also a valid CLF (the
 %           stage-5 mu always satisfies the decrease condition) but tied to
 %           the PD gains.
-p.clf_construction = 'care';
+p.clf_construction = 'lyap';
 p.Q_clf = eye(2*p.ny);          % Q in the (C)ARE / Lyapunov equation
 p.clf_slack_penalty = 1e6;      % "p" multiplying delta^2 in stage 8
 
