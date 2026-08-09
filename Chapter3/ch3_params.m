@@ -79,8 +79,18 @@ p.n_ctrl  = p.bez_deg + 1;      % alpha columns per output (M+1)
 p.bsp_deg = 3;                  % degree used only when basis = 'bspline'
 
 %% ------------------------------------------------------------- controller
-% Selects the swing-phase feedback law used EVERYWHERE (simulation, cost,
-% constraints, force recovery) because they all route through ch3_control.
+% Selects the swing-phase feedback law used to RUN a gait -- forward
+% simulation, animation, and the force/torque recovery that follows one --
+% because those all route through ch3_control.
+%
+% IT DOES NOT AFFECT THE STAGE-3 SOLVE. Nothing in Optimization/ calls
+% ch3_control at all: ch3_col_dynamics goes straight to ch3_io_lin and runs on
+% the FEEDFORWARD alone. The gait is designed ON the zero dynamics surface --
+% node 1 is pinned to y = ydot = 0 and u_ff renders that surface invariant, so
+% eta stays zero across the whole step and any PD or CLF term would be
+% multiplying zero. Changing this field runs the SAME alpha under a different
+% law; it does not produce a different gait. See ch3_col_dynamics for the
+% derivation and ch3_main for where the two stages divide.
 %   'iolin_pd'  stage 5: I/O linearization + PD on the linearized system
 %   'clfqp'     stage 7: unconstrained CLF-QP
 %   'clfqp_con' stage 8: CLF-QP + torque box (+ friction / GRF if enabled)
