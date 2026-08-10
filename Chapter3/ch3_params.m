@@ -73,7 +73,7 @@ p.theta_plus  =  0.30;
 % These two agree EXACTLY when n_ctrl = bez_deg+1 and the B-spline degree is
 % bez_deg: a clamped B-spline with degree+1 control points IS the Bezier
 % curve of that degree.  ch3_test_basis exploits that as a unit test.
-p.basis   = 'bezier';
+p.basis   = 'bspline';
 p.bez_deg = 5;                  % Bezier degree M
 p.n_ctrl  = p.bez_deg + 1;      % alpha columns per output (M+1)
 p.bsp_deg = 3;                  % degree used only when basis = 'bspline'
@@ -95,7 +95,7 @@ p.bsp_deg = 3;                  % degree used only when basis = 'bspline'
 %   'clfqp'     stage 7: unconstrained CLF-QP
 %   'clfqp_con' stage 8: CLF-QP + torque box (+ friction / GRF if enabled)
 %   'ff'        pure feedforward u_ff, no output feedback (diagnostic only)
-p.controller = 'iolin_pd';
+p.controller = 'clfqp';
 
 % Stage 5 gains.  mu = -(1/eps^2) Kp y - (1/eps) Kd ydot.
 %
@@ -136,7 +136,7 @@ p.clf_slack_penalty = 1e6;      % "p" multiplying delta^2 in stage 8
 % gait for this robot is ~0.355 m/s. Asking for much more than that in a cold
 % solve makes NEC1 the dominant residual and the solve fights it from the
 % first iteration. Use ch3_continuation to march v_des beyond this.
-p.v_des        = 0.35;          % NEC1 average walking rate [m/s]
+p.v_des        = 1.2;          % NEC1 average walking rate [m/s]
 p.step_len_min = 0.15;          % floor on step length, kills "step in place"
 
 % TORSO PITCH BOX [rad].  Unlike the rails in ch3_col_bounds this one is a
@@ -303,18 +303,18 @@ p.limits.dec_min        = 1e-3; % sigma_min(LgLf y) >= this
 p.limits.hip_h       = 0.90;    % centre of the hip-height band      [m]
 p.limits.hip_h_tol   = 0.02;    % half-width (so 4 cm of bob total)  [m]
 
-p.limits.enable = struct('torque',  false, ...
-                         'impulse', false, ...
-                         'friction',false, ...   % NIC2
-                         'grf',     false, ...   % NIC1
+p.limits.enable = struct('torque',  true, ...
+                         'impulse', true, ...
+                         'friction',true, ...   % NIC2
+                         'grf',     true, ...   % NIC1
                          'clearance', true, ...
-                         'height',  false, ...
-                         'swing_clear', false, ...  % NIC3
-                         'liftoff',     false, ...  % NEC2
-                         'impact',      false, ...  % NEC3
-                         'hzd',         false, ...  % NEC4 + NEC5
-                         'phase_mono',  false, ...  % HH6
-                         'decoupling',  false);     % HH2
+                         'height',  true, ...
+                         'swing_clear', true, ...  % NIC3
+                         'liftoff',     true, ...  % NEC2
+                         'impact',      true, ...  % NEC3
+                         'hzd',         true, ...  % NEC4 + NEC5
+                         'phase_mono',  true, ...  % HH6
+                         'decoupling',  true);     % HH2
 
 %% -------------------------------------------- hybrid zero dynamics (NEC4/5)
 % Grid for the quadratures in ch3_zero_dynamics. Two sizes on purpose:
@@ -360,7 +360,7 @@ p.hzd_tol = struct('delta_margin', 1e-3, ...   % delta^2 <= 1 - this
 % n_vars itself grows as 14N -- so the work scales like N^2. 15 nodes keeps a
 % solve to minutes while leaving Hermite-Simpson (3rd order) plenty accurate
 % for a step this smooth.
-p.N_nodes  = 15;                % Hermite-Simpson nodes per step
+p.N_nodes  = 41;                % Hermite-Simpson nodes per step
 p.T_min    = 0.20;              % step duration bounds [s]
 p.T_max    = 1.50;
 p.dq_max   = 20;                % box on joint velocities, keeps fmincon sane
