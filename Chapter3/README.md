@@ -60,8 +60,19 @@ stability conditions are stated in. See the NIC/NEC section below.
 
 Supporting: `Simulation/` (`ch3_ode_rhs`, `ch3_step`, `ch3_simulate`),
 `Analysis/` (`ch3_report`, `ch3_forces`, `ch3_poincare`, `ch3_plot_gait`,
-`ch3_compare_controllers`), `Test/`, and `ch3_params.m` — the single source of
-truth for every knob.
+`ch3_hip_accel`, `ch3_compare_controllers`), `Test/`, and `ch3_params.m` — the
+single source of truth for every knob.
+
+`ch3_hip_accel` is the one of those that is not called from `ch3_report`: it
+computes the hip acceleration pointwise from the closed-loop dynamics rather
+than by differencing the trajectory in time, because the hybrid motion has a
+velocity *jump* at every foot strike and any finite difference across a strike
+reports a spike whose height is set by the sample spacing rather than by the
+gait. Run it directly when you need that quantity:
+
+```matlab
+ch3_hip_accel(out.z_opt, out.p, 4, 'Results/ch3_hip_accel.png');
+```
 
 ### Why the code order differs from the chapter's
 
