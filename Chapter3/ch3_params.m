@@ -117,7 +117,7 @@ p.bsp_deg = 3;                  % degree used only when basis = 'bspline'
 %   'clfqp'     stage 7: unconstrained CLF-QP
 %   'clfqp_con' stage 8: CLF-QP + torque box (+ friction / GRF if enabled)
 %   'ff'        pure feedforward u_ff, no output feedback (diagnostic only)
-p.controller = 'clfqp';
+p.controller = 'clfqp_con';
 
 % Stage 5 gains.  mu = -(1/eps^2) Kp y - (1/eps) Kd ydot.
 %
