@@ -104,6 +104,31 @@ The two are independent and can be cross-checked against each other.
 
 ---
 
+## Thesis chapters
+
+Each chapter is a self-contained implementation with its own parameter file,
+entry point and test suite. They build on each other in that order, but only
+Chapters 3 and 4 are about RABBIT.
+
+| chapter | subject | entry point | tests | notes |
+|---|---|---|---|---|
+| **3** | HZD gait design, I/O linearization, RES-CLF, constrained CLF-QP | `Chapter3/ch3_main.m` | `ch3_test_all` | [Chapter3/README.md](Chapter3/README.md), [CH3_OPTIMIZATION_FLOW.md](docs/CH3_OPTIMIZATION_FLOW.md) |
+| **4** | model uncertainty: robust CLF-QP and L₁ adaptive control | `Chapter4/ch4_main.m` | `ch4_test_all` | [CH4_UNCERTAINTY.md](docs/CH4_UNCERTAINTY.md) |
+| **5** | safety: Exponential Control Barrier Functions | `Chapter5/ch5_main.m` | `ch5_test_all` | [CH5_SAFETY.md](docs/CH5_SAFETY.md) |
+
+**Chapter 5 does not use RABBIT.** The chapter validates ECBFs on two
+purpose-built plants — a relative-degree-6 serial spring-mass system and a
+relative-degree-4 two-link pendulum with elastic actuators — and only then
+applies the method to walking. So `Chapter5/` carries its own models and shares
+nothing with the rest of the repo but the code style.
+
+```matlab
+ch5_main                 % both studies + figures into Results/ch5_<stamp>/
+ch5_test_all             % the full Chapter-5 test suite
+```
+
+---
+
 ## Quick start — the HZD gait pipeline (this is the working entry point)
 
 ```matlab
@@ -215,6 +240,9 @@ Each folder has a `DOCS.md` with a file-by-file breakdown.
 | `Reset_Map/` | post-impact leg relabeling + re-plant | [Reset_Map/DOCS.md](Reset_Map/DOCS.md) |
 | `Controller/` | phase variable + (legacy) controllers | [Controller/DOCS.md](Controller/DOCS.md) |
 | `Trajectory_Optimization/` | **HZD gait optimization (main pipeline)** | [Trajectory_Optimization/DOCS.md](Trajectory_Optimization/DOCS.md) |
+| `Chapter3/` | thesis Chapter 3: HZD, RES-CLF, constrained CLF-QP | [Chapter3/README.md](Chapter3/README.md) |
+| `Chapter4/` | thesis Chapter 4: robust CLF-QP + L₁ adaptive control | [CH4_UNCERTAINTY.md](docs/CH4_UNCERTAINTY.md) |
+| `Chapter5/` | thesis Chapter 5: Exponential CBFs (own plants, not RABBIT) | [CH5_SAFETY.md](docs/CH5_SAFETY.md) |
 | `Simulation/` | single-step / gait integrators | [Simulation/DOCS.md](Simulation/DOCS.md) |
 | `Utilities/` | body points + ground-validity checks | [Utilities/DOCS.md](Utilities/DOCS.md) |
 | `Visualization/` | stick-figure animation + GIF export | [Visualization/DOCS.md](Visualization/DOCS.md) |
