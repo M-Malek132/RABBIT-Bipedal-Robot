@@ -24,9 +24,17 @@ function [yd, dyd, d2yd] = ch3_yd(alpha, s, p)
 % That is fixed (see Test/test_bspline_derivative.m), so both bases now agree
 % on values AND derivatives at every degree, which ch3_test_vc asserts.
 %
-% 'bezier' remains the default anyway: its derivatives are closed-form rather
-% than recursive, and it supplies an ANALYTIC second derivative. The B-spline
-% path still central-differences d2yd/ds2, and Lf^2 y depends on it directly.
+% WHICH ONE IS THE DEFAULT.  'bspline', at p.bsp_deg = 3 with 6 control points
+% -- so the shipped configuration is NOT the degenerate case above and the two
+% bases are genuinely different curves. 'bezier' is better behaved on paper:
+% closed-form rather than recursive derivatives, and an ANALYTIC second
+% derivative where this path central-differences one that Lf^2 y depends on.
+%
+% So anything deriving coefficients from endpoint identities must ASK which
+% basis is in play rather than assume Bezier -- the endpoint slope coefficient
+% is M = n_ctrl-1 for Bezier but deg*(n_ctrl-deg) for the clamped B-spline.
+% See ch3_seed, which got this wrong, and ch3_params for what the default
+% costs in transcription order.
 %
 % Inputs
 %   alpha : ny x n_ctrl coefficient matrix (one ROW per output)

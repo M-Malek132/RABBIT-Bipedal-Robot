@@ -150,16 +150,30 @@ end
 %% 9. constraint plumbing
 p0 = ch3_params();
 z_seed = ch3_col_seed(p0);
-c0 = ch3_col_constraints(z_seed, p0);
-pass = report('c has 17 rows', abs(numel(c0) - 17), 0, pass);
+c0_def = ch3_col_constraints(z_seed, p0);
+pass = report('c has 17 rows', abs(numel(c0_def) - 17), 0, pass);
 
 gates = {'swing_clear', [9 10]; 'liftoff', 11; 'impact', [12 13]; ...
          'hzd', [14 15]; 'phase_mono', 16; 'decoupling', 17};
+
+% THE BASELINE IS BUILT HERE, NOT INHERITED FROM THE DEFAULTS.
+% This block asserts that a DISABLED row is held at -1, and that enabling one
+% gate moves only its own rows. Neither can be tested against whatever
+% p.limits.enable happens to default to -- and with every gate defaulting to
+% TRUE, as they now do, the first half is guaranteed to fail because no row is
+% off. That is what used to happen: a gating fault reported when the real story
+% was a test reading defaults it never set.
+p_off = p0;
+for i = 1:size(gates,1)
+    p_off.limits.enable.(gates{i,1}) = false;
+end
+c0 = ch3_col_constraints(z_seed, p_off);
+
 ok_gate = true;
 for i = 1:size(gates,1)
     rows = gates{i,2};
     ok_gate = ok_gate && all(abs(c0(rows) + 1) < 1e-12);   % off => held at -1
-    pg = p0;
+    pg = p_off;
     pg.limits.enable.(gates{i,1}) = true;
     cg = ch3_col_constraints(z_seed, pg);
     others = setdiff(1:17, rows);

@@ -78,6 +78,23 @@ p.theta_plus  =  0.30;
 % These two agree EXACTLY when n_ctrl = bez_deg+1 and the B-spline degree is
 % bez_deg: a clamped B-spline with degree+1 control points IS the Bezier
 % curve of that degree.  ch3_test_basis exploits that as a unit test.
+%
+% THE DEFAULT IS NOT THAT CASE, AND IT COSTS ORDER -- MEASURED. bsp_deg = 3
+% with 6 control points is a piecewise cubic, C^2 at its interior knots and no
+% smoother, and ch3_yd central-differences its d2yd/ds2. Hermite-Simpson needs
+% more smoothness than that, so the seed-rollout defect converges at
+%
+%       bsp_deg = 3   order 1.61,  max|defect| = 1.675e-03 at N = 49
+%       bsp_deg = 5   order 4.51,  max|defect| = 3.874e-07 at N = 49
+%       'bezier'      order 4.51,  max|defect| = 3.874e-07 at N = 49
+%
+% about 4300x in transcription accuracy. ch3_test_collocation's 4th-order
+% assertion is therefore left FAILING ON PURPOSE -- an honest report of the
+% tradeoff, not a defect to tune away. Use 'bezier' or bsp_deg = 5 to recover.
+%
+% Anything deriving coefficients from endpoint identities must ask the basis
+% rather than assume Bezier; see ch3_seed. The reference gait in Results/ was
+% solved under 'bezier', which is why two such bugs survived there unseen.
 p.basis   = 'bspline';
 p.bez_deg = 5;                  % Bezier degree M
 p.n_ctrl  = p.bez_deg + 1;      % alpha columns per output (M+1)
@@ -100,7 +117,7 @@ p.bsp_deg = 3;                  % degree used only when basis = 'bspline'
 %   'clfqp'     stage 7: unconstrained CLF-QP
 %   'clfqp_con' stage 8: CLF-QP + torque box (+ friction / GRF if enabled)
 %   'ff'        pure feedforward u_ff, no output feedback (diagnostic only)
-p.controller = 'clfqp';
+p.controller = 'clfqp_con';
 
 % Stage 5 gains.  mu = -(1/eps^2) Kp y - (1/eps) Kd ydot.
 %
@@ -177,18 +194,24 @@ p.step_len_min = 0.15;          % floor on step length, kills "step in place"
 % as enforce_nec1 below. Reach a leaning target with ch3_posture_march.
 p.qt_range     = [-1.0 1.0];    % [qt_min qt_max]  (see SIGN above)
 
-% Gate on the NEC1 speed equality. Turn it OFF for the first solve: getting a
-% periodic gait at all is the hard part, and pinning the speed simultaneously
-% is what makes a cold solve stall (see ch3_col_constraints). Then turn it on
-% at the achieved speed and march with ch3_continuation.
+% Gate on the NEC1 speed equality. ON by default here, but turn it OFF for a
+% COLD solve: getting a periodic gait at all is the hard part, and pinning the
+% speed simultaneously is what makes a cold solve stall (see
+% ch3_col_constraints). Then turn it back on at the achieved speed and march
+% with ch3_continuation.
 p.enforce_nec1 = true;
 
 %% ---------------------------------- Table 3.1 physical realizability limits
-% Each limit is individually gated.  A DISABLED limit is still evaluated and
-% reported -- it is just not enforced -- so you can measure before tightening.
-% Enable them in this order: GRF first (get Fz > 0), then friction, then
-% torque, then impulse.  Enabling friction while Fz still crosses zero makes
-% |Fx/Fz| blow up and fmincon chases a divide-by-zero.
+% Each limit is individually gated, and EVERY GATE IS ON below -- full fidelity
+% rather than staging up to it. That is right for re-solving a gait that already
+% exists and wrong for finding a new one.
+%
+% A disabled limit is still evaluated and reported, just not enforced, so the
+% staged workflow stays available and is the fallback when a cold solve stalls:
+% gates off, measure off ch3_report, then re-enable GRF first (get Fz > 0), then
+% friction, then torque, then impulse. The order matters -- enabling friction
+% while Fz still crosses zero makes |Fx/Fz| blow up and fmincon chases a
+% divide-by-zero.
 p.limits = struct();
 p.limits.u_max       = 120;     % |u_i| <= u_max                    [Nm]
 p.limits.impulse_max = 15;      % ||impact impulse||_2 <= impulse_max [Ns]
@@ -332,15 +355,20 @@ p.limits.enable = struct('torque',  true, ...
 % already three digits -- ample for a constraint whose job is to keep delta^2
 % away from 1 -- while the report can afford 161.
 %
-% WHY enable.hzd DEFAULTS TO FALSE -- MEASURED. fmincon finite-differences the
+% WHAT enable.hzd COSTS -- MEASURED. fmincon finite-differences the
 % constraints over every decision variable, and each evaluation of
 % ch3_zero_dynamics costs n_grid points of about four 7x7 solves each. On the
 % reference gait (319 variables) one constraint evaluation goes from 0.003 s to
 % 0.241 s when this gate is on, so one gradient goes from about 1 s to about
-% 77 s -- a 80x tax on every fmincon iteration. The intended workflow is the
-% one the Table 3.1 limits already use: solve without it, read the measured
-% delta_zero^2 and zeta*_2 off ch3_report, and only enforce if they are close
-% to their boundaries.
+% 77 s -- a 80x tax on every fmincon iteration.
+%
+% It is ON in the shipped defaults anyway, along with every other gate: this
+% configuration solves at full fidelity rather than staging. Budget for that
+% 80x when timing a solve, and if a COLD solve stalls, the first thing to try
+% is the staged workflow the Table 3.1 limits describe -- turn this off, read
+% the measured delta_zero^2 and zeta*_2 off ch3_report, and re-enable once the
+% gait exists. hzd_grid_solve is the other dial: it is what this gate actually
+% evaluates, and 41 points is already three digits of delta_zero^2.
 %
 % AND NOTE WHAT ALREADY ENFORCES IT. This transcription imposes periodicity
 % through Delta DIRECTLY, so a converged solve is already at the fixed point --

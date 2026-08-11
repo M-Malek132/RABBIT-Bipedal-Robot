@@ -116,12 +116,38 @@ Gq = G(q);
 
 a = w * Mq * v;
 
-% v' = dv_z/dtheta by central difference.  v_z is smooth in theta (it is the
-% solution of a linear system with smoothly varying entries), so a central
-% difference is second-order accurate and needs no derivative of ch3_yd beyond
-% the analytic dyd that ch3_bezier already provides.
+% v' = dv_z/dtheta by finite difference.  v_z is smooth in theta (it is the
+% solution of a linear system with smoothly varying entries), so a second-order
+% difference is accurate and needs no derivative of ch3_yd beyond the analytic
+% dyd that ch3_bezier already provides.
+%
+% THE STENCIL MUST STAY INSIDE [theta_minus, theta_plus].  A plain central
+% difference steps outside at the two ends, where s leaves [0,1] -- and there
+% ch3_yd's B-spline branch CLAMPS and returns dyd = 0, since a clamped knot
+% vector defines no curve outside its span. The sample comes back with Jy = H
+% instead of H - dyd ds_dq, i.e. a different v_z, and the difference quotient
+% is not a derivative of anything.
+%
+% MEASURED under the shipped bspline basis: b read -8.1e+05 at theta_minus and
+% +3.9e+04 at theta_plus against O(10) through the interior, and the reduced
+% ODE missed the full 14-state model by a relative 3.1e+05 there while matching
+% to 2.5e-09 everywhere else. Worse downstream: ch3_zero_dynamics grids the
+% endpoints, so on the seed gait this drove m(end) to 7.6e-23 and delta^2 to
+% 2.8e+44. It is invisible under 'bezier', which evaluates happily outside
+% [0,1] -- which is why it survived.
+%
+% Same remedy as the one-sided stencils in ch3_yd's d2_bspline: within h of an
+% end, a second-order ONE-SIDED formula.
 hstep = 1e-6 * max(1, abs(dth));
-vp = (vel_only(theta + hstep, alpha, p) - vel_only(theta - hstep, alpha, p)) / (2*hstep);
+vz = @(t) vel_only(t, alpha, p);
+
+if theta - hstep >= p.theta_minus && theta + hstep <= p.theta_plus
+    vp = (vz(theta + hstep) - vz(theta - hstep)) / (2*hstep);          % central
+elseif theta - hstep < p.theta_minus
+    vp = (-3*vz(theta) + 4*vz(theta + hstep) - vz(theta + 2*hstep)) / (2*hstep);
+else
+    vp = ( 3*vz(theta) - 4*vz(theta - hstep) + vz(theta - 2*hstep)) / (2*hstep);
+end
 
 b = w * Mq * vp + w * Vq;
 cc = w * Gq;
