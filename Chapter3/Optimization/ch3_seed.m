@@ -4,13 +4,17 @@ function [alpha, x0] = ch3_seed(p, x0)
 %   [alpha, x0] = ch3_seed(p)
 %   [alpha, x0] = ch3_seed(p, x0)
 %
-% Produces Bezier coefficients that are consistent with a given start state
-% rather than merely near it.  Two of the columns are pinned analytically,
-% exploiting the Bezier endpoint identities:
+% Produces coefficients that are consistent with a given start state rather
+% than merely near it.  Two of the columns are pinned analytically, exploiting
+% the endpoint identities that hold for ANY clamped basis:
 %
 %   yd(0)     = alpha_0                 ->  alpha_0 = H q0          gives y(0) = 0
-%   dyd/ds(0) = M (alpha_1 - alpha_0)   ->  alpha_1 = alpha_0 + (H dq0 / sdot0)/M
+%   dyd/ds(0) = c (alpha_1 - alpha_0)   ->  alpha_1 = alpha_0 + (H dq0 / sdot0)/c
 %                                                                  gives ydot(0) = 0
+%
+% where c is the basis's own endpoint slope coefficient -- M for a degree-M
+% Bezier, deg*(n_ctrl-deg) for a clamped B-spline -- read off ch3_yd rather
+% than assumed. See endpoint_slope_coeff below.
 %
 % so the seed starts exactly ON the zero dynamics surface Z = {eta = 0}, with
 % no transient to be absorbed before the gait is even evaluated.  The final
@@ -87,10 +91,29 @@ alpha(:, 1) = y_start;
 % Pin the second column so ydot(0) = 0 exactly, provided the phase is actually
 % advancing at t = 0 (sdot0 ~ 0 would mean the gait clock is not running, and
 % there is then no slope to match).
+%
+% THE SLOPE COEFFICIENT IS THE BASIS'S, NOT THE BEZIER DEGREE. Every clamped
+% basis gives dyd/ds(0) = c (alpha_1 - alpha_0), but c belongs to the basis:
+%
+%       bezier   c = M = n_ctrl - 1
+%       bspline  c = deg * (n_ctrl - deg)      [clamped, uniform interior]
+%
+% These coincide only when deg = n_ctrl - 1 -- exactly when the clamped
+% B-spline IS the Bezier curve. At the shipped defaults they do not: c = 9
+% against the Bezier 5, and using 5 left the seed at |ydot(0)| = 1.478e-01
+% instead of zero, so it did not start on Z at all and the "no transient"
+% claim above was false for the DEFAULT basis. Only the slope was wrong --
+% y(0) = 0 survives either way, since endpoint interpolation holds for any
+% clamped basis.
+%
+% c is read off ch3_yd rather than restated here: yd is linear in alpha, so
+% differentiating a coefficient matrix that is 1 in column 2 and 0 elsewhere
+% gives c directly, and any basis added later is picked up for free.
 [~, ds_dq] = ch3_phase(x0, p);
 sdot0 = ds_dq * dq0;
-if abs(sdot0) > 1e-9 && M_deg >= 1
-    alpha(:, 2) = alpha(:, 1) + (p.H * dq0 / sdot0) / M_deg;
+c_slope = endpoint_slope_coeff(p, n_ctrl);
+if abs(sdot0) > 1e-9 && M_deg >= 1 && abs(c_slope) > 1e-12
+    alpha(:, 2) = alpha(:, 1) + (p.H * dq0 / sdot0) / c_slope;
 end
 
 % Keep the last column as the relabeled target.
@@ -120,4 +143,19 @@ if p.seed_knee_lift ~= 0 && n_ctrl >= 4
     end
 end
 
+end
+
+% ---------------------------------------------------------------------------
+function c = endpoint_slope_coeff(p, n_ctrl)
+%ENDPOINT_SLOPE_COEFF  The c in dyd/ds(0) = c (alpha_1 - alpha_0).
+%
+% Obtained by evaluating the configured basis on a coefficient matrix that is 1
+% in column 2 and 0 everywhere else: yd is linear in alpha, so that derivative
+% IS c. Going through ch3_yd keeps this correct for whatever p.basis says,
+% including any basis added later, instead of restating endpoint algebra that
+% would then have to be kept in sync.
+E = zeros(1, n_ctrl);
+E(2) = 1;
+[~, d1] = ch3_yd(E, 0, p);
+c = d1(1);
 end
