@@ -70,6 +70,25 @@ if ~isempty(p.checkpoint_file)
         @(z, ov, state) checkpoint_fcn(z, ov, state, p));
 end
 
+% WHICH CAP ACTUALLY BINDS.  With central finite differences a gradient costs
+% about 2*n_vars evaluations, so MaxFunctionEvaluations imposes its own implicit
+% iteration limit -- and when it is the smaller of the two, fmincon stops early
+% and still returns exitflag 0, which reads exactly like "hit MaxIterations".
+% At N = 41 the default 3e5 caps the solve at ~250 iterations no matter what
+% p.max_iter says. Raising max_iter alone then changes nothing, and the
+% half-converged result looks like a modelling or mesh failure rather than a
+% budget one. Say so up front instead.
+implied_iters = floor(p.max_fun_evals / (2*numel(z0)));
+if implied_iters < p.max_iter
+    warning('ch3_col_solve:evalCapBinds', ...
+            ['max_fun_evals (%g) caps this solve at ~%d iterations, below ' ...
+             'p.max_iter = %d: with %d variables and central differences a ' ...
+             'gradient costs ~%d evaluations. Raise p.max_fun_evals to at ' ...
+             'least %g for the iteration limit to be the binding one.'], ...
+            p.max_fun_evals, implied_iters, p.max_iter, numel(z0), ...
+            2*numel(z0), 2*numel(z0)*p.max_iter);
+end
+
 if nargin >= 3 && ~isempty(opts_override)
     fn = fieldnames(opts_override);
     for i = 1:numel(fn)
@@ -120,5 +139,26 @@ if ~strcmp(state, 'iter'), return; end
 if mod(ov.iteration, p.checkpoint_every) ~= 0, return; end
 ck = struct('z', z, 'iteration', ov.iteration, 'fval', ov.fval, ...
             'feasibility', ov.constrviolation, 'p', p); %#ok<NASGU>
-save(p.checkpoint_file, '-struct', 'ck');
+
+% A FAILED CHECKPOINT MUST NOT KILL THE SOLVE.  fmincon propagates any error
+% thrown by an OutputFcn straight out of the solver, so an unwritable path
+% destroys the very run the checkpoint exists to protect -- and it does so
+% silently late, at the first multiple of checkpoint_every rather than at
+% setup. This is not hypothetical: results carry the p that produced them, so a
+% warm start from a saved .mat inherits ITS checkpoint path, which routinely
+% points at a scratch directory from a session that no longer exists.
+% Warn once and keep solving; a run without checkpoints still finishes.
+persistent warned
+try
+    save(p.checkpoint_file, '-struct', 'ck');
+catch err
+    if isempty(warned)
+        warning('ch3_col_solve:checkpointFailed', ...
+                ['Could not write the checkpoint to "%s" (%s).\n' ...
+                 'Continuing without checkpoints. Set p.checkpoint_file to a ' ...
+                 'writable path, or '''' to disable it.'], ...
+                p.checkpoint_file, err.message);
+        warned = true;
+    end
+end
 end

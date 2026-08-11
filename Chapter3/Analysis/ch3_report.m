@@ -86,6 +86,42 @@ R.impulse     = norm(E.impulse);
 R.clearance   = E.sw_h(max(2, min(N-1, round((N+1)/2))));
 R.sw_h_min    = min(E.sw_h(2:N-1));
 
+% --- Section 6.3.4 quantities, measured ----------------------------------
+% Same measure-before-you-constrain rule as Table 3.1: every one of these is
+% computed whether or not its gate is on, because the only way to pick a
+% sensible bound is to see what the gait already does.
+h_int = E.sw_h(2:N-1);
+if N > 3, h_int = [h_int, E.sw_hm(2:N-2)]; end
+R.sw_clear_int = min(h_int);              % NIC3(a)
+R.sw_strike    = E.sw_hd(N);              % NIC3(b), negative = descending
+R.liftoff      = E.sw_hd_post;            % NEC2
+R.impulse_z    = E.impulse(2);            % NEC3
+R.impulse_x    = E.impulse(1);
+if R.impulse_z > 1e-9
+    R.impulse_mu = abs(R.impulse_x) / R.impulse_z;
+else
+    R.impulse_mu = Inf;
+end
+R.thetadot_min = min([E.thd, E.thdm]);    % HH6
+R.dec_min      = E.dec_min;               % HH2
+R.eta_post     = norm(E.eta_post, inf);   % HH4/HH5, implied not imposed
+
+% --- hybrid zero dynamics: NEC4, NEC5, i.e. (5.79)/(5.80) ----------------
+% Computed from alpha alone -- no trajectory, no simulation -- so it is an
+% INDEPENDENT read on the same gait, and the cross-check printed below (its
+% predicted fixed point against the rate the collocation actually ends at) is
+% the cheapest evidence that both are right.
+R.hzd = [];
+if ~isfield(opts,'hzd') || opts.hzd
+    try
+        R.hzd = ch3_zero_dynamics(alpha, p, p.hzd_grid);
+        R.hzd_thetadot_end = p.c_theta * X(p.nq+1:2*p.nq, N);
+        R.hzd_zeta_meas    = 0.5 * (R.hzd.m(end) * R.hzd_thetadot_end)^2;
+    catch err
+        R.hzd_error = err.message;
+    end
+end
+
 % --- posture: torso pitch and hip height ---------------------------------
 % Over nodes AND midpoints, matching what ch3_col_constraints actually
 % bounds -- reporting nodes only would under-report both ranges.
@@ -175,6 +211,58 @@ prow('min vertical GRF',   R.Fz_min,     p.limits.Fz_min,      '>=', 'N',  p.lim
 prow('mid-step clearance', R.clearance,  p.limits.clearance,   '>=', 'm',  p.limits.enable.clearance);
 prow('hip-height dev',     R.hip_dev,    p.limits.hip_h_tol,   '<=', 'm',  p.limits.enable.height);
 fprintf('   (max Fz %.1f N, min swing-foot height over the step %.4f m)\n', R.Fz_max, R.sw_h_min);
+
+fprintf('\n SECTION 6.3.4 CONSTRAINT SET   [E] = enforced this solve\n');
+prow('NIC1 min normal GRF',   R.Fz_min,       p.limits.Fz_min,        '>=', 'N',   p.limits.enable.grf);
+prow('NIC2 friction demanded',R.mu_max,       p.limits.mu_s,          '<=', '-',   p.limits.enable.friction);
+prow('NIC3 interior clearance',R.sw_clear_int,p.limits.sw_clear_min,  '>=', 'm',   p.limits.enable.swing_clear);
+prow('NIC3 strike rate',      R.sw_strike,   -p.limits.sw_strike_rate,'<=', 'm/s', p.limits.enable.swing_clear);
+fprintf('   %s %-22s %10.4f =  %-9.4f %-3s  (residual %.1e)\n', ...
+        ternary(~isfield(p,'enforce_nec1') || p.enforce_nec1, '[E]', '[ ]'), ...
+        'NEC1 walking rate', R.speed, p.v_des, 'm/s', abs(R.speed - p.v_des));
+prow('NEC2 lift-off rate',    R.liftoff,      p.limits.liftoff_rate,  '>=', 'm/s', p.limits.enable.liftoff);
+mu_imp = p.limits.mu_s_impact;
+if isempty(mu_imp), mu_imp = p.limits.mu_s; end
+R.mu_s_impact = mu_imp;
+prow('NEC3 impulse Iz',       R.impulse_z,    p.limits.impulse_z_min, '>=', 'Ns',  p.limits.enable.impact);
+prow('NEC3 impulse |Ix|/Iz',  R.impulse_mu,   mu_imp,                 '<=', '-',   p.limits.enable.impact);
+if ~isempty(R.hzd)
+    prow('NEC4 zeta*_2',      R.hzd.zeta_star, R.hzd.V_max/R.hzd.delta2, '>=', '-', p.limits.enable.hzd);
+    prow('NEC5 delta_zero^2', R.hzd.delta2,    1,                        '<=', '-', p.limits.enable.hzd);
+else
+    fprintf('   NEC4/NEC5 not evaluated%s\n', ...
+            ternary(isfield(R,'hzd_error'), [': ' R.hzd_error], ''));
+end
+prow('HH2  sigma_min(LgLfy)', R.dec_min,      p.limits.dec_min,       '>=', '-',     p.limits.enable.decoupling);
+prow('HH6  min thetadot',     R.thetadot_min, p.limits.thetadot_min,  '>=', 'rad/s', p.limits.enable.phase_mono);
+fprintf('       %-22s %10.3e         %-3s  %s\n', 'HH4/HH5 |eta(Delta x_N)|', R.eta_post, '-', ...
+        ternary(R.eta_post < 1e-4, 'ok (implied by periodicity, not imposed)', ...
+                                   'CHECK: hybrid invariance is NOT holding'));
+
+if ~isempty(R.hzd)
+    Zd = R.hzd;
+    fprintf('\n HYBRID ZERO DYNAMICS   (restricted Poincare map, from alpha alone)\n');
+    fprintf('   delta_zero                   %+.6f   (sigma^+ / sigma^-)\n', Zd.delta_zero);
+    fprintf('   delta_zero^2                 %.6f    -> %s\n', Zd.delta2, ...
+            ternary(Zd.stable, 'NEC5 ok, fixed point ATTRACTS', 'NEC5 VIOLATED, fixed point repels'));
+    fprintf('   V_zero(theta_f) / V_zero^MAX %+.6f / %+.6f\n', Zd.V_end, Zd.V_max);
+    fprintf('   zeta*_2 (fixed point)        %.6f  vs  V^MAX/delta^2 = %.6f  -> %s\n', ...
+            Zd.zeta_star, Zd.V_max/Zd.delta2, ternary(Zd.exists, 'NEC4 ok', 'NEC4 VIOLATED, gait stalls mid-step'));
+    if isfield(R, 'hzd_thetadot_end')
+        rel = abs(R.hzd_zeta_meas - Zd.zeta_star) / max(abs(R.hzd_zeta_meas), eps);
+        fprintf('   CROSS-CHECK  thetadot^-       %.6f predicted   %.6f from the collocation\n', ...
+                Zd.thetadot_star, R.hzd_thetadot_end);
+        fprintf('                zeta^-           %.6f predicted   %.6f from the collocation  (rel %.1e)\n', ...
+                Zd.zeta_star, R.hzd_zeta_meas, rel);
+        fprintf('     Two independent routes to the same fixed point: a quadrature over\n');
+        fprintf('     alpha, and a converged periodicity constraint. Disagreement above\n');
+        fprintf('     ~max|eta| means one of them is wrong.\n');
+    end
+    if opts.stability && isfinite(R.rho)
+        fprintf('   vs Poincare rho              %.4f  (full map, %d sims) -- delta^2 is the\n', R.rho, 26);
+        fprintf('     ZERO-DYNAMICS eigenvalue, so rho should not fall below it.\n');
+    end
+end
 
 fprintf('\n TRAJECTORY VALIDITY  (nodes vs a tight rollout -- read this FIRST)\n');
 fprintf('   max |X_node - X_true|        %.3e   (tol %.1e)\n', R.verify.max_dev, p.verify_tol);

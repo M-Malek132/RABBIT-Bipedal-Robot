@@ -115,6 +115,7 @@ Chapters 3 and 4 are about RABBIT.
 | **3** | HZD gait design, I/O linearization, RES-CLF, constrained CLF-QP | `Chapter3/ch3_main.m` | `ch3_test_all` | [Chapter3/README.md](Chapter3/README.md), [CH3_OPTIMIZATION_FLOW.md](docs/CH3_OPTIMIZATION_FLOW.md) |
 | **4** | model uncertainty: robust CLF-QP and L₁ adaptive control | `Chapter4/ch4_main.m` | `ch4_test_all` | [CH4_UNCERTAINTY.md](docs/CH4_UNCERTAINTY.md) |
 | **5** | safety: Exponential Control Barrier Functions | `Chapter5/ch5_main.m` | `ch5_test_all` | [CH5_SAFETY.md](docs/CH5_SAFETY.md) |
+| **6** | walking on stepping stones with CBFs; gait library | `Chapter6/ch6_main.m` | `ch6_test_all` | [Chapter6/README.md](Chapter6/README.md), [CH6_STEPPING_STONES.md](docs/CH6_STEPPING_STONES.md) |
 
 **Chapter 5 does not use RABBIT.** The chapter validates ECBFs on two
 purpose-built plants — a relative-degree-6 serial spring-mass system and a
@@ -126,6 +127,24 @@ nothing with the rest of the repo but the code style.
 ch5_main                 % both studies + figures into Results/ch5_<stamp>/
 ch5_test_all             % the full Chapter-5 test suite
 ```
+
+**Chapter 6 comes back to RABBIT.** It is Chapter 3's QP with barrier rows
+added: the constraint is *where the swing foot lands*, enforced by a condition
+the foot never violates during the step, so precise footstep placement needs no
+re-planning. Section 6.1.1's "modification of CBF for position based
+constraints" turns out to be the relative-degree-2 case of Chapter 5's
+Exponential CBF, and `ch6_test_barrier` asserts the two rows are identical.
+
+```matlab
+ch6_main                 % obstacles, stepping stones, moving stones, 3D, range
+ch6_test_all             % the full Chapter-6 test suite (~15 s)
+```
+
+Section 6.3's robot (DURUS, 23 DoF) is **not modelled here**; that section is
+split into geometry checked exactly with no robot, and a controller checked on a
+swing-foot surrogate. Section 6.4's gait library is RABBIT's, not MARLO's. See
+[CH6_STEPPING_STONES.md](docs/CH6_STEPPING_STONES.md) §3 for what is and is not
+claimed.
 
 ---
 

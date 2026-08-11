@@ -53,6 +53,11 @@ ch3_compare_controllers(out.z_opt, out.p);
 | 7 | **CLF-QP** | `Control/ch3_ctrl_clf_qp.m` (`constrained = false`) |
 | 8 | **Constrained CLF-QP** | `Control/ch3_ctrl_clf_qp.m` (`constrained = true`) |
 
+Alongside stage 3, `HZD/` implements the hybrid zero dynamics itself —
+`ch3_zd_point` (the surface `Z` at one phase) and `ch3_zero_dynamics` (the
+restricted Poincaré map, `δ_zero`, `V_zero`, `ζ*₂`) — which is what the §6.3.4
+stability conditions are stated in. See the NIC/NEC section below.
+
 Supporting: `Simulation/` (`ch3_ode_rhs`, `ch3_step`, `ch3_simulate`),
 `Analysis/` (`ch3_report`, `ch3_forces`, `ch3_poincare`, `ch3_plot_gait`,
 `ch3_compare_controllers`), `Test/`, and `ch3_params.m` — the single source of
@@ -192,6 +197,120 @@ time, warm-starting each phase**, in this order:
 GRF comes first because friction is `|F_x|/F_z`: enabling it while `F_z` still
 crosses zero sets the optimizer chasing a division by zero.
 
+The §6.3.4 gates slot into the same ordering by how much of the trajectory they
+can spread a correction over. `phase_mono`, `decoupling` and `swing_clear` are
+cheap and usually already satisfied — turn them on early as guards. `liftoff`
+and `impact` go **last**, and `impact` needs a march rather than a switch:
+
+> **grf → friction → torque → impulse → phase_mono/decoupling/swing_clear → liftoff → impact**
+
+**Why `impact` is the hardest gate in the pipeline.** Torque, GRF and continuous
+friction are all evaluated *along* the step, so the optimizer has every node to
+spread a correction over. The impact impulse is a property of **one** state,
+`x_N`, filtered through `Δ` — and `x_N` is not free: periodicity ties it to node
+1 and the guard equality pins the swing foot to the ground there. The only way
+to change the impulse is to change the whole orbit. `ch3_impact_march` steps
+`p.limits.mu_s_impact` down a ladder, warm-starting each stage, the way
+`ch3_continuation` marches speed and `ch3_posture_march` marches posture.
+
+`mu_s_impact` is a **separate knob from `mu_s`** on purpose. Physically it is the
+same floor, but marching `mu_s` itself would silently drag NIC2 along with it.
+
+---
+
+## Section 6.3.4 — the NIC / NEC constraint set
+
+The full constraint set of Westervelt et al. §6.3.4 is implemented as 17 rows in
+`ch3_col_constraints`, each individually gated:
+
+| row | constraint | gate | source |
+|---|---|---|---|
+| 5 | friction cone `\|F_x\| ≤ μ_s F_z` | `friction` | NIC1 |
+| 6 | minimum normal force `F_z ≥ F_z_min` | `grf` | NIC2 |
+| 9, 10 | swing foot strictly clear; transversal strike | `swing_clear` | NIC3 |
+| — | average walking rate (in `ceq`) | `enforce_nec1` | NEC1 |
+| 11 | post-impact swing-leg lift-off | `liftoff` | NEC2 |
+| 12, 13 | impulse compressive; impulse inside the cone | `impact` | NEC3 |
+| 14, 15 | fixed point exists; fixed point is stable | `hzd` | NEC4/NEC5 = (5.79)/(5.80) |
+| 16 | `θ` strictly monotonic | `phase_mono` | HH6 |
+| 17 | decoupling matrix invertible on `Z` | `decoupling` | HH2 |
+
+**The hypotheses are the purpose of the constraints, not extra rows.** HGW2 is
+discharged by rows 6 and 9, HI3 by rows 11–13, HGW6 by rows 3 and 16. HH4/HH5
+(hybrid invariance, `Δ(S ∩ Z) ⊂ Z`) gets **no row**: this transcription pins
+`y = ẏ = 0` at node 1 and equates `Δ(x_N)` to node 1, so invariance is *implied*.
+Adding it again would duplicate rows the periodicity block already spans — the
+same rank-deficiency argument that keeps `y = 0` at node 1 only. It is measured
+instead (`E.eta_post`, 3.9e-06 on the reference gait), so the implication is
+verified rather than assumed.
+
+**Where the book's "NEC" label is loose.** NEC2–NEC5 are filed under nonlinear
+*equality* constraints, but every one is written as an inequality — "is
+positive", "ζ*₂ > …", "0 < δ²_zero < 1". They are imposed that way here. NEC1 is
+the only genuine equality in the list, and the only one in `ceq`.
+
+### The zero dynamics, and why δ²_zero is worth the trouble
+
+`ch3_zero_dynamics` builds the restricted Poincaré map from `α` alone — no
+trajectory, no simulation. `ch3_zd_point` reduces the dynamics on `Z` to a scalar
+ODE `a(θ)θ̈ + b(θ)θ̇² + c(θ) = 0` by projecting onto the row `w` that annihilates
+*both* the actuators and the contact wrench, then an integrating factor
+`m = exp(∫b/a)` converts it to the book's `(κ₁, κ₂)` form with `σ = m θ̇`. The step
+map is then affine in `ζ = σ²/2`, so its fixed point and eigenvalue are closed
+form.
+
+The payoff is a **stability certificate that costs one quadrature instead of 26
+step simulations**. On the reference gait the two agree to five digits:
+
+```
+delta_zero^2 = 0.75988   (quadrature over alpha)
+Poincare rho = 0.75989   (26 forward step simulations)
+```
+
+`ch3_test_hzd` checks the reduction against the full 14-state model
+(7.8e-10), and checks that `½σ² + V_zero(θ)` is conserved along a real rollout
+(8.7e-07) — an invariant that cannot be satisfied by accident if `m` is wrong.
+
+**`enable.hzd` defaults to false, and the cost is why.** Measured on the
+reference gait: one constraint evaluation goes from 0.003 s to 0.241 s, so one
+fmincon gradient goes from ~1 s to ~77 s. Also note that this transcription
+imposes periodicity *directly*, so a converged solve is already at the fixed
+point — NEC4/NEC5 are a **check** on the fixed point it found, not the mechanism
+that finds one. The book needs them as constraints because its optimization
+parametrizes `α` alone and never propagates a state.
+
+### What this found in the reference gait
+
+**NEC3 fails.** The impact impulse is mostly *horizontal* where a walking impact
+should be mostly vertical, giving `|I_x|/I_z = 1.35` against `μ_s = 0.4`. The
+impact map imposes `J_sw dq⁺ = 0`, "the foot sticks"; at that ratio it would skid
+instead. Continuous-phase friction (NIC2) is a comfortable 0.194, so this is
+**invisible unless the impulse is checked separately** — exactly why the book
+lists NEC3 apart from NIC2.
+
+**And NEC3 is the one constraint in the set that a coarse mesh gets wrong.**
+
+| mesh | `\|I_x\|/I_z` | `I_z` | `ch3_col_verify` |
+|---|---|---|---|
+| N = 21 | 2.44 | 4.86 Ns | 6.75e-04 ✓ *passes* |
+| N = 41 | 1.35 | 8.34 Ns | 3.57e-04 ✓ |
+
+Remeshing alone — with `impact` still **off**, nothing pushing on the impulse —
+moved the ratio by 80%. The N=21 gait is not a spurious discrete solution; it
+passes verification. But `ch3_col_verify` bounds `max|X_node − X_true|` over the
+step, and the impulse is `Λ(q_N)·v_foot(x_N)` evaluated at **one endpoint**, with
+`I_z` small enough that a 7e-04 state error swamps it. Every Table 3.1 quantity
+is an extremum over the whole step and survives a coarse mesh. This one does not.
+
+The practical consequence: **a ladder calibrated on the coarse number never
+becomes active.** A first attempt starting at 2.20 spent two stages with the
+constraint inactive — the ratio drifted *up*, 1.104 → 1.261 — and the optimizer
+wandered into a region N=41 could not resolve. Refine first, read the ratio, then
+ladder from just below it.
+
+NEC2 also only just holds: the trailing foot lifts off at 0.0495 m/s, two orders
+below the gait's own 3.88 m/s strike rate.
+
 ---
 
 ## The reference gait
@@ -208,6 +327,9 @@ mesh-verified, **stable** gait, found with NEC1 disabled:
 | max \|η\| over nodes | 2.1e-04 |
 | stance-foot drift | 8.7e-07 m |
 | **Poincaré ρ** | **0.760 → stable** |
+| **δ²_zero** (NEC5) | **0.75996 → stable**, agrees with ρ to 2e-05 |
+| ζ*₂ vs `V_max/δ²` (NEC4) | 3.114 vs 0.601 → holds |
+| NEC3 impulse `\|I_x\|/I_z` | **2.44 vs μ_s = 0.4 → fails** |
 
 The forward simulation reproduces the collocation exactly — step length 0.353
 and duration 0.301 on all six steps — which is the cross-check that matters.
