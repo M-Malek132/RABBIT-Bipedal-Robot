@@ -54,7 +54,7 @@ nq = p.nq;
 d_theta = p.theta_minus - p.c_theta(:).' * x0(1:nq);
 x0(3)   = x0(3) + d_theta;
 foot    = P_st(x0(1:nq));
-x0(2)   = x0(2) + foot(2);          % foot_z = -pz - C, so pz += foot_z zeroes it
+x0(2)   = x0(2) + foot(2);          % foot_z = -y - C, so y += foot_z zeroes it
 
 % --- put the stance foot at the ORIGIN, not merely on the ground ----------
 % ch3_col_constraints pins P_st(q_1) = [0;0] to fix the translation gauge (px

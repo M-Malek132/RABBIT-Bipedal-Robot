@@ -5,8 +5,8 @@ function pts = ch3_body_points(q)
 %
 % Pulls the five drawable points out of the generated homogeneous transforms.
 % Column 3 of each 4x4 transform's translation is the WORLD Z (up-positive) --
-% the transforms already carry the pz sign convention, so heights taken from
-% here never need the -pz correction that raw generalized coordinates do.
+% the transforms already carry the y sign convention, so heights taken from
+% here never need the -y correction that raw generalized coordinates do.
 %
 % Torso length 0.75 m matches the value baked into the symbolic derivation in
 % Dynamics/rabbit_energy_model_generalized_Lagrange.m. Changing it there

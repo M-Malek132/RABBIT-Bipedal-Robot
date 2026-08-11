@@ -358,9 +358,22 @@ Only the constrained QP holds the box, and it does so *by construction*. Two
 things are worth reading carefully:
 
 - **The unconstrained CLF-QP is the worst of the three here.** It asks for the
-  least-norm `μ` that certifies the rate at each instant, which leaves no margin
-  — under sampling that error compounds, and the demanded torque nearly doubles.
-  Minimum-norm is not the same as well-behaved.
+  least-norm `μ` that certifies the rate at each instant, and rides that bound
+  at a ratio of exactly 1.0000. But the RES-CLF inequality is a *floor* on
+  convergence, not a target, and on this robot that floor is far too slow:
+  `c₃/ε = 0.732` is a time constant of **1.37 s against a step of 0.301 s**, so
+  meeting it exactly contracts `V` by only 20% per step — while the impact
+  expands `V` by up to **34×**. The hybrid budget is `0.80 × 34.1 = 27.3 > 1`,
+  so `η` grows step over step and the demanded torque nearly doubles. The
+  surplus convergence that min-norm so efficiently eliminates is exactly what
+  was paying for stability across the impact.
+
+  **Sampling is not the cause.** Measured on the transverse dynamics, `dt` from
+  1 kHz to 100 Hz gives identical rollouts (peak `|μ| = 3.0`, `V(T)/V(0) =
+  0.802` at every rate) and `V` never exceeds its certified envelope. The
+  continuous-phase guarantee is not violated anywhere — it simply says nothing
+  about Δ, and the robot is a hybrid system. Minimum-norm is not the same as
+  well-behaved.
 - **δ = 71.5 is the point, not a wart.** It is the controller reporting that it
   could not meet the convergence rate inside the actuator limit. Per Remark 3.2
   the exponential guarantee holds only while δ = 0, so this is the theory's

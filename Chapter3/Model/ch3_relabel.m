@@ -7,11 +7,11 @@ function x_out = ch3_relabel(x_in, p)
 % roles.  RABBIT's legs are geometrically identical, so the relabeling is
 % exactly an index swap -- no physical remapping of angles is needed.
 %
-%   q  = [ px pz qt | q1 q2 | q3 q4 ]   idx 1..7   (stance | swing)
+%   q  = [ px y qt | q1 q2 | q3 q4 ]    idx 1..7   (stance | swing)
 %   dq = [ same order ]                 idx 8..14
 %
 % Only the four leg joints (4,5 <-> 6,7) and their velocities (11,12 <-> 13,14)
-% move.  The floating base (px, pz, qt) and its velocity are untouched.
+% move.  The floating base (px, y, qt) and its velocity are untouched.
 %
 % See also CH3_IMPACT.
 

@@ -73,7 +73,7 @@ foot_new = P_st(x_plus(1:7));
 pass = report('Delta: new stance foot z = 0', abs(foot_new(2)), 1e-12, pass);
 pass = report('Delta: px preserved',          abs(x_plus(1) - x_pre(1)), tol, pass);
 
-% q continuity through impact (before the re-plant shifts pz)
+% q continuity through impact (before the re-plant shifts y)
 x_relabel_check = ch3_relabel([q_pre; dqp], p);
 pass = report('relabel is an involution', ...
               norm(ch3_relabel(x_relabel_check, p) - [q_pre; dqp], inf), tol, pass);

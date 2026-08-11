@@ -28,8 +28,8 @@ function p = ch3_params(varargin)
 p = struct();
 
 %% ------------------------------------------------------------------ model
-% Generalized coordinates q = [px pz qt q1 q2 q3 q4]'
-%   px,pz  torso base position   (pz is DOWN-positive; world height = -pz)
+% Generalized coordinates q = [px y qt q1 q2 q3 q4]'
+%   px,y   torso base position   (y is DOWN-positive; world height = -y)
 %   qt     torso pitch
 %   q1,q2  stance hip, knee      (actuated)
 %   q3,q4  swing  hip, knee      (actuated)
@@ -39,7 +39,12 @@ p.nx   = 2*p.nq;                % full state dimension (14)
 p.iact = (4:7)';                % actuated coordinate indices
 p.ny   = numel(p.iact);         % number of outputs (4)
 p.g0   = 9.8062;                % gravity used in the symbolic derivation
-p.mass = 32;                    % total mass [kg] (10 torso + 4 x 5 leg links + 2)
+p.mass = 30;                    % total mass [kg] (10 torso + 4 x 5 leg links).
+                                % Matches Mass_Properties in the symbolic
+                                % derivation, and M(1,1) -- which for a
+                                % translational floating-base coordinate IS the
+                                % total mass. Nothing reads this field; it is
+                                % here so the number is stated somewhere.
 
 % y0(q) = H*q.  For RABBIT the controlled variables are simply the four
 % actuated joint angles (hip and knee of each leg), so H selects them.

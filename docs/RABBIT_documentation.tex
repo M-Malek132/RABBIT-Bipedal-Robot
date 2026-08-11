@@ -95,7 +95,7 @@ See Section~\ref{sec:known} for legacy entry points that no longer run.
 % =====================================================================
 The generalized coordinates (7 DOF) are
 \begin{equation}
-  q = \begin{bmatrix} p_x & p_z & q_t & q_1 & q_2 & q_3 & q_4 \end{bmatrix}^{\!\top},
+  q = \begin{bmatrix} p_x & y & q_t & q_1 & q_2 & q_3 & q_4 \end{bmatrix}^{\!\top},
   \qquad
   x = \begin{bmatrix} q \\ \dot q \end{bmatrix} \in \mathbb{R}^{14}.
 \end{equation}
@@ -106,14 +106,14 @@ The generalized coordinates (7 DOF) are
 \toprule
 symbol & meaning & actuated \\
 \midrule
-$p_x, p_z$ & torso base position (world frame) & no \\
+$p_x, y$   & torso base position (world frame) & no \\
 $q_t$      & torso pitch angle                 & no \\
 $q_1, q_2$ & stance--leg hip, knee             & \textbf{yes} \\
 $q_3, q_4$ & swing--leg hip, knee              & \textbf{yes} \\
 \bottomrule
 \end{tabular}
 \caption{Generalized coordinates. Four actuators drive $q_1\dots q_4$; the
-floating base $(p_x,p_z,q_t)$ is unactuated, giving one degree of
+floating base $(p_x,y,q_t)$ is unactuated, giving one degree of
 underactuation in single support.}
 \end{table}
 
@@ -131,11 +131,20 @@ shank) $5\,$kg / $0.5\,$m; gravity $g = 9.8062\,\mathrm{m/s^2}$.
 
 \paragraph{Sign convention (important).}
 The world--frame $Z$ axis is \emph{up--positive} (ground $=0$, above ground
-$>0$), but $p_z$ is stored \emph{down--positive} in the generalized
-coordinates, so the world--frame hip height is $-p_z$. All kinematic helpers
+$>0$), but $y$ is stored \emph{down--positive} in the generalized
+coordinates, so the world--frame hip height is $-y$. All kinematic helpers
 (\code{P\_st}, \code{P\_sw}, \code{Tt}, \code{get\_body\_points}) return
 world--frame, up--positive heights. Mixing the two conventions has historically
 caused sign bugs.
+
+The name $y$ follows the symbolic derivation, where the second generalized
+coordinate is declared as \code{y}
+(\fname{rabbit\_energy\_model\_generalized\_Lagrange.m}, line 9), and the base
+transform carries it as $-y$ in the world--vertical row. \warn{Note the symbol
+clash:} $y$ also denotes the \emph{virtual--constraint output} of
+Section~\ref{sec:hzd}. They are told apart by context and by arity --- the
+output is always written with an argument, $y(q)$ or $y(x)$, and is a
+$4$--vector; the coordinate is a scalar and appears only inside $q$.
 
 % =====================================================================
 \section{Continuous dynamics}
@@ -184,13 +193,14 @@ Position is continuous across impact; only velocity jumps.
         \end{equation}
   \item \textbf{Reset map} (\fname{Reset\_Map/rabbit\_reset\_map.m}): relabels
         stance/swing legs (\fname{relabel\_state.m}) and re--plants the new
-        stance foot on the ground ($p_z \mathrel{+}= p_{\mathrm{st},z}$). The
+        stance foot on the ground ($y \mathrel{+}= p_{\mathrm{st},z}$). The
         horizontal coordinate is intentionally not shifted, so the robot walks
         forward continuously in the world frame.
 \end{itemize}
 
 % =====================================================================
 \section{Phase variable and Hybrid Zero Dynamics}
+\label{sec:hzd}
 % =====================================================================
 \paragraph{Phase variable (linear in $q$).}
 The gait ``clock'' is the absolute stance--leg angle, \emph{linear} in $q$:
@@ -224,6 +234,403 @@ with $K_p=400$, $K_d=40$. The B--spline is evaluated by
 \fname{Dynamics/hzd\_closed\_loop\_ode.m}, whose augmented state
 $\xi = [x;\,\text{torque cost}]$ integrates the running cost alongside the
 dynamics.
+
+% =====================================================================
+\section{The Chapter~3 package: three core functions}
+\label{sec:core}
+% =====================================================================
+\fname{Chapter3/} is a separate, from--scratch implementation of the Chapter~3
+pipeline. It reuses only the symbolically generated model in \fname{Dynamics/};
+everything above that layer is new. Three of its functions contain almost all of
+the non--obvious reasoning in the package, and are documented here in full. A
+per--function inventory and call graph is in \fname{docs/CH3\_FUNCTION\_MAP.md}.
+
+% ---------------------------------------------------------------------
+\subsection{\code{ch3\_control\_affine}: building $f$ and $g$}
+% ---------------------------------------------------------------------
+Chapter~3 requires the continuous phase in control--affine form,
+$\dot x = f(x) + g(x)u$. This is stronger than being able to evaluate $\ddot q$
+for a given $u$: three later stages need the $u$--dependence separated
+\emph{symbolically} --- the decoupling matrix $L_gL_f y = J_y\,\ddot q_{\text{in}}$
+of Section~\ref{sec:core}, the requirement that $\ddot y$ be affine in $u$ so the
+stage--7 problem is a QP at all, and the requirement that the ground reaction
+force be affine in $u$ so the friction cone is a \emph{linear} inequality.
+
+Starting from \eqref{eq:eom} with the stance foot pinned, the contact wrench
+enters as the generalized force $J_{\mathrm{st}}^{\top}\lambda$, giving the
+saddle--point system
+\begin{equation}
+  \underbrace{\begin{bmatrix} M & -J^{\top} \\ J & 0 \end{bmatrix}}_{A}
+  \begin{bmatrix} \ddot q \\ \lambda \end{bmatrix}
+  =
+  \begin{bmatrix} Bu - V - G \\ -\dot J\dot q \end{bmatrix},
+  \qquad J \equiv J_{\mathrm{st}}.
+  \label{eq:kkt}
+\end{equation}
+The contact force is therefore not modelled but \emph{solved for}, as the
+Lagrange multiplier of the same system that yields the accelerations.
+
+\paragraph{The five right--hand sides.}
+$A$ contains no $u$, and $u$ enters the right--hand side linearly. One
+factorization with five right--hand sides --- one drift column and four input
+directions --- therefore recovers the whole affine structure by superposition:
+\begin{lstlisting}
+rhs = [ [-V_vec - G_vec], B_mat ; ...
+        [-Jdotdq],        zeros(nc, nu) ];
+sol = A \ rhs;             % (nq+nc) x (1+nu)
+\end{lstlisting}
+\begin{equation}
+  \ddot q = \ddot q_{\text{drift}} + \ddot q_{\text{in}}\,u,
+  \qquad
+  \lambda = \lambda_{\text{drift}} + \lambda_{\text{in}}\,u,
+\end{equation}
+\begin{equation}
+  f(x) = \begin{bmatrix} \dot q \\ \ddot q_{\text{drift}}\end{bmatrix},
+  \qquad
+  g(x) = \begin{bmatrix} 0_{7\times4} \\ \ddot q_{\text{in}}\end{bmatrix}.
+\end{equation}
+This is exact --- not linearized, not finite--differenced; it is the solution of
+\eqref{eq:kkt}, rearranged. The structural zero in the top block of $g$ (torque
+cannot change position instantaneously) is precisely what makes the outputs
+relative degree~2.
+
+Finite--differencing $g$ instead would cost five solves \emph{plus} truncation
+error, and every downstream quantity inherits it: $L_gL_fy \to u_{\mathrm{ff}}
+\to$ the collocation cost $\to$ every gradient \code{fmincon} estimates.
+Measured, the batched solve is also $3.5\times$ faster
+($9.6\,\mu$s versus $33.2\,\mu$s).
+
+\paragraph{Numerical character.}
+Over all nodes of the reference gait, $\operatorname{cond}(A)\in[457,491]$; over
+4000 random poses the median is $428$ and the maximum $1.07\times10^{3}$, with
+$J_{\mathrm{st}}$ never losing rank. Two structural notes:
+\begin{itemize}
+  \item $A$ is \emph{not} symmetric ($\lVert A-A^{\top}\rVert_\infty = 5.88$),
+        because the upper--right block is $-J^{\top}$ while the lower--left is
+        $+J$. Negating one block row would give the symmetric indefinite form
+        admitting $LDL^{\top}$. The present arrangement is equally valid and
+        returns $\lambda$ directly in the desired convention --- the force the
+        \emph{ground applies to the robot}, $F_z>0$ pushing up (measured
+        $F_z = +39.75\,$N at $u=0$). At $9\times9$ the solver choice is
+        immaterial.
+  \item \warn{The solve is unguarded.} \code{ch3\_io\_lin} checks \code{rcond}
+        and falls back to \code{pinv}; this function checks nothing. The
+        justification holds --- $M$ is positive definite always and
+        $J_{\mathrm{st}}$ for a planar point foot is generically full row rank,
+        with zero rank failures in 4000 random poses --- but a singular $A$ would
+        propagate \code{NaN} into an ODE step rather than raise a diagnosis.
+\end{itemize}
+
+\paragraph{Two details worth preserving.}
+The local names \code{M\_mat}, \code{V\_vec}, \code{G\_vec} avoid shadowing the
+functions \code{M}, \code{V}, \code{G} on the path --- writing \code{M = M(q)}
+would make the next call in scope index the matrix instead. And
+\code{nc = size(J,1)} reads the contact count from the Jacobian rather than
+hardcoding it, so a different contact model propagates automatically. The
+\code{aux} struct is assembled only when \code{nargout > 2}, which matters when
+\code{ode45} calls the function tens of thousands of times per step.
+
+% ---------------------------------------------------------------------
+\subsection{\code{ch3\_io\_lin}: from a nonlinear robot to $\ddot y = \mu$}
+% ---------------------------------------------------------------------
+The outputs have relative degree~2: $u$ is a torque, so it cannot appear until
+one has differentiated down to $\ddot q$. Because $\partial s/\partial q$ is a
+\emph{constant} row (Hypothesis HH6, \eqref{eq:theta}), the derivative of the
+output Jacobian collapses to a single term,
+\begin{equation}
+  \dot J_y = -\frac{d^2y_d}{ds^2}\,\dot s\,\frac{\partial s}{\partial q},
+  \qquad
+  \dot J_y\dot q = -\frac{d^2y_d}{ds^2}\,\dot s^{\,2},
+\end{equation}
+so that, substituting $\ddot q = \ddot q_{\text{drift}} + \ddot q_{\text{in}}u$,
+\begin{equation}
+  \ddot y = \underbrace{J_y\ddot q_{\text{drift}} - \tfrac{d^2y_d}{ds^2}\dot s^{\,2}}_{L_f^2y\ \ (4\times1)}
+          + \underbrace{J_y\ddot q_{\text{in}}}_{L_gL_fy\ \ (4\times4)} u .
+\end{equation}
+Were $\theta$ nonlinear in $q$, $\dot J_y$ would additionally carry the
+\emph{Hessian of the phase} --- a $7\times7$ second--derivative tensor to build
+and differentiate at every timestep. That is the concrete value of the linear
+phase variable. Both terms are exact: $\ddot q_{\text{in}}$ from \eqref{eq:kkt},
+$d^2y_d/ds^2$ analytically from the B\'ezier basis.
+
+Inverting the decoupling matrix gives
+\begin{equation}
+  u = u_{\mathrm{ff}} + (L_gL_fy)^{-1}\mu,
+  \qquad
+  u_{\mathrm{ff}} = -(L_gL_fy)^{-1}L_f^2y
+  \quad\Longrightarrow\quad
+  \ddot y = \mu .
+\end{equation}
+Verified independently by central--differencing $\dot y(x)$ along the true flow
+$\dot x = f+gu$, never reusing the $\ddot y$ formula: $u=u_{\mathrm{ff}}$ gives
+$\max|\ddot y| = 2.55\times10^{-9}$; a requested
+$\mu = [1.5,\,-2,\,0.7,\,3]^{\top}$ is delivered to $2.48\times10^{-9}$; and
+$\mu = e_k$ moves only channel $k$, reproducing the identity to $10^{-9}$. Peak
+$|u_{\mathrm{ff}}|$ over the reference step is $106.6\,$Nm. Every controller in
+stages 5--8 differs \emph{only} in how it selects $\mu$.
+
+\paragraph{What is not linearized.}
+On the constraint manifold single support is $10$--dimensional while
+$\eta = [y;\dot y]$ is $8$, leaving a $2$--dimensional zero dynamics
+$(\theta,\dot\theta)$. This is \emph{partial} feedback linearization, and
+partial by necessity: full--state feedback linearization requires full
+actuation, and there are four actuators for five effective DOF. Feedback handles
+the transverse directions; the choice of $\alpha$ handles the pendulum.
+
+\paragraph{Conditioning, and a correction to the source comment.}
+Measured: over the gait $\operatorname{rcond}(L_gL_fy)\in[5.61,8.34]\times10^{-3}$
+($\operatorname{cond}\in[80,128]$); over 20\,000 random states spanning the full
+$\pm\pi$ joint box the worst value is $8.05\times10^{-6}$. \textbf{The
+\code{pinv} fallback never fires} --- zero times in 20\,000 states. It is
+genuinely defensive.
+
+The source comment attributes near--singularity to \emph{``knee lock, or if
+$dy_d/ds$ drives $J_y$ toward a rank--deficient combination.''} Measured, the two
+halves do not fare equally:
+\begin{itemize}
+  \item \warn{Knee lock: not supported.} Driving the stance knee to full
+        extension leaves conditioning flat
+        ($q_2 = 1.347 \to \operatorname{rcond} 5.76\times10^{-3}$;
+         $q_2 = 0 \to 7.03\times10^{-3}$). A $121\times121$ grid over
+        \emph{both} knees across $(-\pi,\pi)$ puts the worst case at
+        $\operatorname{rcond} = 2.14\times10^{-7}$ at
+        $(q_2,q_4)=(2.125,1.866)$ --- deep double--knee \emph{flexion}
+        ($\approx122^\circ$ and $\approx107^\circ$), not extension, and still
+        five orders above the $10^{-12}$ threshold.
+  \item \textbf{Profile slope: supported.} Stretching $\alpha$ about $\alpha_0$
+        degrades conditioning monotonically: a $100\times$ steeper profile costs
+        about $1.75$ orders of magnitude of \code{rcond}
+        ($5.76\times10^{-3} \to 1.01\times10^{-4}$).
+\end{itemize}
+
+The docstring has since been corrected accordingly: it now states the
+profile--slope mechanism, records that knee angle barely matters, and notes that
+the \code{pinv} fallback has never been observed to fire.
+
+% ---------------------------------------------------------------------
+\subsection{\code{ch3\_impact}: the same matrix, a different meaning}
+% ---------------------------------------------------------------------
+The impact solves a system structurally identical to \eqref{eq:kkt} --- same
+saddle--point shape, same $M$, a foot Jacobian and a multiplier --- while
+everything it \emph{means} differs.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & \code{ch3\_control\_affine} & \code{ch3\_impact} \\
+\midrule
+unknowns   & accelerations $\ddot q$      & post--impact velocities $\dot q^{+}$ \\
+multiplier & contact \emph{force} [N]     & contact \emph{impulse} [Ns] \\
+Jacobian   & $J_{\mathrm{st}}$, pinned foot & $J_{\mathrm{sw}}$, foot about to land \\
+right side & forces $Bu-V-G$              & momentum $M\dot q^{-}$ \\
+balance    & force                        & momentum \\
+\bottomrule
+\end{tabular}
+\caption{The two KKT systems of the hybrid model. Configuration $q$ does not
+appear on the right of the impact system because it is \emph{continuous} through
+impact; $M$ and $J_{\mathrm{sw}}$ are both evaluated at the pre--impact
+configuration. The bottom row imposes $J_{\mathrm{sw}}\dot q^{+}=0$: the foot
+strikes and sticks, with no rebound and no slip.}
+\end{table}
+
+Measured: $\operatorname{cond} = 490.8$, essentially that of the continuous
+system, and $\lVert J_{\mathrm{sw}}\dot q^{+}\rVert = 4.8\times10^{-16}$.
+
+\paragraph{The impact is violently dissipative.}
+On the reference gait the kinetic energy falls
+$70.06 \to 20.27\,$J --- \textbf{71.1\,\% destroyed in an instant} --- with an
+impulse of $[-11.85,\,4.86]^{\top}$, norm $12.81\,$Ns (the Table~3.1 impulse
+quantity). This is the physical content of ``plastic'': the ground absorbs
+whatever is required to stop the foot dead. It is also why the impact dominates
+the hybrid stability budget, and why $\varepsilon$ in the stage--5 law is
+squeezed --- the controller has exactly one step to undo what $\Delta$ does in
+zero time.
+
+\paragraph{Order is not negotiable.}
+$\Delta$ is impact, then relabel, then re--plant. Swapping the first two does not
+merely perturb the result:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+wrong--order impulse & $[0.000,\ 0.000]$ versus correct $[-11.851,\ 4.858]$ \\
+velocity error & $\lVert\dot q^{+}_{\text{correct}}-\dot q^{+}_{\text{wrong}}\rVert = 13.85$ (correct norm $5.49$) \\
+true swing foot & left sliding at $0.663$ instead of $4.8\times10^{-16}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\warn{The impulse is exactly zero --- the impact becomes a no--op.} The reason is
+worth understanding rather than memorizing: \code{ch3\_relabel} swaps the leg
+coordinate slots, so after relabelling, $J_{\mathrm{sw}}$ evaluated on the new
+coordinates describes the \emph{old stance} foot. That foot was pinned and
+already satisfies $J\dot q = 0$; the constraint the solver is asked to enforce is
+already met, the multiplier is zero, and nothing happens. The code runs and
+returns plausible numbers.
+
+\paragraph{Re--plant, and the coordinate left alone.}
+Since $y$ is down--positive, $\text{foot}_z = -y - (\text{joint terms})$, so
+adding $\text{foot}_z$ to $y$ drives the new stance foot to exactly $z=0$. On a
+collocation solution the correction is negligible ($1.7\times10^{-12}\,$m ---
+node $N$ is constrained to the guard), but in forward simulation the event
+tolerance leaves a real residual, and without the re--plant the contact point
+ratchets downward across steps. $p_x$ is deliberately \emph{not} reset (measured
+$\Delta p_x = 0$ through $\Delta$): it is the translation gauge and must
+accumulate, which is why periodicity is imposed on $13$ components and not $14$.
+
+% =====================================================================
+\section{Model verification}
+\label{sec:verify}
+% =====================================================================
+The generated dynamics were checked against physical invariants, finite
+differences, and independent second computations --- no check reuses the
+pipeline's own claims. Test set: three states from the reference gait plus four
+random physically plausible poses.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}L{7.4cm} r r@{}}
+\toprule
+check & value & tolerance \\
+\midrule
+$M$ symmetric                                   & $0$                    & $10^{-10}$ \\
+$M$ positive definite (min.\ eigenvalue)        & $4.21\times10^{-2}>0$  & --- \\
+$M_{11}=M_{22}=$ total mass ($30\,$kg)          & $0$                    & $10^{-10}$ \\
+\code{DM} $=\dot M$ (finite difference)         & $3.05\times10^{-9}$    & $10^{-4}$ \\
+passivity $\dot q^{\top}(\dot M - 2C)\dot q = 0$ & $1.05\times10^{-14}$  & $10^{-9}$ \\
+$G = \partial P/\partial q$ (finite difference) & $3.00\times10^{-8}$    & $10^{-5}$ \\
+$J_{\mathrm{st}},J_{\mathrm{sw}}$ versus finite differences & $2.3\times10^{-10}$ & $10^{-6}$ \\
+$\dot J\dot q$ (stance, swing) versus finite differences & $3.2\times10^{-9}$ & $10^{-5}$ \\
+$P_{\mathrm{st}},P_{\mathrm{sw}}$ versus the $T_2,T_4$ transforms & $1.1\times10^{-16}$ & $10^{-12}$ \\
+HH6: $\theta$ equals the geometric leg angle (mod $2\pi$) & $5.33\times10^{-15}$ & $10^{-10}$ \\
+$f_{1:7}=\dot q$ and $g_{1:7,:}=0$              & $0$                    & $10^{-14}$ \\
+$f+gu$ versus \code{rabbit\_constrained\_dynamics} & $4.55\times10^{-13}$ & $10^{-8}$ \\
+$\lambda$ affine in $u$                         & $1.14\times10^{-13}$   & $10^{-8}$ \\
+$J\ddot q + \dot J\dot q = 0$                   & $2.19\times10^{-13}$   & $10^{-8}$ \\
+energy conserved at $u=0$ (relative drift)      & $1.11\times10^{-14}$   & $10^{-8}$ \\
+impact: $J_{\mathrm{sw}}\dot q^{+}=0$           & $8.33\times10^{-16}$   & $10^{-10}$ \\
+impact dissipates kinetic energy                & $\Delta KE \le 0$      & --- \\
+\bottomrule
+\end{tabular}
+\caption{Model verification. The passivity identity is the strongest single
+check on $V$: it ties the Coriolis vector to the derivative of the mass matrix,
+two separately generated files. Energy conservation is the strongest end--to--end
+check: integrating the constrained dynamics for $0.25\,$s at $u=0$ exercises
+$M$, $V$, $G$, $J_{\mathrm{st}}$, $\dot J\dot q$ and the KKT solve simultaneously
+($194.150857 \to 194.150857\,$J).}
+\end{table}
+
+\paragraph{The HH6 identity, stated precisely.}
+The geometric identity is
+\begin{equation}
+  \operatorname{atan2}\!\big(-v_x,\,-v_z\big) = q_t + q_1 + \tfrac12 q_2
+  \pmod{2\pi},
+  \qquad v = p_{\mathrm{st}} - p_{\mathrm{hip}},
+\end{equation}
+verified to $5.3\times10^{-15}$ over 5000 random poses with either knee anywhere
+in $(-\pi,\pi)$. What is exact for all poses is the \emph{direction}; the
+hip--to--foot \emph{distance} is $\cos(q_2/2)$ (verified to $4.4\times10^{-16}$),
+so the leg shortens as the knee bends and equals the straight--leg length $1$
+only at $q_2=0$. Writing $L=\tfrac12$ for the link length,
+$\sin a_1 + \sin(a_1{+}q_2) = 2\sin(a_1{+}\tfrac{q_2}{2})\cos\tfrac{q_2}{2}$ and
+likewise for the cosine, so $\cos(q_2/2)$ factors out as magnitude and the angle
+$a_1 + q_2/2$ is what remains.
+
+\subsection{Smoothness of \code{ch3\_yd}}
+\label{sec:ydsmooth}
+Because $d^2y_d/ds^2$ enters $L_f^2y$ directly, the output profile must be $C^2$
+and the derivatives it returns must genuinely be its derivatives. Both were
+tested. The default B\'ezier basis passes unchanged; the optional B--spline
+basis had two defects, \textbf{both since fixed} --- the before/after contrast
+is drawn in Fig.~\ref{fig:ydsmooth}(c,d) and described below, because it is the
+reason the code is written the way it is.
+
+\paragraph{B\'ezier: smooth, and the derivatives are correct.}
+Against central finite differences on $s\in[-0.4,1.4]$ with $h=10^{-5}$,
+$\max|dy_d - \tfrac{d}{ds}y_d| = 3.74\times10^{-9}$ and
+$\max|d^2y_d - \tfrac{d}{ds}dy_d| = 7.22\times10^{-9}$. (Comparing $d^2y_d$
+against the \emph{second}--difference of $y_d$ gives $1.05\times10^{-4}$, which is
+that formula's own roundoff, $\approx\epsilon/h^2$, not an error in
+\code{ch3\_yd}.) Scanning 200\,000 samples, every sample--to--sample step in
+$y_d$, $dy_d$ and $d^2y_d$ sits just under the bound implied by the next
+derivative --- $1.624\times10^{-4}$ against a Lipschitz bound of
+$1.640\times10^{-4}$, and so on --- so there are no jumps. This is expected: a
+degree--5 polynomial is $C^\infty$. It is now checked rather than assumed.
+
+\paragraph{B--spline: the same curve, two defects since corrected.}
+At matching degree (\code{bsp\_deg} $=5$ with $6$ control points) the B--spline
+reproduces the B\'ezier curve to $6.66\times10^{-16}$ in value and
+$1.78\times10^{-15}$ in slope, which confirms the degree--5
+\code{BSpline\_derivative} fix. Two further problems were found and repaired:
+
+\begin{itemize}
+  \item \textbf{The clamp made $dy_d$ inconsistent with $y_d$.} A clamped knot
+        vector defines the curve only on $[0,1]$, so unlike the B\'ezier branch
+        this one must clamp $s$. It did --- but then evaluated the slope at the
+        clamped $s$ as well, so outside the interval $y_d$ froze constant while
+        the reported $dy_d$ froze at the \emph{boundary slope} ($0.561$ below
+        $s=0$, $0.883$ above $s=1$). A constant function has zero derivative, so
+        the returned $dy_d$ was not the derivative of the returned $y_d$, and
+        \code{ch3\_outputs} then built $J_y = H - dy_d\,\partial s/\partial q$
+        from it and added a term that should not have been there. This also
+        defeated the phase margin of Section~\ref{sec:hzd}: \code{ch3\_phase}
+        deliberately allows $s\in[-0.5,1.5]$ because a polynomial is well
+        behaved just outside $[0,1]$, but the B--spline branch reinstated a hard
+        clamp at exactly $[0,1]$ --- a kink at $s=0$, the start of every step.
+        \emph{Fix:} $dy_d$ and $d^2y_d$ are now zero whenever the clamp engages,
+        matching what \code{ch3\_phase} does with $\partial s/\partial q$.
+  \item \textbf{The second derivative degraded at touchdown.} It is obtained by
+        differencing the analytic first derivative with $h=10^{-5}$, and the
+        stencil was \emph{clipped} to $[0,1]$ --- which silently turns the
+        central difference into a half--width one--sided formula, dropping it
+        from $O(h^2)$ to $O(h)$. The error was flat at $\approx4\times10^{-9}$
+        across the interior and jumped to $1.76\times10^{-4}$ once $1-s<h$. The
+        affected neighbourhood is narrow, but $s=1$ is exactly where node $N$
+        sits and where $|d^2y_d/ds^2|$ is largest on this gait ($5.85$ versus
+        $\approx1$ mid--step), so it fed $L_f^2y$ at the worst moment.
+        \emph{Fix:} the stencil is now kept entirely inside $[0,1]$, using a
+        second--order one--sided formula within $h$ of an end. The error at
+        $s=1$ falls from $1.76\times10^{-4}$ to $3.77\times10^{-9}$, matching
+        interior accuracy.
+\end{itemize}
+
+Neither defect was reachable in the default configuration
+(\code{p.basis = 'bezier'}), where no clamp exists and both derivatives are
+closed--form; they affected only the B--spline cross--check path. All five
+\code{ch3\_test\_*} suites pass after the change.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{fig_yd_smoothness.png}
+\caption{Smoothness of \code{ch3\_yd}; shaded band is the nominal phase interval
+$[0,1]$. (a) the four B\'ezier profiles, which extrapolate smoothly outside the
+band --- this is what the phase margin relies on, and the steep divergence of
+$q_4$ past $s\approx1.2$ is why that margin is $0.5$ and not larger. (b) the
+B--spline value necessarily freezes outside $[0,1]$, where the B\'ezier
+continues. (c) the reported slope: \emph{former} behaviour froze at the boundary
+value, contradicting the constant it accompanied; \emph{current} behaviour is
+zero wherever the value is frozen. (d) B--spline $d^2y_d$ error against the
+analytic value, plotted against distance from touchdown (note the reversed
+logarithmic axis): the clipped stencil degenerated to one--sided once $1-s$ fell
+below the step $h=10^{-5}$ and lost five orders of accuracy; the interior
+stencil holds interior accuracy all the way to $s=1$. Regenerate with
+\fname{Visualization/make\_yd\_smoothness\_figure.m}.}
+\label{fig:ydsmooth}
+\end{figure}
+
+\paragraph{Two documentation defects found, neither affecting behaviour.}
+\begin{itemize}
+  \item \code{p.mass} in \fname{Chapter3/ch3\_params.m} read $32$ against an
+        actual total mass of $30\,$kg ($10$ torso $+\ 4\times5$ links), confirmed
+        both by summing \code{Mass\_Properties} and by reading $M_{11}$, which
+        for a translational floating--base coordinate \emph{is} the total mass.
+        The field is assigned and never read anywhere in the codebase.
+        \emph{Corrected to $30$.}
+  \item The \code{ch3\_io\_lin} knee--lock attribution discussed in
+        Section~\ref{sec:core}. \emph{Corrected} --- the docstring now states
+        the profile--slope mechanism the measurements support, drops the
+        knee--lock claim they contradict, and records that the \code{pinv} path
+        has never been observed to fire.
+\end{itemize}
 
 % =====================================================================
 \section{Trajectory optimization (the nonlinear program)}

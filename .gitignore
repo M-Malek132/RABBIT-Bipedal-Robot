@@ -17,3 +17,9 @@ slprj/
 # deletes them on success, but an interrupted solve leaves them behind)
 Results/*_ckpt.mat
 Results/ch5_result_*.mat
+
+# Heavy simulation outputs: the raw state trajectories and the rendered walk
+# animations are reproducible from the chapter drivers, so only the result
+# figures (.png) under Results/ are tracked.
+Results/ch4_result_*.mat
+Results/ch4_walk_*.gif
