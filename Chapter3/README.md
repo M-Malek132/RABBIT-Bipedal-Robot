@@ -40,6 +40,51 @@ ch3_compare_controllers(out.z_opt, out.p);
 
 ---
 
+## What you call, and what you don't
+
+Chapter 3 is 55 `.m` files, but only **13 are entry points**. The other 42 are
+internals reached through them — you should rarely need to call one directly.
+If you are looking for "where do I start", it is one of these.
+
+**Solve and verify**
+
+| Call | What it does |
+|------|--------------|
+| `ch3_main` | solve a gait end to end, then report on it |
+| `ch3_test_all` | run all six stage tests (`ch3_test_model`/`_vc`/`_hzd`/`_collocation`/`_control`/`_simulation`) |
+| `ch3_params` | every knob in the pipeline; the single source of truth |
+
+**Optimization campaigns** — hand-run drivers that march one requirement at a
+time, warm-starting each solve from the last. See *Table 3.1 limits — measure
+first* below for why marching is not optional, and what order to apply them in.
+
+| Call | Marches |
+|------|---------|
+| `ch3_continuation` | walking speed `v_des` |
+| `ch3_posture_march` | torso-pitch box and hip-height band |
+| `ch3_impact_march` | the NEC3 impulse friction cone down to `mu_s` |
+| `ch3_lean_tall_march` | combined forward-lean + hip-height campaign |
+| `ch3_col_resume` | not a march — runs a bounded chunk of one solve from a checkpoint, one MATLAB process per chunk, for the crash-prone install described above |
+
+**Analysis** — the first four take `(z, p)` straight from a solve;
+`ch3_animate` takes an unpacked `(x0, alpha, p)`.
+
+| Call | Produces |
+|------|----------|
+| `ch3_report(z, p)` | full diagnostic read-out; the first thing to read after a solve (`ch3_main` runs it for you) |
+| `ch3_plot_gait(z, p)` | six-panel gait summary figure |
+| `ch3_compare_controllers(z, p)` | the stage-8 payoff: same gait under each control law |
+| `ch3_hip_accel(z, p)` | hip acceleration from the dynamics, not differenced in time (see below) |
+| `ch3_animate(x0, alpha, p)` | walk animation |
+
+Everything else — `Model/`, `VirtualConstraints/`, `Control/`, `HZD/`,
+`Simulation/`, the `Optimization/ch3_col_*` transcription, `ch3_seed`,
+`ch3_repose`, `ch3_forces`, `ch3_poincare`, `ch3_body_points`,
+`ch3_upgrade_params` — is internal. The stage table below says which stage each
+one implements.
+
+---
+
 ## The eight stages, and where each one lives
 
 | # | Stage | Files |
@@ -58,10 +103,20 @@ Alongside stage 3, `HZD/` implements the hybrid zero dynamics itself —
 restricted Poincaré map, `δ_zero`, `V_zero`, `ζ*₂`) — which is what the §6.3.4
 stability conditions are stated in. See the NIC/NEC section below.
 
-Supporting: `Simulation/` (`ch3_ode_rhs`, `ch3_step`, `ch3_simulate`),
-`Analysis/` (`ch3_report`, `ch3_forces`, `ch3_poincare`, `ch3_plot_gait`,
-`ch3_compare_controllers`), `Test/`, and `ch3_params.m` — the single source of
-truth for every knob.
+Supporting: `Simulation/` (`ch3_ode_rhs`, `ch3_step`, `ch3_simulate`) runs a
+gait forward; `Analysis/` reports on one; `Test/` verifies each stage. Which of
+those you call and which are internal is the map above.
+
+Of the analysis tools, `ch3_hip_accel` is the one `ch3_report` does not run for
+you: it computes the hip acceleration pointwise from the closed-loop dynamics rather
+than by differencing the trajectory in time, because the hybrid motion has a
+velocity *jump* at every foot strike and any finite difference across a strike
+reports a spike whose height is set by the sample spacing rather than by the
+gait. Run it directly when you need that quantity:
+
+```matlab
+ch3_hip_accel(out.z_opt, out.p, 4, 'Results/ch3_hip_accel.png');
+```
 
 ### Why the code order differs from the chapter's
 

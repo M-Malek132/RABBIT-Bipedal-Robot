@@ -77,7 +77,7 @@ p.theta_plus  =  0.30;
 %
 % These two agree EXACTLY when n_ctrl = bez_deg+1 and the B-spline degree is
 % bez_deg: a clamped B-spline with degree+1 control points IS the Bezier
-% curve of that degree.  ch3_test_basis exploits that as a unit test.
+% curve of that degree.  ch3_test_vc (check 3) exploits that as a unit test.
 %
 % THE DEFAULT IS NOT THAT CASE, AND IT COSTS ORDER -- MEASURED. bsp_deg = 3
 % with 6 control points is a piecewise cubic, C^2 at its interior knots and no

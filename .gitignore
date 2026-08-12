@@ -14,12 +14,24 @@ slprj/
 *.synctex.gz
 
 # Collocation solver checkpoints (transient warm-start scratch; ch3_main
-# deletes them on success, but an interrupted solve leaves them behind)
+# deletes them on success, but an interrupted solve leaves them behind).
+# ch3_col_resume names its chunks ch3_ckpt_<timestamp>.mat, which puts "ckpt"
+# in the MIDDLE of the name and so slips past the *_ckpt.mat pattern above.
 Results/*_ckpt.mat
+Results/ch3_ckpt_*.mat
 Results/ch5_result_*.mat
 
 # Heavy simulation outputs: the raw state trajectories and the rendered walk
 # animations are reproducible from the chapter drivers, so only the result
 # figures (.png) under Results/ are tracked.
+Results/ch3_result_*.mat
+Results/ch3_walk_*.gif
 Results/ch4_result_*.mat
 Results/ch4_walk_*.gif
+
+# Per-stage march histories. These are solver diagnostics for one campaign --
+# every rung's z, exitflag and timing -- so they age out with the campaign that
+# wrote them. ch3_posture_march_hist is the exception: ch3_leantall_drive cites
+# its verified pitch ladder as the one to reuse, so it is kept and tracked.
+Results/*_hist.mat
+!Results/ch3_posture_march_hist.mat

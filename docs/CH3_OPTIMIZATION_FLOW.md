@@ -383,3 +383,4 @@ The shipped reference gait reaches `rho = 0.760`.
 | [`ch3_col_remesh.m`](../Chapter3/Optimization/ch3_col_remesh.m) | move a solution onto a finer mesh |
 | [`ch3_col_resume.m`](../Chapter3/Optimization/ch3_col_resume.m) | run a bounded chunk of a solve from a checkpoint, one MATLAB process per chunk |
 | [`ch3_continuation.m`](../Chapter3/Optimization/ch3_continuation.m) | march `v_des`, warm-starting each speed |
+| [`ch3_lean_tall_march.m`](../Chapter3/Optimization/ch3_lean_tall_march.m) | end-to-end campaign driver for the forward-lean, ~0.94 m hip gait; resumable, `'warm'` (4 rungs from the converged lean gait) or `'cold'` (17 stages from a seed) |

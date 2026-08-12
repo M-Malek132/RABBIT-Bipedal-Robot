@@ -65,6 +65,24 @@ options = optimoptions('fmincon', ...
 % add-on registry crashed in a network call and took down a solve at iteration
 % 76.) Writing z every few iterations makes a crash cost minutes, not a run,
 % and the checkpoint doubles as a warm start.
+% VALIDATE THE PATH AT SETUP, NOT AT THE FIRST WRITE.  ch3_upgrade_params
+% clears a checkpoint path that this machine cannot honour, but callers may set
+% one AFTER that call (ch3_col_resume does), so the destination is re-checked
+% here. Doing it now means a bad path is reported before the solve starts
+% rather than at the first multiple of checkpoint_every, minutes in.
+if ~isempty(p.checkpoint_file)
+    ck_dir = fileparts(p.checkpoint_file);
+    if ~isempty(ck_dir) && ~isfolder(ck_dir)
+        warning('ch3_col_solve:checkpointDir', ...
+                ['Checkpoint directory "%s" does not exist, so "%s" would be ' ...
+                 'written somewhere unintended (on POSIX a Windows path is a ' ...
+                 'legal FILENAME, not an error).\nSolving without ' ...
+                 'checkpoints; set p.checkpoint_file to a writable path, or ' ...
+                 ''''' to disable it.'], ck_dir, p.checkpoint_file);
+        p.checkpoint_file = '';
+    end
+end
+
 if ~isempty(p.checkpoint_file)
     options = optimoptions(options, 'OutputFcn', ...
         @(z, ov, state) checkpoint_fcn(z, ov, state, p));
