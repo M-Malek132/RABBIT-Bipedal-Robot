@@ -5,27 +5,11 @@ those numbers, every timestep, for as long as it walks. Everything else in
 [`CH3_OPTIMIZATION_FLOW.md`](CH3_OPTIMIZATION_FLOW.md) and
 [`CH3_FUNCTION_MAP.md`](CH3_FUNCTION_MAP.md) is detail underneath this handoff.
 
-```mermaid
-sequenceDiagram
-    participant Eng as Engineer
-    participant Opt as Optimizer (offline)
-    participant Ver as Verifier
-    participant Ctrl as Controller (online)
-    participant Robot as Robot dynamics
-
-    Eng->>Opt: hand-tuned seed pose
-    Opt->>Opt: search for alpha (Bezier coeffs)
-    Opt->>Ver: does this trajectory hold up?
-    Ver-->>Opt: no - refine mesh, try again
-    Ver-->>Eng: yes - periodic, stable gait
-
-    Eng->>Ctrl: deploy alpha
-    loop every timestep
-        Robot->>Ctrl: current state x
-        Ctrl->>Robot: torque u(x, alpha)
-    end
-    Robot->>Robot: step ends - foot impact, repeat
-```
+![Chapter 3 sequence: Engineer, Optimizer and Verifier exchange messages once
+offline to produce alpha, a verified periodic gait. The Engineer deploys alpha
+to the Controller, which exchanges state and torque with the Robot every
+timestep in a loop, until a foot impact ends the step and the loop
+repeats.](figures/ch3_sequence.svg)
 
 The top half runs once, before deployment. The loop at the bottom runs every
 timestep, forever.
