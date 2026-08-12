@@ -3,7 +3,8 @@
 Which function computes what, and who calls it. Derived from the call graph, not
 from the folder layout — the two do not always agree.
 
-Companion documents: [`CH3_OPTIMIZATION_FLOW.md`](CH3_OPTIMIZATION_FLOW.md) expands
+Companion documents: [`CH3_SEQUENCE.md`](CH3_SEQUENCE.md) is the big picture in
+one diagram, [`CH3_OPTIMIZATION_FLOW.md`](CH3_OPTIMIZATION_FLOW.md) expands
 stage 3, and [`Chapter3/README.md`](../Chapter3/README.md) is the reference manual
 for the pipeline as a whole.
 

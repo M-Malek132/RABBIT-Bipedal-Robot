@@ -3,7 +3,9 @@
 How stage 3 of the Chapter 3 pipeline actually solves for the Bézier
 coefficients `alpha`. Everything here lives in
 [`Chapter3/Optimization/`](../Chapter3/Optimization); the reference manual for
-the pipeline as a whole is [`Chapter3/README.md`](../Chapter3/README.md).
+the pipeline as a whole is [`Chapter3/README.md`](../Chapter3/README.md). For
+the big-picture handoff in one diagram, see
+[`CH3_SEQUENCE.md`](CH3_SEQUENCE.md).
 
 Section 0 places stage 3 within the chapter as a whole. Everything after it is
 about stage 3 itself, where there are **two nested flows** — and conflating them
