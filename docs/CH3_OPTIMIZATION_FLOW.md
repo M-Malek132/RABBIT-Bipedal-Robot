@@ -65,37 +65,14 @@ periodicity is a property of the solve and stability is not (§5).
 
 ## 1. The outer workflow
 
-```mermaid
-flowchart TD
-    subgraph SEED["Seeding"]
-        P["ch3_params<br/>single source of truth; limits all off"]
-        S1["ch3_seed<br/>hand-tuned pose; alpha_0 and alpha_1 pinned<br/>so y = 0 and ydot = 0 exactly"]
-        S2["ch3_col_seed<br/>feedforward rollout, cut where theta reaches<br/>theta_plus, resampled onto N nodes with deval"]
-    end
-
-    subgraph STAGE["Limit staging -- enable one at a time, warm-starting each"]
-        direction LR
-        L1["GRF<br/>normal force floor"]
-        L2["friction<br/>cone on Fx over Fz"]
-        L3["torque<br/>peak actuator"]
-        L4["impulse<br/>impact magnitude"]
-    end
-
-    Z0[["z0 = X ; T ; alpha"]]
-    SOLVE["ch3_col_solve<br/>fmincon SQP -- NEC1 off, all limits off"]
-    V{"ch3_col_verify<br/>nodes vs a tight rollout from node 1"}
-    RM["ch3_col_remesh<br/>pchip in tau = t/T onto a finer mesh"]
-    CONT["ch3_continuation<br/>NEC1 on; march v_des, warm start each speed"]
-    REP["ch3_report + ch3_poincare<br/>spectral radius rho of the step-to-step map"]
-    OUT[("Results/ch3_reference_gait.mat")]
-
-    P --> S1 --> S2 --> Z0 --> SOLVE --> V
-    V -->|"deviation over verify_tol"| RM
-    RM -->|"warm start"| SOLVE
-    V -->|"ok"| L1
-    L1 --> L2 --> L3 --> L4
-    L4 --> CONT --> REP --> OUT
-```
+![Chapter 3 outer workflow: a hand-tuned pose is seeded and rolled out into a
+collocation problem z0. ch3_col_solve runs fmincon with speed and safety
+limits disabled. ch3_col_verify checks the result against a true rollout: on
+excess deviation, ch3_col_remesh refines the mesh and the solve retries with a
+warm start; once verified, four limits (GRF, friction, torque, impulse) are
+enabled one at a time, each re-verified. ch3_continuation then marches the
+desired speed under those limits, warm-starting each step, and ch3_report plus
+ch3_poincare produce the final reference gait.](figures/ch3_outer_workflow.svg)
 
 ### Why the workflow has this shape
 

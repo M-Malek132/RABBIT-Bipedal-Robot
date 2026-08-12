@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="1100" viewBox="0 0 920 1100" role="img" aria-labelledby="figtitle figdesc">
+<title id="figtitle">Chapter 3 outer workflow</title>
+<desc id="figdesc">A hand-tuned pose is seeded and rolled out into a collocation problem z0. ch3_col_solve runs fmincon with speed and safety limits disabled. ch3_col_verify checks the result against a true rollout: on excess deviation, ch3_col_remesh refines the mesh and the solve retries with a warm start; once verified, four limits (ground reaction force, friction, torque, impulse) are enabled one at a time, each re-verified. ch3_continuation then marches the desired speed under those limits, warm-starting each step, and ch3_report plus ch3_poincare produce the final reference gait.</desc>
+<style>
+  .bg     { fill: #ffffff; }
+  .proc   { fill: #eef0fb; stroke: #3d4f9e; stroke-width: 1.5; }
+  .gate   { fill: #faf1de; stroke: #a86a0c; stroke-width: 1.5; }
+  .out    { fill: #e6f4f1; stroke: #12796a; stroke-width: 1.5; }
+  .data   { fill: #ffffff; stroke: #3d4f9e; stroke-width: 1.5; }
+  .container { fill: #fbfbf9; stroke: #b9beb0; stroke-width: 1.25; stroke-dasharray: 5 4; }
+  .fn     { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; font-weight: 700; fill: #1b2130; text-anchor: middle; }
+  .desc   { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10px; fill: #5a6270; text-anchor: middle; }
+  .glabel { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 11.5px; font-style: italic; fill: #8891a0; }
+  .edge   { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10.5px; }
+  .edge.ok     { fill: #3d4f9e; }
+  .edge.warn   { fill: #a86a0c; }
+  .line.main   { stroke: #3d4f9e; stroke-width: 1.5; fill: none; }
+  .line.warn   { stroke: #a86a0c; stroke-width: 1.5; fill: none; }
+</style>
+
+<defs>
+  <marker id="arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#3d4f9e"/>
+  </marker>
+  <marker id="arrow-warn" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#a86a0c"/>
+  </marker>
+</defs>
+
+<rect class="bg" x="0" y="0" width="920" height="1100"/>
+
+<!-- Seeding subgraph -->
+<rect class="container" x="40" y="30" width="800" height="150" rx="10"/>
+<text class="glabel" x="60" y="50">Seeding</text>
+
+<rect class="proc" x="60" y="70" width="240" height="80" rx="8"/>
+<text class="fn" x="180" y="100">ch3_params</text>
+<text class="desc" x="180" y="116">single source of truth</text>
+<text class="desc" x="180" y="130">limits all off</text>
+
+<rect class="proc" x="320" y="70" width="240" height="80" rx="8"/>
+<text class="fn" x="440" y="96">ch3_seed</text>
+<text class="desc" x="440" y="112">hand-tuned pose</text>
+<text class="desc" x="440" y="126">alpha_0, alpha_1 pinned: y=0, ydot=0</text>
+
+<rect class="proc" x="580" y="70" width="240" height="80" rx="8"/>
+<text class="fn" x="700" y="96">ch3_col_seed</text>
+<text class="desc" x="700" y="112">feedforward rollout, cut at theta_plus</text>
+<text class="desc" x="700" y="126">resampled onto N nodes (deval)</text>
+
+<path class="line main" d="M300,110 L320,110" marker-end="url(#arrow-main)"/>
+<path class="line main" d="M560,110 L580,110" marker-end="url(#arrow-main)"/>
+
+<!-- S2 -> Z0 -->
+<path class="line main" d="M700,150 L700,190 L440,190 L440,210" marker-end="url(#arrow-main)"/>
+
+<!-- Z0 subroutine node -->
+<rect class="data" x="350" y="210" width="180" height="50" rx="4"/>
+<line x1="362" y1="210" x2="362" y2="260" stroke="#3d4f9e" stroke-width="1.5"/>
+<line x1="518" y1="210" x2="518" y2="260" stroke="#3d4f9e" stroke-width="1.5"/>
+<text class="fn" x="440" y="240" style="font-size:12px">z0 = [X ; T ; alpha]</text>
+
+<!-- Z0 -> SOLVE -->
+<path class="line main" d="M440,260 L440,290" marker-end="url(#arrow-main)"/>
+
+<!-- SOLVE -->
+<rect class="proc" x="290" y="290" width="300" height="70" rx="8"/>
+<text class="fn" x="440" y="318">ch3_col_solve</text>
+<text class="desc" x="440" y="334">fmincon SQP — NEC1 off, all limits off</text>
+
+<!-- SOLVE -> V -->
+<path class="line main" d="M440,360 L440,400" marker-end="url(#arrow-main)"/>
+
+<!-- V diamond -->
+<polygon class="gate" points="440,400 570,470 440,540 310,470"/>
+<text class="fn" x="440" y="466" style="fill:#a86a0c">ch3_col_verify</text>
+<text class="desc" x="440" y="482">nodes vs tight rollout</text>
+
+<!-- V -> RM -->
+<path class="line warn" d="M570,470 L680,470" marker-end="url(#arrow-warn)"/>
+<text class="edge warn" x="625" y="452" text-anchor="middle">deviation</text>
+<text class="edge warn" x="625" y="464" text-anchor="middle">&gt; verify_tol</text>
+
+<!-- RM -->
+<rect class="gate" x="680" y="430" width="190" height="80" rx="8"/>
+<text class="fn" x="775" y="460" style="fill:#a86a0c">ch3_col_remesh</text>
+<text class="desc" x="775" y="476">pchip in tau = t/T</text>
+<text class="desc" x="775" y="490">onto a finer mesh</text>
+
+<!-- RM -> SOLVE (warm start loop) -->
+<path class="line warn" d="M775,430 L775,325 L590,325" marker-end="url(#arrow-warn)"/>
+<rect x="645" y="308" width="80" height="16" fill="#ffffff" opacity="0.85"/>
+<text class="edge warn" x="649" y="320">warm start</text>
+
+<!-- V -> limit staging (ok) -->
+<path class="line main" d="M440,540 L440,600 L155,600 L155,640" marker-end="url(#arrow-main)"/>
+<rect x="448" y="562" width="34" height="16" fill="#ffffff" opacity="0.85"/>
+<text class="edge ok" x="452" y="574">ok</text>
+
+<!-- Limit staging subgraph -->
+<rect class="container" x="40" y="600" width="800" height="150" rx="10"/>
+<text class="glabel" x="60" y="620">Limit staging — enable one at a time, warm-starting each</text>
+
+<rect class="proc" x="70" y="640" width="170" height="80" rx="8"/>
+<text class="fn" x="155" y="672">GRF</text>
+<text class="desc" x="155" y="690">normal force floor</text>
+
+<rect class="proc" x="260" y="640" width="170" height="80" rx="8"/>
+<text class="fn" x="345" y="672">friction</text>
+<text class="desc" x="345" y="690">cone on Fx / Fz</text>
+
+<rect class="proc" x="450" y="640" width="170" height="80" rx="8"/>
+<text class="fn" x="535" y="672">torque</text>
+<text class="desc" x="535" y="690">peak actuator limit</text>
+
+<rect class="proc" x="640" y="640" width="170" height="80" rx="8"/>
+<text class="fn" x="725" y="672">impulse</text>
+<text class="desc" x="725" y="690">impact magnitude</text>
+
+<path class="line main" d="M240,680 L260,680" marker-end="url(#arrow-main)"/>
+<path class="line main" d="M430,680 L450,680" marker-end="url(#arrow-main)"/>
+<path class="line main" d="M620,680 L640,680" marker-end="url(#arrow-main)"/>
+
+<!-- L4 -> CONT -->
+<path class="line main" d="M725,720 L725,760 L440,760 L440,790" marker-end="url(#arrow-main)"/>
+
+<!-- CONT -->
+<rect class="proc" x="290" y="790" width="300" height="70" rx="8"/>
+<text class="fn" x="440" y="818">ch3_continuation</text>
+<text class="desc" x="440" y="834">NEC1 on; march v_des, warm-start each speed</text>
+
+<path class="line main" d="M440,860 L440,900" marker-end="url(#arrow-main)"/>
+
+<!-- REP -->
+<rect class="proc" x="290" y="900" width="300" height="70" rx="8"/>
+<text class="fn" x="440" y="928">ch3_report + ch3_poincare</text>
+<text class="desc" x="440" y="944">spectral radius rho of the step-to-step map</text>
+
+<path class="line main" d="M440,970 L440,1000" marker-end="url(#arrow-main)"/>
+
+<!-- OUT cylinder -->
+<path class="out" d="M330,1010 L330,1055 A110,14 0 0,0 550,1055 L550,1010" stroke="#12796a" stroke-width="1.5" fill="#e6f4f1"/>
+<ellipse class="out" cx="440" cy="1010" rx="110" ry="14"/>
+<text class="fn" x="440" y="1042" style="fill:#12796a; font-size:11.5px">Results/ch3_reference_gait.mat</text>
+
+</svg>
