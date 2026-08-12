@@ -115,33 +115,15 @@ fails for reasons that look like bugs. `ch3_report` prints every limit with its
 
 ## 2. Inside one `fmincon` evaluation
 
-```mermaid
-flowchart TD
-    subgraph E["ch3_col_eval -- one cached pass per z"]
-        direction TB
-        UNP["ch3_col_unpack<br/>X is 14 x N, T scalar, alpha is 4 x 6"]
-        ND["for each node k: ch3_col_dynamics, then ch3_io_lin<br/>one KKT factorization per node"]
-        NDO["u_ff, f_k, lambda_k, swing-foot height"]
-        MID["midpoints by Hermite interpolation<br/>re-evaluated through the same dynamics"]
-        DEF["Hermite-Simpson defects<br/>+ Simpson quadrature of u squared"]
-        IMP["ch3_impact at node N<br/>x_next and the impact impulse"]
-        UNP --> ND --> NDO --> MID --> DEF --> IMP
-    end
-
-    Z["z = X ; T ; alpha"]
-    COST["ch3_col_cost<br/>J = integral of u squared, divided by L_step"]
-    CON["ch3_col_constraints<br/>ceq and c"]
-    F["fmincon SQP step<br/>central finite differences, ScaleProblem off"]
-    CK[("p.checkpoint_file")]
-
-    Z --> UNP
-    IMP --> COST
-    IMP --> CON
-    COST --> F
-    CON --> F
-    F -->|"new z"| Z
-    F -->|"every checkpoint_every iterations"| CK
-```
+![Inside one ch3_col_eval pass: a candidate z is unpacked into X, T and alpha.
+Every node runs through ch3_col_dynamics then ch3_io_lin to get feedforward
+torque, drift, contact force and swing-foot height. Midpoints come from
+Hermite interpolation, re-evaluated through the same dynamics; Hermite-Simpson
+defects and a Simpson quadrature of torque-squared are formed, and ch3_impact
+is applied at the final node. The result feeds both the cost and the
+constraints, which feed one fmincon SQP step; the step proposes a new z and
+the loop repeats, checkpointing z every few
+iterations.](figures/ch3_col_eval.svg)
 
 ### The decision vector
 
