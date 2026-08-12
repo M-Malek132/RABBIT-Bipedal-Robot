@@ -26,7 +26,7 @@ of three**, then **two flows that never meet at runtime**, then a verdict.
 ![Chapter 3 pipeline: a shared foundation of stages 1, 2 and 4 feeds two
 separate flows -- an offline optimization that runs once, and an online control
 loop that runs every timestep. The two meet only at
-verification.](figures/ch3_pipeline_flow.png)
+verification.](figures/ch3_pipeline_flow.svg)
 
 The three grey boxes across the top are stages 1, 2 and 4; the left column is
 stage 3; the right column is stages 5-8.
