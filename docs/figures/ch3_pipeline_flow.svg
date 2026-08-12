@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="650" viewBox="0 0 900 650" role="img" aria-labelledby="figtitle figdesc">
+<title id="figtitle">Chapter 3 pipeline flow</title>
+<desc id="figdesc">A shared foundation of stage 1 (hybrid model), stage 2 (virtual constraints)
+and stage 4 (I/O linearization) feeds two flows that never meet at runtime: stage 3,
+an offline optimization that solves for alpha once, and stages 5 through 8, the
+runtime control stack that picks a torque law every timestep. Only alpha crosses
+between them; T does not. The two flows meet only at verification, where
+ch3_report and ch3_poincare check the offline solve against a forward simulation
+of the runtime stack and produce the reference gait.</desc>
+<style>
+  .found  { fill: #eef0ea; stroke: #7a8073; stroke-width: 1.5; }
+  .off    { fill: #eef0fb; stroke: #3d4f9e; stroke-width: 1.5; }
+  .on     { fill: #e6f4f1; stroke: #12796a; stroke-width: 1.5; }
+  .gate   { fill: #faf1de; stroke: #a86a0c; stroke-width: 1.5; }
+  .fn     { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; font-weight: 700; fill: #1b2130; text-anchor: middle; }
+  .fn-sm  { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; font-weight: 700; fill: #1b2130; text-anchor: middle; }
+  .desc   { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10px; fill: #5a6270; text-anchor: middle; }
+  .hdr-off  { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 12px; font-style: italic; font-weight: 600; fill: #3d4f9e; text-anchor: middle; }
+  .hdr-on   { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 12px; font-style: italic; font-weight: 600; fill: #12796a; text-anchor: middle; }
+  .note   { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10.5px; font-style: italic; fill: #8891a0; text-anchor: middle; }
+  .cross-label { font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10.5px; fill: #a83d6a; text-anchor: middle; }
+  .line   { stroke: #7a8073; stroke-width: 1.5; fill: none; }
+  .line.off  { stroke: #3d4f9e; stroke-width: 1.5; fill: none; }
+  .line.on   { stroke: #12796a; stroke-width: 1.5; fill: none; }
+  .line.cross { stroke: #a83d6a; stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
+</style>
+
+<defs>
+  <marker id="arrow-grey" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#7a8073"/>
+  </marker>
+  <marker id="arrow-off" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#3d4f9e"/>
+  </marker>
+  <marker id="arrow-on" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#12796a"/>
+  </marker>
+  <marker id="arrow-cross" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#a83d6a"/>
+  </marker>
+</defs>
+
+<rect x="0" y="0" width="900" height="650" fill="#ffffff"/>
+
+<text class="note" x="60" y="20" text-anchor="start">Shared foundation — pure functions of state, called by both flows</text>
+
+<!-- foundation row -->
+<rect class="found" x="60" y="30" width="240" height="80" rx="8"/>
+<text class="fn-sm" x="180" y="62">Stage 1 — Hybrid model</text>
+<text class="desc" x="180" y="80">xdot = f + g u,  x+ = Delta(x-)</text>
+
+<rect class="found" x="330" y="30" width="240" height="80" rx="8"/>
+<text class="fn-sm" x="450" y="62">Stage 2 — Virtual constraints</text>
+<text class="desc" x="450" y="80">y = y0(q) - y_d(s(q), alpha)</text>
+
+<rect class="found" x="600" y="30" width="240" height="80" rx="8"/>
+<text class="fn-sm" x="720" y="62">Stage 4 — I/O linearization</text>
+<text class="desc" x="720" y="80">yddot = Lf2y + LgLfy * u</text>
+
+<!-- merge bus -->
+<path class="line" d="M180,110 L180,140"/>
+<path class="line" d="M450,110 L450,140"/>
+<path class="line" d="M720,110 L720,140"/>
+<path class="line" d="M180,140 L720,140"/>
+<path class="line" d="M270,140 L270,180" marker-end="url(#arrow-grey)"/>
+<path class="line" d="M630,140 L630,180" marker-end="url(#arrow-grey)"/>
+
+<!-- column headers -->
+<text class="hdr-off" x="270" y="203">Stage 3 — offline, runs once</text>
+<text class="hdr-on" x="630" y="203">Stages 5-8 — online, every timestep</text>
+
+<!-- STAGE3 -->
+<rect class="off" x="140" y="220" width="260" height="90" rx="8"/>
+<text class="fn" x="270" y="253">Offline optimization</text>
+<text class="desc" x="270" y="270">ch3_col_solve chain -&gt; alpha, T</text>
+<text class="desc" x="270" y="286">see the outer-workflow diagram</text>
+
+<!-- RUNTIME -->
+<rect class="on" x="500" y="220" width="260" height="90" rx="8"/>
+<text class="fn" x="630" y="253">Runtime control</text>
+<text class="desc" x="630" y="270">ch3_control: PD, RES-CLF, CLF-QP</text>
+<text class="desc" x="630" y="286">stages 5-8, called every timestep</text>
+
+<!-- alpha crosses -->
+<path class="line cross" d="M400,265 L500,265" marker-end="url(#arrow-cross)"/>
+<text class="cross-label" x="450" y="250">alpha — 24 numbers</text>
+<text class="cross-label" x="450" y="288" style="font-style:italic">T does not cross</text>
+
+<!-- converge to verification -->
+<path class="line off" d="M270,310 L270,360 L460,360 L460,400" marker-end="url(#arrow-off)"/>
+<path class="line on" d="M630,310 L630,360 L540,360 L540,400" marker-end="url(#arrow-on)"/>
+<text class="note" x="500" y="378">meet only here</text>
+
+<!-- VERIFY -->
+<rect class="gate" x="270" y="400" width="460" height="100" rx="8"/>
+<text class="fn" x="500" y="435" style="fill:#a86a0c">ch3_report + ch3_poincare</text>
+<text class="desc" x="500" y="453">forward sim vs collocation: 0.353 m, 0.301 s (agree)</text>
+<text class="desc" x="500" y="470">spectral radius rho = 0.760</text>
+
+<path class="line off" d="M500,500 L500,530" marker-end="url(#arrow-off)" style="stroke:#12796a"/>
+
+<!-- OUT cylinder -->
+<path class="on" d="M400,540 L400,570 A100,10 0 0,0 600,570 L600,540" stroke="#12796a" stroke-width="1.5" fill="#e6f4f1"/>
+<ellipse class="on" cx="500" cy="540" rx="100" ry="10"/>
+<text class="fn" x="500" y="561" style="fill:#12796a; font-size:11.5px">Results/ch3_reference_gait.mat</text>
+
+</svg>
