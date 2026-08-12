@@ -112,7 +112,7 @@ Chapters 3 and 4 are about RABBIT.
 
 | chapter | subject | entry point | tests | notes |
 |---|---|---|---|---|
-| **3** | HZD gait design, I/O linearization, RES-CLF, constrained CLF-QP | `Chapter3/ch3_main.m` | `ch3_test_all` | [Chapter3/README.md](Chapter3/README.md), [CH3_SEQUENCE.md](docs/CH3_SEQUENCE.md), [CH3_OPTIMIZATION_FLOW.md](docs/CH3_OPTIMIZATION_FLOW.md) |
+| **3** | HZD gait design, I/O linearization, RES-CLF, constrained CLF-QP | `Chapter3/ch3_main.m` | `ch3_test_all` | [Chapter3/README.md](Chapter3/README.md), [CH3.md](docs/CH3.md) |
 | **4** | model uncertainty: robust CLF-QP and L₁ adaptive control | `Chapter4/ch4_main.m` | `ch4_test_all` | [CH4_UNCERTAINTY.md](docs/CH4_UNCERTAINTY.md) |
 | **5** | safety: Exponential Control Barrier Functions | `Chapter5/ch5_main.m` | `ch5_test_all` | [CH5_SAFETY.md](docs/CH5_SAFETY.md) |
 | **6** | walking on stepping stones with CBFs; gait library | `Chapter6/ch6_main.m` | `ch6_test_all` | [Chapter6/README.md](Chapter6/README.md), [CH6_STEPPING_STONES.md](docs/CH6_STEPPING_STONES.md) |
