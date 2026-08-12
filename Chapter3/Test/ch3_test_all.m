@@ -6,6 +6,10 @@ function ch3_test_all()
 % Each suite checks its stage against an INDEPENDENT reference rather than
 % against itself:
 %
+%   ch3_test_params       ch3_upgrade_params, which every analysis and every
+%                         warm start routes a saved p through: missing fields
+%                         refilled from the defaults, present fields preserved,
+%                         and the one field deliberately NOT preserved.
 %   ch3_test_model        f + g*u vs the KKT constrained dynamics; impact
 %                         against a hand-built momentum balance; guard
 %                         gradient against finite differences.
@@ -30,10 +34,10 @@ function ch3_test_all()
 % Runs in a few minutes. Anything that fails prints the measured error and its
 % tolerance, so the size of the discrepancy is visible rather than just a name.
 
-suites = {@ch3_test_model, @ch3_test_vc, @ch3_test_control, ...
+suites = {@ch3_test_params, @ch3_test_model, @ch3_test_vc, @ch3_test_control, ...
           @ch3_test_collocation, @ch3_test_simulation, @ch3_test_hzd};
-names  = {'model', 'virtual constraints', 'controllers', 'collocation', ...
-          'simulation', 'hybrid zero dynamics'};
+names  = {'params', 'model', 'virtual constraints', 'controllers', ...
+          'collocation', 'simulation', 'hybrid zero dynamics'};
 
 fprintf('\n############ CHAPTER 3 TEST SUITE ############\n');
 t0 = tic;
