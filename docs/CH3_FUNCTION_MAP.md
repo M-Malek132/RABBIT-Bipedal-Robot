@@ -12,47 +12,7 @@ for the pipeline as a whole.
 
 ## The layers
 
-```mermaid
-flowchart TD
-    subgraph L0["Layer 0 -- generated primitives (Dynamics/)"]
-        direction LR
-        PRIM["M, V, G, input_matrix<br/>J_st, J_sw, Jdotdq_st<br/>P_st, P_sw, Tt/T2/T4"]
-    end
-
-    subgraph L1["Layer 1 -- hybrid model (Chapter3/Model/)"]
-        direction LR
-        CA["ch3_control_affine<br/>builds f and g"]
-        GD["ch3_guard<br/>the surface S"]
-        IM["ch3_impact<br/>the reset map Delta"]
-    end
-
-    subgraph L2["Layer 2 -- closed loop (Chapter3/Control/)"]
-        direction LR
-        IO["ch3_io_lin<br/>Lf2y, LgLfy, u_ff"]
-        CT["ch3_control<br/>dispatch on p.controller"]
-    end
-
-    subgraph L3["Layer 3 -- simulation (Chapter3/Simulation/)"]
-        direction TB
-        RHS["ch3_ode_rhs<br/>xdot = f + g u"]
-        ST["ch3_step<br/>ode45 to the guard, then Delta"]
-        SIM["ch3_simulate<br/>chain n steps"]
-        RHS --> ST --> SIM
-    end
-
-    COL["ch3_col_dynamics<br/>u = u_ff, never integrated"]
-    CE["ch3_col_eval<br/>nodes + midpoints, cached"]
-
-    PRIM --> CA
-    PRIM --> GD
-    PRIM --> IM
-    CA --> IO --> CT --> RHS
-    CA --> RHS
-    GD --> ST
-    IM --> ST
-    CA --> COL
-    IO --> COL --> CE
-```
+![Chapter 3 function map](figures/function_map.png)
 
 `ch3_ode_rhs` and `ch3_col_dynamics` are **parallel, not nested**. Both build on
 `ch3_control_affine`, and the difference is the whole reason stage 3 and stages
