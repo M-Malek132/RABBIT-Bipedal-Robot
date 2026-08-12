@@ -9,7 +9,7 @@ those numbers, every timestep, for as long as it walks. Everything else in
 offline to produce alpha, a verified periodic gait. The Engineer deploys alpha
 to the Controller, which exchanges state and torque with the Robot every
 timestep in a loop, until a foot impact ends the step and the loop
-repeats.](figures/ch3_sequence.svg)
+repeats.](figures/ch3_sequence.png)
 
 The top half runs once, before deployment. The loop at the bottom runs every
 timestep, forever.
