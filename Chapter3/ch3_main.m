@@ -46,7 +46,7 @@ fprintf(' v_des %.3f m/s, eps %.2f, CLF via %s\n', p.v_des, p.eps, p.clf_constru
 % The solve runs under pure feedforward regardless of p.controller: the gait
 % is designed ON the zero dynamics surface, where the feedback term is
 % multiplying zero. p.controller selects what RUNS the resulting gait.
-[z_opt, solve_out] = ch3_col_solve(p);
+[z_opt, solve_out] = ch3_col_solve_min(p);
 
 %% --- report --------------------------------------------------------------
 R = ch3_report(z_opt, p, struct('stability', true, 'simulate', 5));
