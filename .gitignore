@@ -12,6 +12,18 @@ slprj/
 *.out
 *.toc
 *.synctex.gz
+# biblatex/biber and latexmk intermediates. These regenerate on every compile,
+# so tracking them produces large diffs that carry no information -- the .bcf
+# alone is ~2400 lines. Note that removing the .bbl is what makes a bare
+# `xelatex` print raw citation keys instead of [1]; build with
+# `latexmk -xelatex`, which runs biber and the reruns for you.
+*.bcf
+*.run.xml
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.xdv
 
 # Collocation solver checkpoints (transient warm-start scratch; ch3_main
 # deletes them on success, but an interrupted solve leaves them behind).
