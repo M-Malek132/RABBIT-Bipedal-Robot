@@ -7,9 +7,24 @@ fprintf('Initializing RABBIT Robot Project...\n');
 restoredefaultpath;
 project_root = fileparts(mfilename('fullpath'));
 
-% Add everything recursively, but then we handle potential 
-% missing folders or conflicts explicitly if needed.
-addpath(genpath(project_root));
+% Add everything recursively -- EXCEPT hidden directories.
+%
+% genpath walks folders whose names begin with a dot, and .claude/worktrees
+% holds COMPLETE CHECKOUTS of this repo (that is what a git worktree is). Those
+% copies contain a ch3_*.m for nearly every function here, and '.claude' sorts
+% BEFORE 'Chapter3', so an unfiltered genpath puts them first on the path and
+% every Chapter 3 call silently resolves to whatever commit the worktree is
+% parked at. Measured: which('ch3_continuation') returned the worktree copy at
+% f363689, four commits behind main, while the edited file sat third in the
+% list -- so edits appeared to have no effect, and a function deleted on main
+% still ran because a worktree still had it.
+%
+% Dropping any entry with a dot-prefixed component fixes this for every future
+% worktree too, without disturbing the worktrees themselves.
+parts = strsplit(genpath(project_root), pathsep);
+parts = parts(~cellfun(@isempty, parts));
+parts = parts(~contains(parts, [filesep '.']));
+addpath(strjoin(parts, pathsep));
 
 %% 2. Setup Results Folder
 results_dir = fullfile(project_root, 'Results');
