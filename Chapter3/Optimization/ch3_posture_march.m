@@ -1,8 +1,8 @@
-function [z, hist] = ch3_posture_march(p, stages, iters_per_stage, z0)
+function [z, hist] = ch3_posture_march(p, stages, iters_per_stage, z0, logfile)
 %CH3_POSTURE_MARCH  March the torso-pitch box and hip-height band.
 %
 %   [z, hist] = ch3_posture_march(p, stages)
-%   [z, hist] = ch3_posture_march(p, stages, iters_per_stage, z0)
+%   [z, hist] = ch3_posture_march(p, stages, iters_per_stage, z0, logfile)
 %
 % Solves the gait at each posture target in turn, seeding every solve from the
 % previous converged result.  ch3_continuation does this for walking SPEED;
@@ -37,6 +37,11 @@ function [z, hist] = ch3_posture_march(p, stages, iters_per_stage, z0)
 %                     before it, so only what changes needs writing.
 %   iters_per_stage : fmincon iterations per stage (default p.max_iter)
 %   z0              : starting decision vector (default: fresh seed)
+%   logfile         : optional path; progress is appended and flushed after
+%                     every stage (ch3_logln), so a long march run under
+%                     -batch can be watched instead of staying silent until it
+%                     exits. ch3_lean_tall_march passes its own log down here,
+%                     so a nested march interleaves into one file.
 %
 % Outputs
 %   z    : decision vector at the final stage reached
@@ -48,12 +53,14 @@ function [z, hist] = ch3_posture_march(p, stages, iters_per_stage, z0)
 % ch3_continuation: continuing from a solution that is not a real trajectory
 % only propagates the problem.
 %
-% See also CH3_CONTINUATION, CH3_COL_SOLVE, CH3_COL_VERIFY, CH3_PARAMS.
+% See also CH3_CONTINUATION, CH3_COL_SOLVE, CH3_COL_VERIFY, CH3_COL_BUDGET,
+%          CH3_LOGLN, CH3_PARAMS.
 
 p = ch3_upgrade_params(p);
 
 if nargin < 3 || isempty(iters_per_stage), iters_per_stage = p.max_iter; end
 if nargin < 4 || isempty(z0), z0 = ch3_col_seed(p); end
+if nargin < 5, logfile = ''; end
 
 hist = struct('qt_range', {}, 'hip_h', {}, 'hip_h_tol', {}, 'height', {}, ...
               'z', {}, 'fval', {}, 'exitflag', {}, 'max_ceq', {}, 'max_c', {}, ...
@@ -72,9 +79,13 @@ for k = 1:numel(stages)
     if isfield(s, 'hip_h_tol') && ~isempty(s.hip_h_tol), pk.limits.hip_h_tol = s.hip_h_tol; end
     if isfield(s, 'height')    && ~isempty(s.height),    pk.limits.enable.height = logical(s.height); end
 
-    pk.max_iter = iters_per_stage;
+    % Size the evaluation cap to the iteration budget, taking the mesh from z
+    % rather than pk.N_nodes: a caller-supplied z0 may be finer than the p it
+    % arrived with. Without this the default 3e5 caps a 61-node stage at ~170
+    % iterations however large iters_per_stage is -- see ch3_col_budget.
+    pk = ch3_col_budget(pk, iters_per_stage, z);
 
-    fprintf('\n===== posture stage %d/%d =====\n', k, numel(stages));
+    ch3_logln(logfile, sprintf('===== posture stage %d/%d =====', k, numel(stages)));
 
     % Move the gait INTO the new pitch box before solving, rather than letting
     % fmincon clamp it there. Clamping shifts theta at every node and detonates
@@ -89,22 +100,22 @@ for k = 1:numel(stages)
         % rides the lower bound, so that is where the gait will settle anyway.
         delta = (pk.qt_range(1) + 0.01) - min(qt_now);
         [z, ri] = ch3_repose(z, pk, delta);
-        fprintf('  repose  %+.4f rad : qt [%+.3f %+.3f] -> [%+.3f %+.3f]\n', ...
+        ch3_logln(logfile, sprintf('  repose  %+.4f rad : qt [%+.3f %+.3f] -> [%+.3f %+.3f]', ...
                 delta, ri.qt_before(1), ri.qt_before(2), ...
-                ri.qt_after(1), ri.qt_after(2));
+                ri.qt_after(1), ri.qt_after(2)));
         [~, ceq_r] = ch3_col_constraints(z, pk);
-        fprintf('          warm-start residual after repose: %.3e\n', max(abs(ceq_r)));
+        ch3_logln(logfile, sprintf('          warm-start residual after repose: %.3e', max(abs(ceq_r))));
     end
 
-    fprintf('  qt box   [%+.3f %+.3f] rad  (%+.1f .. %+.1f deg)\n', ...
+    ch3_logln(logfile, sprintf('  qt box   [%+.3f %+.3f] rad  (%+.1f .. %+.1f deg)', ...
             pk.qt_range(1), pk.qt_range(2), ...
-            rad2deg(pk.qt_range(1)), rad2deg(pk.qt_range(2)));
+            rad2deg(pk.qt_range(1)), rad2deg(pk.qt_range(2))));
     if pk.limits.enable.height
-        fprintf('  hip band %.3f +- %.3f m  [ENABLED]\n', ...
-                pk.limits.hip_h, pk.limits.hip_h_tol);
+        ch3_logln(logfile, sprintf('  hip band %.3f +- %.3f m  [ENABLED]', ...
+                pk.limits.hip_h, pk.limits.hip_h_tol));
     else
-        fprintf('  hip band %.3f +- %.3f m  [off]\n', ...
-                pk.limits.hip_h, pk.limits.hip_h_tol);
+        ch3_logln(logfile, sprintf('  hip band %.3f +- %.3f m  [off]', ...
+                pk.limits.hip_h, pk.limits.hip_h_tol));
     end
 
     [z_new, out] = ch3_col_solve(pk, z);
@@ -125,18 +136,18 @@ for k = 1:numel(stages)
                      'hip_lo', min(hip), 'hip_hi', max(hip), ...
                      'verify_dev', V.max_dev, 'verify_ok', V.ok);
 
-    fprintf(['  -> J = %.2f, max|ceq| = %.2e, max c = %.2e\n' ...
+    ch3_logln(logfile, sprintf(['  -> J = %.2f, max|ceq| = %.2e, max c = %.2e\n' ...
              '     qt  %+.4f .. %+.4f rad (%+.1f .. %+.1f deg)\n' ...
              '     hip %.4f .. %.4f m (bob %.4f)\n' ...
-             '     verify %.2e (ok=%d)\n'], ...
+             '     verify %.2e (ok=%d)'], ...
             out.fval, out.max_ceq, out.max_c, ...
             min(qt), max(qt), rad2deg(min(qt)), rad2deg(max(qt)), ...
-            min(hip), max(hip), max(hip)-min(hip), V.max_dev, V.ok);
+            min(hip), max(hip), max(hip)-min(hip), V.max_dev, V.ok));
 
     if ~V.ok
-        fprintf(['  STOPPING: this stage did not verify as a real trajectory.\n' ...
-                 '  Continuing from it would propagate a fictional gait. Refine\n' ...
-                 '  the mesh (ch3_col_remesh) or take smaller posture steps.\n']);
+        ch3_logln(logfile, ['  STOPPING: this stage did not verify as a real trajectory.' ...
+                 newline '  Continuing from it would propagate a fictional gait. Refine' ...
+                 newline '  the mesh (ch3_col_remesh) or take smaller posture steps.']);
         return;
     end
 

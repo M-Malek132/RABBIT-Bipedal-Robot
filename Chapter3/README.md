@@ -79,7 +79,7 @@ first* below for why marching is not optional, and what order to apply them in.
 
 Everything else — `Model/`, `VirtualConstraints/`, `Control/`, `HZD/`,
 `Simulation/`, the `Optimization/ch3_col_*` transcription, `ch3_seed`,
-`ch3_repose`, `ch3_forces`, `ch3_poincare`, `ch3_body_points`,
+`ch3_repose`, `ch3_logln`, `ch3_forces`, `ch3_poincare`, `ch3_body_points`,
 `ch3_upgrade_params` — is internal. The stage table below says which stage each
 one implements.
 

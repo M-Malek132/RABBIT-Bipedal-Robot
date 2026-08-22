@@ -49,7 +49,7 @@ stages = ladder();
 if exist(STATE, 'file')
     S = load(STATE);
     k0 = S.k_done + 1;  z = S.z;  p = S.p;  hist = S.hist;
-    logln(LOG, sprintf('RESUME at stage %d/%d', k0, numel(stages)));
+    ch3_logln(LOG, sprintf('RESUME at stage %d/%d', k0, numel(stages)));
 else
     if ~exist(SEED, 'file')
         error('ch3_realizability_march:seed', 'Cannot find seed gait "%s".', SEED);
@@ -58,12 +58,12 @@ else
     z = S.z;
     p = ch3_upgrade_params(S.pf);
     k0 = 1;  hist = {};
-    logln(LOG, sprintf('=== REALIZABILITY march: %d stages ===', numel(stages)));
+    ch3_logln(LOG, sprintf('=== REALIZABILITY march: %d stages ===', numel(stages)));
 
     E0 = ch3_col_eval(z, p);
     V0 = ch3_col_verify(z, p, false);
     peak_u0 = max(max(abs(E0.u(:))), max(abs(E0.um(:))));
-    logln(LOG, sprintf(['    seed: N=%d peak|u|=%.2f Nm  ||impulse||=%.3f Ns  ' ...
+    ch3_logln(LOG, sprintf(['    seed: N=%d peak|u|=%.2f Nm  ||impulse||=%.3f Ns  ' ...
                         'verify %.3e (ok=%d)'], size(E0.X,2), peak_u0, ...
                        norm(E0.impulse), V0.max_dev, V0.ok));
 end
@@ -71,8 +71,8 @@ end
 for k = k0:numel(stages)
     st = stages(k);
     t0 = tic;
-    p = budget(p, st.iters);
-    logln(LOG, sprintf('--- stage %d/%d [%s] %s', k, numel(stages), st.kind, st.desc));
+    p = ch3_col_budget(p, st.iters);
+    ch3_logln(LOG, sprintf('--- stage %d/%d [%s] %s', k, numel(stages), st.kind, st.desc));
 
     switch st.kind
         case 'torque'
@@ -89,13 +89,13 @@ for k = k0:numel(stages)
                 ch3_animate(X(:,1), alpha, p, 4, ...
                             fullfile(resd, 'ch3_walk_full_constrained.gif'));
             catch ME
-                logln(LOG, sprintf('animate failed: %s', ME.message));
+                ch3_logln(LOG, sprintf('animate failed: %s', ME.message));
             end
-            logln(LOG, sprintf('FINAL rho=%.4f  speed=%.4f m/s  file=%s', ...
+            ch3_logln(LOG, sprintf('FINAL rho=%.4f  speed=%.4f m/s  file=%s', ...
                                R.rho, R.speed, FINAL));
             k_done = k; %#ok<NASGU>
             save(STATE, 'k_done', 'z', 'p', 'hist');
-            logln(LOG, 'MARKER_ALLDONE');
+            ch3_logln(LOG, 'MARKER_ALLDONE');
             return;
     end
 
@@ -107,19 +107,19 @@ for k = k0:numel(stages)
     % than mesh coarseness -- see ch3_lean_tall_march for the same reasoning).
     % If it still misses, refine the mesh next.
     if ~V.ok
-        logln(LOG, sprintf(['    stage missed (verify %.3e); retrying with ' ...
+        ch3_logln(LOG, sprintf(['    stage missed (verify %.3e); retrying with ' ...
                             '%d iterations'], V.max_dev, 2*p.max_iter));
-        p2 = budget(p, 2*st.iters);
+        p2 = ch3_col_budget(p, 2*st.iters);
         [z_new, out] = ch3_col_solve(p2, z);
         V = ch3_col_verify(z_new, p2, false);
         if V.ok, p = p2; end
     end
 
     if ~V.ok
-        logln(LOG, sprintf(['    stage missed again (verify %.3e); refining ' ...
+        ch3_logln(LOG, sprintf(['    stage missed again (verify %.3e); refining ' ...
                             'mesh 61 -> 81 and retrying'], V.max_dev));
         [z_r, p_r] = ch3_col_remesh(z, p, 81);
-        p_r = budget(p_r, st.iters);
+        p_r = ch3_col_budget(p_r, st.iters);
         [z_new, out] = ch3_col_solve(p_r, z_r);
         V = ch3_col_verify(z_new, p_r, false);
         if V.ok, p = p_r; end
@@ -127,7 +127,7 @@ for k = k0:numel(stages)
 
     E = ch3_col_eval(z_new, p);
     peak_u = max(max(abs(E.u(:))), max(abs(E.um(:))));
-    logln(LOG, sprintf(['    N=%d  J=%.2f  exitflag=%d  max|ceq|=%.2e  max c=%.2e\n' ...
+    ch3_logln(LOG, sprintf(['    N=%d  J=%.2f  exitflag=%d  max|ceq|=%.2e  max c=%.2e\n' ...
                         '    peak|u|=%.3f Nm  ||impulse||=%.3f Ns  speed=%.4f m/s\n' ...
                         '    verify %.3e (ok=%d)   %.0f s'], ...
                        size(E.X,2), out.fval, out.exitflag, out.max_ceq, out.max_c, ...
@@ -139,8 +139,8 @@ for k = k0:numel(stages)
                          'verify_dev', V.max_dev, 'verify_ok', V.ok); %#ok<AGROW>
 
     if ~V.ok
-        logln(LOG, sprintf('STOP at stage %d: did not verify (%.3e)', k, V.max_dev));
-        logln(LOG, 'MARKER_STOPPED');
+        ch3_logln(LOG, sprintf('STOP at stage %d: did not verify (%.3e)', k, V.max_dev));
+        ch3_logln(LOG, 'MARKER_STOPPED');
         k_done = k - 1; %#ok<NASGU>
         save(STATE, 'k_done', 'z', 'p', 'hist');
         return;
@@ -172,20 +172,4 @@ end
 
 function s = mk(kind, desc, target, iters)
 s = struct('kind', kind, 'desc', desc, 'target', target, 'iters', iters);
-end
-
-function p = budget(p, iters)
-if ~isempty(iters), p.max_iter = iters; end
-n_vars = 14 * p.N_nodes + 1 + p.ny * p.n_ctrl;
-p.max_fun_evals = ceil(2.2 * n_vars * p.max_iter);
-end
-
-function logln(f, msg)
-fid = fopen(f, 'a');
-if fid < 0
-    error('ch3_realizability_march:log', 'Cannot open log file "%s".', f);
-end
-fprintf(fid, '%s  %s\n', datestr(now, 'HH:MM:SS'), msg); %#ok<TNOW1,DATST>
-fclose(fid);
-fprintf('%s\n', msg);
 end

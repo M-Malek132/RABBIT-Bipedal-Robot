@@ -43,7 +43,7 @@ function [z, out] = ch3_col_resume(ckpt_file, n_iters, p_override)
 %   z   : decision vector after this chunk
 %   out : ch3_col_solve output for this chunk
 %
-% See also CH3_COL_SOLVE, CH3_COL_VERIFY.
+% See also CH3_COL_SOLVE, CH3_COL_VERIFY, CH3_COL_BUDGET.
 
 if exist(ckpt_file, 'file')
     S = load(ckpt_file);
@@ -63,8 +63,14 @@ else
     fprintf('[resume] no checkpoint; starting from a fresh seed\n');
 end
 
-p.max_iter        = n_iters;
 p.checkpoint_file = ckpt_file;
+
+% Size the evaluation cap to this chunk's iteration count, taking the mesh from
+% z0 rather than p.N_nodes -- a checkpoint may have been written after a
+% remesh. Chunks are usually small enough that the default 3e5 would not bind,
+% but a large chunk on a fine mesh would silently stop short of n_iters and
+% look like the solve converging. See ch3_col_budget.
+p = ch3_col_budget(p, n_iters, z0);
 
 [z, out] = ch3_col_solve(p, z0);
 

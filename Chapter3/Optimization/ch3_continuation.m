@@ -1,8 +1,8 @@
-function [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0)
+function [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0, logfile)
 %CH3_CONTINUATION  March the walking speed, warm-starting each solve.
 %
 %   [z, hist] = ch3_continuation(p, v_targets)
-%   [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0)
+%   [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0, logfile)
 %
 % Solves the gait at each speed in v_targets in turn, seeding every solve from
 % the previous converged result.
@@ -27,6 +27,9 @@ function [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0)
 %   v_targets      : vector of speeds to solve, in order
 %   iters_per_step : fmincon iterations per speed (default p.max_iter)
 %   z0             : optional starting decision vector (default: fresh seed)
+%   logfile        : optional path; progress is appended and flushed after
+%                    every step (ch3_logln), so a long march run under -batch
+%                    can be watched instead of staying silent until it exits
 %
 % Outputs
 %   z    : decision vector at the final speed reached
@@ -36,12 +39,14 @@ function [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0)
 % A speed whose solve fails to verify stops the march: continuing from a
 % solution that is not a real trajectory only propagates the problem.
 %
-% See also CH3_COL_SOLVE, CH3_COL_VERIFY, CH3_COL_REMESH.
+% See also CH3_COL_SOLVE, CH3_COL_VERIFY, CH3_COL_REMESH, CH3_COL_BUDGET,
+%          CH3_LOGLN.
 
 p = ch3_upgrade_params(p);
 
 if nargin < 3 || isempty(iters_per_step), iters_per_step = p.max_iter; end
 if nargin < 4 || isempty(z0), z0 = ch3_col_seed(p); end
+if nargin < 5, logfile = ''; end
 
 hist = struct('v_des', {}, 'z', {}, 'fval', {}, 'exitflag', {}, ...
               'max_ceq', {}, 'verify_dev', {}, 'verify_ok', {}, 'speed', {});
@@ -50,11 +55,16 @@ z = z0;
 
 for k = 1:numel(v_targets)
     pk = p;
-    pk.v_des     = v_targets(k);
-    pk.max_iter  = iters_per_step;
+    pk.v_des = v_targets(k);
 
-    fprintf('\n===== continuation step %d/%d : v_des = %.4f m/s =====\n', ...
-            k, numel(v_targets), pk.v_des);
+    % Size the evaluation cap to the iteration budget, taking the mesh from z
+    % rather than pk.N_nodes: a caller-supplied z0 may be finer than the p it
+    % arrived with. Without this the default 3e5 caps a 61-node step at ~170
+    % iterations however large iters_per_step is -- see ch3_col_budget.
+    pk = ch3_col_budget(pk, iters_per_step, z);
+
+    ch3_logln(logfile, sprintf('===== continuation step %d/%d : v_des = %.4f m/s =====', ...
+                               k, numel(v_targets), pk.v_des));
 
     [z_new, out] = ch3_col_solve(pk, z);
 
@@ -66,13 +76,13 @@ for k = 1:numel(v_targets)
                      'verify_dev', V.max_dev, 'verify_ok', V.ok, ...
                      'speed', E.L_step / E.T); %#ok<AGROW>
 
-    fprintf('  -> J = %.2f, max|ceq| = %.2e, speed = %.4f, verify = %.2e (ok=%d)\n', ...
-            out.fval, out.max_ceq, E.L_step/E.T, V.max_dev, V.ok);
+    ch3_logln(logfile, sprintf('  -> J = %.2f, max|ceq| = %.2e, speed = %.4f, verify = %.2e (ok=%d)', ...
+                               out.fval, out.max_ceq, E.L_step/E.T, V.max_dev, V.ok));
 
     if ~V.ok
-        fprintf(['  STOPPING: this step did not verify as a real trajectory.\n' ...
-                 '  Continuing from it would propagate a fictional gait. Refine\n' ...
-                 '  the mesh (ch3_col_remesh) or take smaller speed steps.\n']);
+        ch3_logln(logfile, ['  STOPPING: this step did not verify as a real trajectory.' ...
+                 newline '  Continuing from it would propagate a fictional gait. Refine' ...
+                 newline '  the mesh (ch3_col_remesh) or take smaller speed steps.']);
         return;
     end
 

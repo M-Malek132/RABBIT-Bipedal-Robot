@@ -48,9 +48,9 @@ function [z, hist, p_out] = ch3_impact_march(p, ratios, iters_per_stage, z0, log
 %                     measures -- read it off ch3_report.
 %   iters_per_stage : fmincon iterations per stage (default p.max_iter)
 %   z0              : starting decision vector (default: fresh seed)
-%   logfile         : optional path; progress is appended and FLUSHED after
-%                     every stage, so a long march can be watched while it runs
-%                     instead of only after it finishes.
+%   logfile         : optional path; progress is appended and flushed after
+%                     every stage (ch3_logln), so a long march can be watched
+%                     while it runs instead of only after it finishes.
 %
 % Outputs
 %   z     : decision vector at the last stage that converged AND verified
@@ -66,7 +66,8 @@ function [z, hist, p_out] = ch3_impact_march(p, ratios, iters_per_stage, z0, log
 % gives: continuing from a solution that is not a real trajectory propagates a
 % fictional gait rather than fixing it.
 %
-% See also CH3_CONTINUATION, CH3_POSTURE_MARCH, CH3_COL_SOLVE, CH3_REPORT.
+% See also CH3_CONTINUATION, CH3_POSTURE_MARCH, CH3_COL_SOLVE, CH3_COL_BUDGET,
+%          CH3_LOGLN, CH3_REPORT.
 
 p = ch3_upgrade_params(p);
 
@@ -90,18 +91,23 @@ p_out = p;
 p_out.limits.enable.impact = true;
 
 E0 = ch3_col_eval(z, pk);
-say(logfile, sprintf(['\n===== ch3_impact_march: %d stages =====\n' ...
-                      'start: |Ix|/Iz = %.4f  (I = [%.3f %.3f] Ns)\n' ...
-                      'target ladder: %s\n'], ...
+ch3_logln(logfile, sprintf(['===== ch3_impact_march: %d stages =====\n' ...
+                            'start: |Ix|/Iz = %.4f  (I = [%.3f %.3f] Ns)\n' ...
+                            'target ladder: %s'], ...
      numel(ratios), ratio_of(E0.impulse), E0.impulse(1), E0.impulse(2), ...
      num2str(ratios(:).', '%.3f ')));
 
 for k = 1:numel(ratios)
     pk.limits.mu_s_impact = ratios(k);
-    pk.max_iter = iters_per_stage;
 
-    say(logfile, sprintf('\n===== stage %d/%d : mu_s_impact = %.4f =====\n', ...
-                         k, numel(ratios), ratios(k)));
+    % Size the evaluation cap to the iteration budget, taking the mesh from z
+    % rather than pk.N_nodes: a caller-supplied z0 may be finer than the p it
+    % arrived with. Without this the default 3e5 caps a 61-node stage at ~170
+    % iterations however large iters_per_stage is -- see ch3_col_budget.
+    pk = ch3_col_budget(pk, iters_per_stage, z);
+
+    ch3_logln(logfile, sprintf('===== stage %d/%d : mu_s_impact = %.4f =====', ...
+                               k, numel(ratios), ratios(k)));
 
     [z_new, out] = ch3_col_solve(pk, z);
 
@@ -116,19 +122,19 @@ for k = 1:numel(ratios)
                      'speed', E.L_step/E.T, 'L_step', E.L_step, 'T', E.T, ...
                      'verify_dev', V.max_dev, 'verify_ok', V.ok);
 
-    say(logfile, sprintf([ ...
+    ch3_logln(logfile, sprintf([ ...
         '  -> J = %.2f, exitflag %d, max|ceq| = %.2e, max c = %.2e\n' ...
         '     |Ix|/Iz = %.4f  (target %.4f),  I = [%.3f %.3f] Ns\n' ...
         '     speed %.4f m/s, L_step %.4f m, T %.4f s\n' ...
-        '     verify %.2e (ok=%d)\n'], ...
+        '     verify %.2e (ok=%d)'], ...
         out.fval, out.exitflag, out.max_ceq, out.max_c, ...
         r, ratios(k), E.impulse(1), E.impulse(2), ...
         E.L_step/E.T, E.L_step, E.T, V.max_dev, V.ok));
 
     if ~V.ok
-        say(logfile, sprintf([ ...
+        ch3_logln(logfile, sprintf([ ...
             '  STOPPING: stage %d did not verify as a real trajectory.\n' ...
-            '  Refine the mesh (ch3_col_remesh) or take smaller ratio steps.\n'], k));
+            '  Refine the mesh (ch3_col_remesh) or take smaller ratio steps.'], k));
         return;
     end
 
@@ -141,20 +147,4 @@ end
 % ---------------------------------------------------------------------------
 function r = ratio_of(I)
 if I(2) > 1e-9, r = abs(I(1))/I(2); else, r = Inf; end
-end
-
-function say(logfile, msg)
-%SAY  Print, and append to the logfile with an immediate flush.
-%
-% MATLAB buffers stdout under -batch, so a march that runs for an hour prints
-% nothing until it exits and looks indistinguishable from a hang. Opening,
-% writing and CLOSING the log at every stage forces the write through.
-fprintf('%s', msg);
-if ~isempty(logfile)
-    fid = fopen(logfile, 'a');
-    if fid > 0
-        fprintf(fid, '%s', msg);
-        fclose(fid);
-    end
-end
 end

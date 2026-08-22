@@ -85,11 +85,11 @@ end
 if exist(STATE, 'file')
     S = load(STATE);
     k0 = S.k_done + 1;  z = S.z;  p = S.p;  hist = S.hist;
-    logln(LOG, sprintf('RESUME at stage %d/%d', k0, numel(stages)));
+    ch3_logln(LOG, sprintf('RESUME at stage %d/%d', k0, numel(stages)));
 elseif strcmp(route, 'cold')
     k0 = 1;  z = [];  hist = {};
     p = ch3_params('N_nodes', 21, 'enforce_nec1', false, 'qt_range', [-1 1]);
-    logln(LOG, sprintf('=== LEAN+TALL march (cold), %d stages ===', numel(stages)));
+    ch3_logln(LOG, sprintf('=== LEAN+TALL march (cold), %d stages ===', numel(stages)));
 else
     if ~exist(SEED, 'file')
         error('ch3_lean_tall_march:seed', ...
@@ -102,11 +102,11 @@ else
     p.qt_range             = [0.08 0.25];
     p.limits.enable.height = true;
     k0 = 1;  hist = {};
-    logln(LOG, '=== LEAN+TALL march (warm): hip band 0.925 -> 0.955 ceiling ===');
+    ch3_logln(LOG, '=== LEAN+TALL march (warm): hip band 0.925 -> 0.955 ceiling ===');
 
     E0 = ch3_col_eval(z, p);
     V0 = ch3_col_verify(z, p, false);
-    logln(LOG, sprintf(['    seed: N=%d v=%.4f qt=[%+.4f %+.4f] hip=[%.4f %.4f] ' ...
+    ch3_logln(LOG, sprintf(['    seed: N=%d v=%.4f qt=[%+.4f %+.4f] hip=[%.4f %.4f] ' ...
                         'verify %.3e (ok=%d)'], size(E0.X,2), E0.L_step/E0.T, ...
                        min(E0.X(3,:)), max(E0.X(3,:)), ...
                        min(-E0.X(2,:)), max(-E0.X(2,:)), V0.max_dev, V0.ok));
@@ -118,16 +118,16 @@ for k = k0:numel(stages)
     t0 = tic;
     if isfield(st.opt, 'iters') && ~isempty(st.opt.iters), p.max_iter = st.opt.iters; end
     if ~isempty(iters), p.max_iter = iters; end
-    logln(LOG, sprintf('--- stage %d/%d [%s] %s', k, numel(stages), st.kind, st.desc));
+    ch3_logln(LOG, sprintf('--- stage %d/%d [%s] %s', k, numel(stages), st.kind, st.desc));
 
     switch st.kind
         case 'cold'
-            p = budget(p);
+            p = ch3_col_budget(p);
             z = ch3_col_solve(p, ch3_col_seed(p));
 
         case {'pitch', 'height'}
-            p = budget(p);
-            [z2, h] = ch3_posture_march(p, st.opt, p.max_iter, z);
+            p = ch3_col_budget(p);
+            [z2, h] = ch3_posture_march(p, st.opt, p.max_iter, z, LOG);
 
             % ONE RETRY, AND ITS CURE DEPENDS ON WHY THE RUNG MISSED.
             % ch3_posture_march's own advice when a rung fails to verify is
@@ -142,25 +142,24 @@ for k = k0:numel(stages)
             if isempty(h) || ~h(end).verify_ok
                 if isempty(h), dev = NaN; else, dev = h(end).verify_dev; end
                 if p.N_nodes < 61
-                    logln(LOG, sprintf(['    rung did not verify at N=%d ' ...
+                    ch3_logln(LOG, sprintf(['    rung did not verify at N=%d ' ...
                                         '(dev %.3e); refining to 61 and retrying'], ...
                                        p.N_nodes, dev));
                     [z, p] = ch3_col_remesh(z, p, 61);
-                    p = budget(p);
+                    p = ch3_col_budget(p);
                     z = ch3_col_solve(p, z);
                 else
-                    logln(LOG, sprintf(['    rung missed (dev %.3e); retrying ' ...
+                    ch3_logln(LOG, sprintf(['    rung missed (dev %.3e); retrying ' ...
                                         'with %d iterations'], dev, 2*p.max_iter));
-                    p.max_iter = 2 * p.max_iter;
-                    p = budget(p);
+                    p = ch3_col_budget(p, 2 * p.max_iter);
                 end
-                [z2, h] = ch3_posture_march(p, st.opt, p.max_iter, z);
+                [z2, h] = ch3_posture_march(p, st.opt, p.max_iter, z, LOG);
             end
 
             if isempty(h) || ~h(end).verify_ok
                 if isempty(h), dev = NaN; else, dev = h(end).verify_dev; end
-                logln(LOG, sprintf('STOP at stage %d: did not verify (dev %.3e)', k, dev));
-                logln(LOG, 'MARKER_STOPPED');
+                ch3_logln(LOG, sprintf('STOP at stage %d: did not verify (dev %.3e)', k, dev));
+                ch3_logln(LOG, 'MARKER_STOPPED');
                 return;
             end
 
@@ -176,10 +175,10 @@ for k = k0:numel(stages)
             % the last rather than restarting the structural work.
             for Nn = st.opt.N
                 [z, p] = ch3_col_remesh(z, p, Nn);
-                p = budget(p);
+                p = ch3_col_budget(p);
                 z = ch3_col_solve(p, z);
                 Vr = ch3_col_verify(z, p, false);
-                logln(LOG, sprintf('    N=%d: verify %.3e (ok=%d)', ...
+                ch3_logln(LOG, sprintf('    N=%d: verify %.3e (ok=%d)', ...
                                    Nn, Vr.max_dev, Vr.ok));
                 if Vr.ok, break; end
             end
@@ -192,9 +191,9 @@ for k = k0:numel(stages)
                 ch3_animate(X(:,1), alpha, p, 4, ...
                             fullfile(resd, 'ch3_walk_lean_tall.gif'));
             catch ME
-                logln(LOG, sprintf('animate failed: %s', ME.message));
+                ch3_logln(LOG, sprintf('animate failed: %s', ME.message));
             end
-            logln(LOG, sprintf('FINAL rho=%.4f  speed=%.4f m/s', R.rho, R.speed));
+            ch3_logln(LOG, sprintf('FINAL rho=%.4f  speed=%.4f m/s', R.rho, R.speed));
     end
 
     % --- measure whatever this stage produced -----------------------------
@@ -202,7 +201,7 @@ for k = k0:numel(stages)
     V   = ch3_col_verify(z, p, false);
     qt  = E.X(3,:);
     hip = -E.X(2,:);                       % pz is DOWN-positive
-    logln(LOG, sprintf(['    N=%d  T=%.4f  L=%.4f  v=%.4f m/s\n' ...
+    ch3_logln(LOG, sprintf(['    N=%d  T=%.4f  L=%.4f  v=%.4f m/s\n' ...
                         '    qt  [%+.4f %+.4f] rad (%+.1f .. %+.1f deg)\n' ...
                         '    hip [ %.4f  %.4f] m  (bob %.4f)\n' ...
                         '    verify %.3e (ok=%d)   %.0f s'], ...
@@ -222,18 +221,18 @@ for k = k0:numel(stages)
 
     if ~V.ok && ~strcmp(st.kind, 'final')
         if st.soft
-            logln(LOG, sprintf(['    coarse (%.3e > %.1e) -- expected here; ' ...
+            ch3_logln(LOG, sprintf(['    coarse (%.3e > %.1e) -- expected here; ' ...
                                 'the next stage refines'], V.max_dev, p.verify_tol));
         else
-            logln(LOG, sprintf('STOP at stage %d: verify failed (%.3e > %.1e)', ...
+            ch3_logln(LOG, sprintf('STOP at stage %d: verify failed (%.3e > %.1e)', ...
                                k, V.max_dev, p.verify_tol));
-            logln(LOG, 'MARKER_STOPPED');
+            ch3_logln(LOG, 'MARKER_STOPPED');
             return;
         end
     end
 end
 
-logln(LOG, 'MARKER_ALLDONE');
+ch3_logln(LOG, 'MARKER_ALLDONE');
 
 end
 
@@ -303,24 +302,4 @@ function s = mk(kind, desc, opt, soft)
 % march (only the cold solve, whose failure refinement is meant to fix).
 if nargin < 4 || isempty(soft), soft = false; end
 s = struct('kind', kind, 'desc', desc, 'opt', opt, 'soft', soft);
-end
-
-function p = budget(p)
-% Make MaxIterations the binding cap rather than MaxFunctionEvaluations.
-% Central differences cost ~2*n_vars evaluations per gradient, so the default
-% 3e5 silently caps a 599-variable solve at ~250 iterations (and an 879-variable
-% one at ~170).
-n_vars = 14 * p.N_nodes + 1 + p.ny * p.n_ctrl;
-p.max_fun_evals = ceil(2.2 * n_vars * p.max_iter);
-end
-
-function logln(f, msg)
-fid = fopen(f, 'a');
-if fid < 0
-    error('ch3_lean_tall_march:log', ...
-          'Cannot open the log file "%s" for append.', f);
-end
-fprintf(fid, '%s  %s\n', datestr(now, 'HH:MM:SS'), msg); %#ok<TNOW1,DATST>
-fclose(fid);          % close every time -- that is what makes it readable live
-fprintf('%s\n', msg);
 end
