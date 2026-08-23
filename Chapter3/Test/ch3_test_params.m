@@ -11,11 +11,22 @@ function ch3_test_params()
 %   2. PRESERVE what the stale struct has, so a result is still analysed under
 %      the settings that produced it.
 %
-% ...with exactly one documented exception, checked below.
+% ...with exactly two documented exceptions, checked below.
 %
-%   1-3. missing fields, including nested limits, come from the defaults.
-%   4-5. present fields win, and are not overwritten by the defaults.
-%   6.   p.checkpoint_file is cleared when this machine cannot honour it.
+%   1-3.  missing fields, including nested limits, come from the defaults.
+%   3b.   EXCEPT p.limits.enable, where a missing gate is filled in as FALSE.
+%   4-5.  present fields win, and are not overwritten by the defaults.
+%   6.    p.checkpoint_file is cleared when this machine cannot honour it.
+%
+% WHY 3b EXISTS.  Filling a missing gate from ch3_params makes the loader's
+% answer depend on a default that can change later -- and it did.  b64160e
+% added the six NIC/NEC gates defaulting to false; e7e101b flipped every
+% default to true; from that commit on, eight gaits solved before the gates
+% existed loaded claiming to enforce them.  Results/ch3_gait_forward_lean_tall
+% .mat is the sharp case: it verifies as a real trajectory at 1.30e-05 and
+% misses NEC3 by 0.92, and it is the documented warm-start seed for
+% ch3_lean_tall_march.  Nothing was written and nothing re-solved to cause
+% that; only a default in another file moved.
 %
 % WHY 6 EXISTS.  A .mat saved on Windows carries an absolute
 % 'C:\Users\...\Results\ch3_*_ckpt.mat'.  On macOS and Linux a backslash is a
@@ -48,6 +59,54 @@ q = ch3_upgrade_params(p);
 pass = ok('missing enable flag refilled', ...
           isequal(sort(fieldnames(q.limits.enable)), ...
                   sort(fieldnames(d.limits.enable))), pass);
+
+%% 3b. ...BUT REFILLED AS FALSE, which is the opposite of every other field.
+% A gate absent from a saved struct is evidence the constraint was not enforced
+% when that gait was solved, not an opinion the result forgot to record. Taking
+% it from the defaults instead is what silently switched six constraints on
+% underneath eight stored gaits when e7e101b flipped every default to true --
+% Results/ch3_gait_forward_lean_tall.mat then loaded claiming to enforce NEC3
+% while missing it by 0.92. These cases pin the rule so a future default flip
+% cannot reach back into results already on disk.
+p = d;  p.limits.enable = rmfield(p.limits.enable, en{1});
+q = ch3_upgrade_params(p);
+pass = ok('missing enable flag refilled as FALSE', ...
+          q.limits.enable.(en{1}) == false, pass);
+
+% The historical shape exactly: the six-field enable struct that shipped before
+% b64160e added the NIC/NEC gates.
+p = d;
+p.limits.enable = struct('torque', false, 'impulse', false, 'friction', false, ...
+                         'grf', false, 'clearance', true, 'height', true);
+q = ch3_upgrade_params(p);
+pass = ok('pre-NEC struct gets no phantom gates', ...
+          ~q.limits.enable.impact && ~q.limits.enable.hzd && ...
+          ~q.limits.enable.swing_clear && ~q.limits.enable.liftoff && ...
+          ~q.limits.enable.phase_mono && ~q.limits.enable.decoupling, pass);
+pass = ok('...while its own six flags survive', ...
+          q.limits.enable.clearance && q.limits.enable.height && ...
+          ~q.limits.enable.torque && ~q.limits.enable.grf, pass);
+
+% An explicit true is still honoured -- the rule is "absent means off", not
+% "everything off".
+p = d;
+p.limits.enable = struct('impact', true);
+q = ch3_upgrade_params(p);
+pass = ok('explicit true still wins', ...
+          q.limits.enable.impact && ~q.limits.enable.torque, pass);
+
+% A struct predating gating altogether.
+p = d;  p.limits = rmfield(p.limits, 'enable');
+q = ch3_upgrade_params(p);
+pass = ok('enable absent entirely -> all gates off', ...
+          isfield(q.limits, 'enable') && ...
+          ~any(struct2array_local(q.limits.enable)), pass);
+
+% And a FRESH ch3_params must round-trip untouched: the rule applies to what a
+% saved struct omits, and a fresh one omits nothing.
+q = ch3_upgrade_params(d);
+pass = ok('fresh ch3_params round-trips unchanged', ...
+          isequal(q.limits.enable, d.limits.enable), pass);
 
 %% 4-5. present fields are preserved, NOT overwritten by the defaults
 p = d;  p.v_des = 0.4242;  p.N_nodes = 17;
@@ -92,4 +151,10 @@ end
 
 function s = tf(b)
 if b, s = 'PASS'; else, s = 'FAIL'; end
+end
+
+function v = struct2array_local(s)
+% struct2array ships with a toolbox this suite does not require.
+c = struct2cell(s);
+v = [c{:}];
 end

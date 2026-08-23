@@ -89,6 +89,27 @@ if exist(STATE, 'file')
 elseif strcmp(route, 'cold')
     k0 = 1;  z = [];  hist = {};
     p = ch3_params('N_nodes', 21, 'enforce_nec1', false, 'qt_range', [-1 1]);
+
+    % THE COLD STAGE RUNS BARE, which is what its own stage description says
+    % ("qt box wide, height off, NEC1 off") and what the staged workflow in
+    % ch3_params prescribes: solve once with the gates down, then enable them
+    % one at a time from a converged gait. ch3_params has shipped every gate
+    % defaulting to TRUE since e7e101b, so without this the cold solve starts
+    % from ch3_col_seed carrying the full NIC/NEC set -- including NEC3, which
+    % ch3_impact_march exists precisely because it cannot be switched on in one
+    % move (a fresh seed sits outside the impulse friction cone by a factor of
+    % six). Only clearance stays on; it is the one gate this pipeline has
+    % always solved cold with.
+    %
+    % The height rungs below switch enable.height back on themselves, and
+    % realizability is a separate march (ch3_realizability_march) that runs
+    % after this one -- so nothing here silently loses a constraint it needs.
+    gates = fieldnames(p.limits.enable);
+    for i = 1:numel(gates)
+        p.limits.enable.(gates{i}) = false;
+    end
+    p.limits.enable.clearance = true;
+
     ch3_logln(LOG, sprintf('=== LEAN+TALL march (cold), %d stages ===', numel(stages)));
 else
     if ~exist(SEED, 'file')
@@ -184,8 +205,14 @@ for k = k0:numel(stages)
             end
 
         case 'final'
+            % A DELIVERABLE GAIT IS NEVER WRITTEN VIOLATING ITS OWN LIMITS.
+            % Not a warning: this file is what everything downstream loads and
+            % warm-starts from, and a gait whose params claim a constraint it
+            % misses propagates that claim to every consumer.
+            FINAL = fullfile(resd, 'ch3_gait_lean_tall.mat');
+            ch3_assert_limits(z, p, FINAL, LOG);
             R = ch3_report(z, p, struct('stability', true, 'simulate', 5));
-            save(fullfile(resd, 'ch3_gait_lean_tall.mat'), 'z', 'p', 'R');
+            save(FINAL, 'z', 'p', 'R');
             [X, ~, alpha] = ch3_col_unpack(z, p);
             try
                 ch3_animate(X(:,1), alpha, p, 4, ...
@@ -199,25 +226,41 @@ for k = k0:numel(stages)
     % --- measure whatever this stage produced -----------------------------
     E   = ch3_col_eval(z, p);
     V   = ch3_col_verify(z, p, false);
+    chk = ch3_col_check_limits(z, p);
     qt  = E.X(3,:);
     hip = -E.X(2,:);                       % pz is DOWN-positive
     ch3_logln(LOG, sprintf(['    N=%d  T=%.4f  L=%.4f  v=%.4f m/s\n' ...
                         '    qt  [%+.4f %+.4f] rad (%+.1f .. %+.1f deg)\n' ...
                         '    hip [ %.4f  %.4f] m  (bob %.4f)\n' ...
-                        '    verify %.3e (ok=%d)   %.0f s'], ...
+                        '    verify %.3e (ok=%d)  limits max c %.2e (ok=%d)   %.0f s'], ...
                        size(E.X,2), E.T, E.L_step, E.L_step/E.T, ...
                        min(qt), max(qt), rad2deg(min(qt)), rad2deg(max(qt)), ...
                        min(hip), max(hip), max(hip)-min(hip), ...
-                       V.max_dev, V.ok, toc(t0)));
+                       V.max_dev, V.ok, chk.max_c, chk.ok, toc(t0)));
 
     hist{end+1} = struct('k', k, 'kind', st.kind, 'desc', st.desc, ...
                          'z', z, 'N', size(E.X,2), 'T', E.T, ...
                          'speed', E.L_step/E.T, 'qt_lo', min(qt), 'qt_hi', max(qt), ...
                          'hip_lo', min(hip), 'hip_hi', max(hip), ...
-                         'verify_dev', V.max_dev, 'verify_ok', V.ok); %#ok<AGROW>
+                         'verify_dev', V.max_dev, 'verify_ok', V.ok, ...
+                         'limits_ok', chk.ok, 'limits_max_c', chk.max_c); %#ok<AGROW>
 
+    % chk TRAVELS WITH THE STATE FILE.  State is a resume point, so it is
+    % written even when the stage went wrong -- but it is also, in practice, a
+    % warm-start seed for other marches (ch3_talllean_state.mat is one), and a
+    % seed that cannot say whether it was feasible is how the eight-file
+    % incident in ch3_upgrade_params/merge_gates stayed invisible.
     k_done = k; %#ok<NASGU>
-    save(STATE, 'k_done', 'z', 'p', 'hist');
+    save(STATE, 'k_done', 'z', 'p', 'hist', 'chk');
+
+    if ~chk.ok
+        ch3_logln(LOG, sprintf('    %s', chk.report));
+        ch3_logln(LOG, sprintf(['STOP at stage %d: the gait violates a limit its ' ...
+                            'own params enable. Not a mesh problem -- verify ' ...
+                            'passed at %.3e.'], k, V.max_dev));
+        ch3_logln(LOG, 'MARKER_STOPPED');
+        return;
+    end
 
     if ~V.ok && ~strcmp(st.kind, 'final')
         if st.soft

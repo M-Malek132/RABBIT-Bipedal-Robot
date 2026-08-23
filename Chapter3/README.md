@@ -271,6 +271,35 @@ to change the impulse is to change the whole orbit. `ch3_impact_march` steps
 `mu_s_impact` is a **separate knob from `mu_s`** on purpose. Physically it is the
 same floor, but marching `mu_s` itself would silently drag NIC2 along with it.
 
+### A gate a saved result never mentioned is **off**
+
+Results carry the `p` that produced them, and `ch3_upgrade_params` fills in
+fields added since. `p.limits.enable` is the one nested struct that does **not**
+take its missing fields from `ch3_params`: an absent gate is filled in as
+`false`. Absence is evidence about the solve — the row was not in the
+transcription when that gait was written — not an opinion the result forgot to
+record.
+
+This is not hypothetical. `b64160e` added the six NIC/NEC gates defaulting to
+`false`, so the merge read older files correctly. `e7e101b` then flipped every
+default to `true`, and from that commit the loader switched six constraints on
+underneath **eight** stored gaits. `Results/ch3_gait_forward_lean_tall.mat` is
+the sharp case: it verifies as a real trajectory at `1.30e-05` and misses NEC3
+by `0.92` (`|I_x|/I_z = 0.463` against `μ_s = 0.4`), and it is the documented
+warm-start seed for `ch3_lean_tall_march`. Nothing was written and nothing
+re-solved to cause that — only a default in another file moved.
+
+Two consequences worth keeping:
+
+* **Enabling a gate is always explicit.** `ch3_impact_march` already worked this
+  way (it turns `enable.impact` on for its own copy of `p` so the caller's stays
+  off); the marches that inherit a seed's gates now say which ones they hold.
+* **`ch3_col_verify` cannot catch this.** It asks whether the nodes lie on a real
+  trajectory. Being a real trajectory and being feasible for the current
+  constraint set are different questions — `ch3_col_check_limits` asks the
+  second, and `ch3_assert_limits` refuses to write a deliverable gait that fails
+  it.
+
 ---
 
 ## Section 6.3.4 — the NIC / NEC constraint set
