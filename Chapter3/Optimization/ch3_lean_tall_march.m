@@ -8,10 +8,28 @@ function ch3_lean_tall_march(route, iters, max_stage)
 % Two routes to the same gait. They share every stage mechanic below and differ
 % only in where they start and how long the ladder is:
 %
-%   'warm' (default)  Starts from Results/ch3_gait_forward_lean_tall.mat, an
-%                     N = 61 gait ALREADY at the target pitch (qt +0.080 ..
-%                     +0.166 rad) with the hip at 0.905-0.925 m, and walks only
+%   'warm' (default)  Starts from Results/ch3_gait_forward_lean_tall_nec3.mat,
+%                     an N = 61 gait ALREADY at the target pitch (qt +0.080 ..
+%                     +0.163 rad) with the hip at 0.909-0.925 m, and walks only
 %                     the height band up: ceiling 0.925 -> 0.955, four rungs.
+%
+%                     THIS SEED CARRIES NEC3 ENFORCED (enable.impact, with
+%                     mu_s_impact = 0.4) and sits at |Ix|/Iz = 0.3667, inside
+%                     the impulse friction cone by 0.033. The gate is stored
+%                     true, so ch3_upgrade_params keeps it on and every rung
+%                     below must HOLD the cone rather than merely inherit it.
+%                     That is the point of seeding from this file: its
+%                     predecessor, ch3_gait_forward_lean_tall.mat, sat at
+%                     0.4628 -- OUTSIDE a 0.4 cone -- so a warm run that ever
+%                     enabled impact began infeasible.
+%
+%                     THE PRICE IS TORQUE. Marching NEC3 in cost peak |u|
+%                     107.4 -> 140.4 Nm (+31%), which is ABOVE the 120 Nm
+%                     ch3_realizability_march marches down to. Run that march
+%                     AFTER this one, and expect its torque rungs to start
+%                     further out than its own header's 191.4 -> 120 Nm note
+%                     implies. The older seed is still on disk if a campaign
+%                     wants the cheaper-torque gait and does not need NEC3.
 %
 %   'cold'            Starts from ch3_col_seed at N = 21 with the pitch box
 %                     wide open, and walks the whole way: refine, seven pitch
@@ -73,7 +91,9 @@ switch route
         STATE = fullfile(resd, 'ch3_talllean_state.mat');
         LOG   = fullfile(resd, 'ch3_talllean.log');
 end
-SEED = fullfile(resd, 'ch3_gait_forward_lean_tall.mat');
+% The NEC3-enforced gait, not its predecessor ch3_gait_forward_lean_tall.mat.
+% See the warm-route note in the header for what that buys and what it costs.
+SEED = fullfile(resd, 'ch3_gait_forward_lean_tall_nec3.mat');
 
 stages = ladder(route);
 
@@ -85,7 +105,48 @@ end
 if exist(STATE, 'file')
     S = load(STATE);
     k0 = S.k_done + 1;  z = S.z;  p = S.p;  hist = S.hist;
+    p = ch3_upgrade_params(p);
     ch3_logln(LOG, sprintf('RESUME at stage %d/%d', k0, numel(stages)));
+
+    % A RESUME CARRIES THE STATE'S GATES, NOT THE SEED'S -- the seed is not
+    % read at all on this path. So changing SEED (or the gates inside it) has
+    % NO EFFECT until this state file is gone, and the run would quietly
+    % enforce less than the seed promises while looking like a normal resume.
+    % Name both sets and say so, rather than leaving it to be discovered.
+    gs = fieldnames(p.limits.enable)';
+    gs = gs(cellfun(@(g) logical(p.limits.enable.(g)), gs));
+    ch3_logln(LOG, sprintf('    state gates: %s', strjoin(gs, ' ')));
+
+    if exist(SEED, 'file')
+        Q = load(SEED);
+        if     isfield(Q, 'p'),  qp = ch3_upgrade_params(Q.p);
+        elseif isfield(Q, 'pf'), qp = ch3_upgrade_params(Q.pf);
+        else,                    qp = [];
+        end
+        if ~isempty(qp)
+            gq = fieldnames(qp.limits.enable)';
+            gq = gq(cellfun(@(g) logical(qp.limits.enable.(g)), gq));
+            missing = setdiff(gq, gs);
+            if ~isempty(missing)
+                ch3_logln(LOG, sprintf([ ...
+                    '    NOTE: the seed enforces %s, which this state does NOT.\n' ...
+                    '    The seed is not read when resuming, so those gates stay ' ...
+                    'off for the\n    rest of the march. Delete %s to restart ' ...
+                    'from the seed, or set them\n    on the state''s p if you ' ...
+                    'want them held from here.'], ...
+                    strjoin(missing, ' '), STATE));
+            end
+        end
+    end
+
+    Cr = ch3_col_check_limits(z, p);
+    ch3_logln(LOG, sprintf('    state gait: limits max c=%.2e (ok=%d)', Cr.max_c, Cr.ok));
+    if ~Cr.ok
+        ch3_logln(LOG, sprintf('    %s', Cr.report));
+        error('ch3_lean_tall_march:stateInfeasible', ...
+              'Resume state "%s" violates a limit its own params enable:\n%s', ...
+              STATE, Cr.report);
+    end
 elseif strcmp(route, 'cold')
     k0 = 1;  z = [];  hist = {};
     p = ch3_params('N_nodes', 21, 'enforce_nec1', false, 'qt_range', [-1 1]);
@@ -119,7 +180,21 @@ else
     end
     S = load(SEED);
     z = S.z;
-    p = ch3_upgrade_params(S.pf);       % this file stores its params as pf
+
+    % ACCEPT EITHER NAME. Gaits written by the solve drivers store their
+    % parameters as 'p'; the older hand-built files in Results/ store them as
+    % 'pf'. Hard-coding one made the seed filename and the variable name a
+    % matched pair, so re-pointing SEED at a differently-written file failed
+    % with "Unrecognized field name" rather than anything about seeds.
+    if     isfield(S, 'p'),  p = ch3_upgrade_params(S.p);
+    elseif isfield(S, 'pf'), p = ch3_upgrade_params(S.pf);
+    else
+        error('ch3_lean_tall_march:seedVars', ...
+              ['Seed "%s" contains neither p nor pf, so there are no ' ...
+               'parameters to warm-start from (has: %s).'], ...
+              SEED, strjoin(fieldnames(S)', ', '));
+    end
+
     p.qt_range             = [0.08 0.25];
     p.limits.enable.height = true;
     k0 = 1;  hist = {};
@@ -127,10 +202,36 @@ else
 
     E0 = ch3_col_eval(z, p);
     V0 = ch3_col_verify(z, p, false);
+    C0 = ch3_col_check_limits(z, p);
+
+    % SAY WHICH GATES THIS RUN IS HOLDING. The seed's own enable struct decides
+    % that -- enforcing NEC3 through the height rungs is inherited from the
+    % file, not set here -- so a log that does not name them cannot be read
+    % back later to tell which constraints a result actually respects.
+    gon = fieldnames(p.limits.enable)';
+    gon = gon(cellfun(@(g) logical(p.limits.enable.(g)), gon));
+
     ch3_logln(LOG, sprintf(['    seed: N=%d v=%.4f qt=[%+.4f %+.4f] hip=[%.4f %.4f] ' ...
-                        'verify %.3e (ok=%d)'], size(E0.X,2), E0.L_step/E0.T, ...
+                        'verify %.3e (ok=%d)\n' ...
+                        '    gates: %s\n' ...
+                        '    |Ix|/Iz=%.4f  peak|u|=%.1f Nm  limits max c=%.2e (ok=%d)'], ...
+                       size(E0.X,2), E0.L_step/E0.T, ...
                        min(E0.X(3,:)), max(E0.X(3,:)), ...
-                       min(-E0.X(2,:)), max(-E0.X(2,:)), V0.max_dev, V0.ok));
+                       min(-E0.X(2,:)), max(-E0.X(2,:)), V0.max_dev, V0.ok, ...
+                       strjoin(gon, ' '), ...
+                       abs(E0.impulse(1))/E0.impulse(2), ...
+                       max(max(abs(E0.u(:))), max(abs(E0.um(:)))), ...
+                       C0.max_c, C0.ok));
+
+    % A seed that already violates something it declares is not a warm start,
+    % it is the bug this guard exists for -- fail here rather than after the
+    % first rung has spent an hour inheriting it.
+    if ~C0.ok
+        ch3_logln(LOG, sprintf('    %s', C0.report));
+        error('ch3_lean_tall_march:seedInfeasible', ...
+              ['Warm-route seed "%s" violates a limit its own params ' ...
+               'enable:\n%s'], SEED, C0.report);
+    end
 end
 
 % --- the march ------------------------------------------------------------
