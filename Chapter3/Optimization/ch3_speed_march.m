@@ -98,10 +98,8 @@ if ~exist(resd, 'dir'), mkdir(resd); end
 
 STATE = fullfile(resd, 'ch3_speed_march_state.mat');
 LOG   = fullfile(resd, 'ch3_speed_march.log');
-SEED  = fullfile(resd, 'ch3_gait_full_constrained.mat');
+SEED  = fullfile(resd, 'ch3_gait_lean_partial.mat');
 FINAL = fullfile(resd, 'ch3_speed_family.mat');
-
-V_GRID = 0.35:0.05:1.20;      % the requested range, absolute
 
 % --- start or resume ------------------------------------------------------
 if exist(STATE, 'file')
@@ -118,9 +116,41 @@ else
     z = S.z;
     if isfield(S, 'p'), p = S.p; else, p = S.pf; end
     p = ch3_upgrade_params(p);
-    p.enforce_nec1 = false;         % phases 1-2 let the speed float
+    p.enforce_nec1 = false;         % the lean leg lets the speed float
+
+    % HZD OFF AS A CONSTRAINT, MEASURED AS A DIAGNOSTIC INSTEAD.
+    % NEC4/NEC5 come from ch3_zero_dynamics, which ch3_col_constraints itself
+    % documents as the expensive row: one evaluation is p.hzd_grid_solve (41)
+    % points of roughly four 7x7 solves, and fmincon finite-differences it once
+    % per decision variable. Measured here it costs 2 min/iteration against
+    % 18 s with the gate off -- a 7x tax that puts this campaign past 30 hours.
+    % That cost is why the gate ships defaulting to false.
+    %
+    % So it is switched off for the marching and evaluated ONCE PER RUNG below,
+    % which is free by comparison and is the same "report it rather than impose
+    % it" treatment ch3_col_eval gives hybrid invariance. If a rung ever comes
+    % back with nec4/nec5 violated the log says so immediately, rather than the
+    % campaign discovering it at the end.
+    p.limits.enable.hzd = false;
+
+    % RAISE THE HIP CEILING BEFORE MARCHING ANYTHING.
+    % The seed rides its band ceiling exactly: band [0.8450 0.9250], gait hip
+    % max 0.9250. Together with the four limit caps -- Fz 50.0, |Fx|/Fz 0.4000,
+    % |u| 120.0, ||I|| 15.00, every one of them exactly active -- that is FIVE
+    % active constraints, which pins the gait at a vertex of the feasible set
+    % with no direction left to move in. It showed up as a 0.05 m/s speed rung
+    % collapsing: objective and feasibility frozen at 3.286e-02 while the step
+    % length fell to 3.1e-07.
+    %
+    % Four of those five are physics or Table 3.1 and stay. The hip ceiling is
+    % the one that is pure design choice, and raising it is MORE aligned with
+    % wanting a tall gait, not less -- 0.955 is the ceiling ch3_lean_tall_march
+    % already targets. The floor is left where it is; the final height rung
+    % raises that instead, once the marching is done.
+    p.limits.hip_h     = 0.9000;
+    p.limits.hip_h_tol = 0.0550;      % band [0.8450 0.9550]
     k0 = 1;  hist = {};  dead = '';  z_split = [];
-    stages = posture_ladder();      % phase 3 is appended once posture lands
+    stages = ladder();              % the whole chain, known up front
 
     E0 = ch3_col_eval(z, p);
     V0 = ch3_col_verify(z, p, false);
@@ -138,13 +168,17 @@ else
                            max(abs(lam0(1,:))./max(lam0(2,:),1e-9)), p.limits.mu_s, ...
                            max(max(abs(E0.u(:))),max(abs(E0.um(:)))), p.limits.u_max, ...
                            norm(E0.impulse), p.limits.impulse_max));
-    ch3_logln(LOG, sprintf('    target: qt box -> [0.080 0.250], hip floor -> 0.885'));
+    ch3_logln(LOG, sprintf(['    hip ceiling raised 0.9250 -> 0.9550 (it was a 5th ' ...
+                            'active constraint, pinning the gait)']));
+    ch3_logln(LOG, sprintf(['    plan: speed DOWN to 0.35 (slack), lean to +0.080 there, ' ...
+                            'then speed UP to 1.20 until it breaks']));
 end
 
 % --- the campaign ---------------------------------------------------------
 % A while loop, not for: phase 3 is APPENDED to stages partway through, and a
 % for loop fixes its bound at entry and would never see the new rungs.
 k = k0;
+stopped = false;
 while k <= numel(stages)
     if ~isempty(max_stage) && k > max_stage, break; end
     st = stages(k);
@@ -186,16 +220,16 @@ while k <= numel(stages)
             end
 
         case 'speed'
-            if st.restart
-                z = z_split;
-                ch3_logln(LOG, sprintf('--- restarting from the phase-2 gait for the %s branch', st.branch));
-            end
             p.enforce_nec1 = true;
             p.v_des = st.target;
             p = ch3_col_budget(p, iters, z);
 
+            % ch3_col_solve ALREADY ran ch3_col_verify and put it in out.verify.
+            % Re-running it here cost a second ode45 at RelTol 1e-11 -- about
+            % 13 minutes a rung, comparable to the solve itself -- for an answer
+            % already in hand.
             [z_new, out] = ch3_col_solve(p, z);
-            V = ch3_col_verify(z_new, p, false);
+            V = out.verify;
 
             % ONE RETRY on a bigger budget. At N = 61 the mesh is not the
             % suspect -- a miss is exhausted iterations, the same reasoning
@@ -205,7 +239,7 @@ while k <= numel(stages)
                                         'with %d iterations'], V.max_dev, 2*iters));
                 p2 = ch3_col_budget(p, 2*iters, z);
                 [z_new, out] = ch3_col_solve(p2, z);
-                V = ch3_col_verify(z_new, p2, false);
+                V = out.verify;
                 if V.ok, p = p2; end
             end
             ok  = V.ok;
@@ -219,33 +253,50 @@ while k <= numel(stages)
     lam = [E.lam, E.lamm];
     peak_u = max(max(abs(E.u(:))), max(abs(E.um(:))));
 
+    % NEC4/NEC5 once per rung -- cheap here, ruinous inside a gradient.
+    nec = [NaN NaN];
+    try
+        Zd = ch3_zero_dynamics(E.alpha, p, p.hzd_grid_solve);
+        nec = [Zd.nec4, Zd.nec5];
+    catch
+    end
+
     ch3_logln(LOG, sprintf([ ...
         '    v=%.4f  T=%.4f  L=%.4f  J=%.2f  exitflag=%d\n' ...
         '    qt [%+.4f %+.4f] rad   hip [%.4f %.4f] m (bob %.4f)\n' ...
         '    Fz>=%.1f (%.1f)  |Fx|/Fz=%.4f (%.2f)  |u|=%.1f (%.0f)  ||I||=%.2f (%.1f)\n' ...
-        '    max|ceq|=%.2e  max c=%.2e  verify %.3e (ok=%d)   %.0f s'], ...
+        '    max|ceq|=%.2e  max c=%.2e  verify %.3e (ok=%d)\n' ...
+        '    NEC4=%+.4f  NEC5=%+.4f  (both must stay <= 0)   %.0f s'], ...
         E.L_step/E.T, E.T, E.L_step, out.fval, out.exitflag, ...
         min(qt), max(qt), min(hip), max(hip), max(hip)-min(hip), ...
         min(lam(2,:)), p.limits.Fz_min, ...
         max(abs(lam(1,:))./max(lam(2,:),1e-9)), p.limits.mu_s, ...
         peak_u, p.limits.u_max, norm(E.impulse), p.limits.impulse_max, ...
-        out.max_ceq, out.max_c, dev, ok, toc(t0)));
+        out.max_ceq, out.max_c, dev, ok, nec(1), nec(2), toc(t0)));
 
     if ~ok
-        if strcmp(st.kind, 'speed')
-            dead = st.branch;
-            ch3_logln(LOG, sprintf(['    STOP on the %s branch at v=%.3f: did not ' ...
-                                    'verify (%.3e). Skipping the rest of it.'], ...
-                                   st.branch, st.target, dev));
-            k_done = k; %#ok<NASGU>
-            save(STATE, 'k_done', 'z', 'p', 'hist', 'stages', 'z_split', 'dead');
-            k = k + 1;  continue;
+        % THE CHAIN HALTS HERE, whichever leg it was. Every leg warm-starts
+        % from the one before -- the lean rungs expect the 0.35 m/s gait, the
+        % up rungs expect the leaned one -- so skipping a failed rung would run
+        % the next leg from a gait it was not designed for, and a failed rung's
+        % z is not a real trajectory in the first place.
+        %
+        % A stall on the UP leg is the expected outcome rather than a fault: it
+        % locates the fastest gait reachable at this posture inside Table 3.1.
+        % Either way the family collected so far is written out below.
+        if strcmp(st.branch, 'up')
+            ch3_logln(LOG, sprintf(['    CEILING FOUND: v = %.3f m/s does not ' ...
+                                    'verify (%.3e). The gait below it is the ' ...
+                                    'fastest reachable at this posture.'], ...
+                                   st.target, dev));
+        else
+            ch3_logln(LOG, sprintf('    STOP in %s (%s): did not verify (%.3e)', ...
+                                   st.kind, st.desc, dev));
         end
-        ch3_logln(LOG, sprintf('    STOP in %s: did not verify (%.3e)', st.kind, dev));
-        ch3_logln(LOG, 'MARKER_STOPPED');
         k_done = k - 1; %#ok<NASGU>
         save(STATE, 'k_done', 'z', 'p', 'hist', 'stages', 'z_split', 'dead');
-        return;
+        stopped = true;
+        break;
     end
 
     if strcmp(st.kind, 'speed')
@@ -255,19 +306,6 @@ while k <= numel(stages)
     z = z_new;
     k_done = k; %#ok<NASGU>
 
-    % Posture phases just finished: split the speed grid where they landed and
-    % append phase 3. z_split is the warm start BOTH branches start from.
-    if k == numel(stages) && isempty(z_split)
-        v0 = E.L_step / E.T;
-        z_split = z;
-        hist{end+1} = rec(E, p, out, dev, v0, 'posture', qt, hip, lam, peak_u, z); %#ok<AGROW>
-        stages = [stages, speed_ladder(V_GRID, v0)]; %#ok<AGROW>
-        ch3_logln(LOG, sprintf(['=== posture done at v=%.4f, qt [%+.4f %+.4f], ' ...
-                                'hip [%.4f %.4f]. Phase 3: %d speed rungs ==='], ...
-                               v0, min(qt), max(qt), min(hip), max(hip), ...
-                               numel(stages)-k));
-    end
-
     save(STATE, 'k_done', 'z', 'p', 'hist', 'stages', 'z_split', 'dead');
     k = k + 1;
 end
@@ -275,7 +313,7 @@ end
 % --- collect the family, ascending in speed -------------------------------
 if isempty(hist)
     ch3_logln(LOG, 'no rung converged; nothing to write');
-    ch3_logln(LOG, 'MARKER_ALLDONE');
+    ch3_logln(LOG, marker(stopped));
     return;
 end
 
@@ -286,11 +324,19 @@ save(FINAL, 'fam', '-v7.3');
 
 ch3_logln(LOG, sprintf('FAMILY: %d gaits, v = %.4f .. %.4f m/s -> %s', ...
                        numel(fam), min([fam.v]), max([fam.v]), FINAL));
-ch3_logln(LOG, 'MARKER_ALLDONE');
+ch3_logln(LOG, sprintf('    lean at the fast end: qt [%+.4f %+.4f] rad', ...
+                       fam(end).qt_lo, fam(end).qt_hi));
+ch3_logln(LOG, marker(stopped));
 
 end
 
 % ---------------------------------------------------------------- helpers
+function m = marker(stopped)
+% The wrapper greps for these: ALLDONE ends the run, STOPPED ends it too but
+% says the campaign halted itself rather than finishing the ladder.
+if stopped, m = 'MARKER_STOPPED'; else, m = 'MARKER_ALLDONE'; end
+end
+
 function r = rec(E, p, out, dev, target, branch, qt, hip, lam, peak_u, z)
 r = struct('v', E.L_step/E.T, 'v_target', target, 'branch', branch, ...
            'z', z, 'p', p, 'N', E.N, 'T', E.T, 'L_step', E.L_step, ...
@@ -303,38 +349,54 @@ r = struct('v', E.L_step/E.T, 'v_target', target, 'branch', branch, ...
            'peak_u', peak_u, 'impulse', norm(E.impulse), 'verify_dev', dev);
 end
 
-function stages = posture_ladder()
-% Phase 1 walks the qt box FLOOR forward from -0.100 to +0.080 -- the floor is
-% what the optimizer rides -- closing the ceiling in behind it. Phase 2 then
-% raises the hip band floor so the height cannot sag once the torso is forward.
-stages = [ ...
-    mkp('lean: qt box [-0.080 0.450]', struct('qt_range', [-0.080 0.450])), ...
-    mkp('lean: qt box [-0.060 0.450]', struct('qt_range', [-0.060 0.450])), ...
-    mkp('lean: qt box [-0.040 0.450]', struct('qt_range', [-0.040 0.450])), ...
-    mkp('lean: qt box [-0.020 0.420]', struct('qt_range', [-0.020 0.420])), ...
-    mkp('lean: qt box [ 0.000 0.400]', struct('qt_range', [ 0.000 0.400])), ...
-    mkp('lean: qt box [ 0.020 0.370]', struct('qt_range', [ 0.020 0.370])), ...
-    mkp('lean: qt box [ 0.040 0.320]', struct('qt_range', [ 0.040 0.320])), ...
-    mkp('lean: qt box [ 0.060 0.280]', struct('qt_range', [ 0.060 0.280])), ...
-    mkp('lean: qt box [ 0.080 0.250]  TARGET', struct('qt_range', [0.080 0.250])), ...
-    mkp('height: hip band [0.885 0.925]', ...
-        struct('hip_h', 0.9050, 'hip_h_tol', 0.0200, 'height', true)) ];
-end
-
-function stages = speed_ladder(grid, v0)
-% Split the absolute speed grid at wherever the posture phases landed:
-% everything below marched downward, everything above upward, each branch
-% restarting from the posture gait.
-down = sort(grid(grid < v0 - 1e-9), 'descend');
-up   = sort(grid(grid > v0 + 1e-9), 'ascend');
-
+function stages = ladder()
+% ONE CONTINUOUS CHAIN, ordered so each leg is solved where it is cheapest.
+%
+% The first attempt marched the lean at ~1.0 m/s and hit a wall: rung 1
+% converged (exitflag 1), rung 2 only just made it on iterations (exitflag 0,
+% 1806 s), rung 3 returned exitflag -2 after 12 of its 100 iterations. That
+% gradient is a feasibility boundary, not a budget shortfall -- the gait was
+% pinned at all four limit caps AND riding the top of the hip band, with
+% nothing left to trade for torso pitch.
+%
+% STEP SIZE IS 0.05 m/s, NOT 0.10. A 0.10 step was tried and stalled: the
+% solve ended at max|ceq| = 8.6e-02 with the retry making no progress --
+% feasibility stuck at 9.05e-02, step length 2.3e-03, and first-order
+% optimality GROWING. With all four limits pinned at their caps the gait has no
+% slack, so even a speed change is expensive and the step has to be small.
+%
+% Speed is the slack. Torque and impact impulse both fall with speed, so the
+% same lean that is infeasible at 1.0 m/s has room at 0.35. Hence: walk the
+% speed DOWN first at the partial lean, do the lean where it is cheap, then
+% walk the speed back UP at the full lean until it breaks. Where it breaks is
+% the answer to "how fast can this robot walk leaning forward, inside
+% Table 3.1" -- a measurement, not a failure.
+%
+% Every leg continues from the one before it, so there is no restart and no
+% branch: it is a single warm-start chain from 1.00 down to 0.35, through the
+% lean, and back up.
 stages = struct('kind', {}, 'desc', {}, 'opt', {}, 'target', {}, ...
                 'branch', {}, 'restart', {});
-for i = 1:numel(down)
-    stages(end+1) = mks(down(i), 'down', i == 1); %#ok<AGROW>
+
+% leg 1: speed down, 0.10 steps from the banked 1.0054 m/s
+for v = 1.00:-0.05:0.35
+    stages(end+1) = mks(v, 'down'); %#ok<AGROW>
 end
-for i = 1:numel(up)
-    stages(end+1) = mks(up(i), 'up', i == 1); %#ok<AGROW>
+
+% leg 2: the lean, at 0.35 m/s where the limits have margin
+for lo = [-0.040 -0.020 0.000 0.020 0.040 0.060 0.080]
+    hi = max(0.250, lo + 0.170);
+    stages(end+1) = mkp(sprintf('lean: qt box [%+.3f %+.3f]', lo, hi), ...
+                        struct('qt_range', [lo hi])); %#ok<AGROW>
+end
+% Lock the height in by raising the FLOOR, leaving the ceiling free at 0.955
+% so the gait is never pinned against it again.
+stages(end+1) = mkp('height: hip band [0.885 0.955]', ...
+                    struct('hip_h', 0.9200, 'hip_h_tol', 0.0350, 'height', true));
+
+% leg 3: speed back up at the full lean, until it stops verifying
+for v = 0.40:0.05:1.20
+    stages(end+1) = mks(v, 'up'); %#ok<AGROW>
 end
 end
 
@@ -343,8 +405,8 @@ s = struct('kind', 'posture', 'desc', desc, 'opt', opt, 'target', [], ...
            'branch', '', 'restart', false);
 end
 
-function s = mks(target, branch, restart)
+function s = mks(target, branch)
 s = struct('kind', 'speed', ...
            'desc', sprintf('v_des = %.3f m/s [%s]', target, branch), ...
-           'opt', struct(), 'target', target, 'branch', branch, 'restart', restart);
+           'opt', struct(), 'target', target, 'branch', branch, 'restart', false);
 end
