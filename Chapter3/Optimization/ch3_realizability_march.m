@@ -3,9 +3,12 @@ function ch3_realizability_march()
 %
 %   ch3_realizability_march()
 %
-% Starting point is Results/ch3_gait_fix.mat -- an N = 61 gait already
-% verified with friction, GRF, clearance, hip-height, NEC3 impulse validity
-% and the HZD/HH gates all ENFORCED (see ch3_report on that file). Only two
+% Starting point is Results/ch3_gait_fix.mat -- an N = 61 gait that SATISFIES
+% friction, GRF, clearance, hip-height, NEC3 impulse validity and the HZD/HH
+% gates (measured max c = -5.2e-04 across all of them), though only the first
+% four were enforced during its own solve: it predates the NIC/NEC rows, so
+% the rest it meets incidentally rather than by construction. This march
+% enables them explicitly at the top so they are held from here on. Only two
 % Table 3.1 limits are still off there:
 %
 %   peak |torque|     191.4 Nm measured  vs  u_max        = 120 Nm
@@ -57,6 +60,21 @@ else
     S = load(SEED);
     z = S.z;
     p = ch3_upgrade_params(S.pf);
+
+    % ENABLE THE GATES THIS MARCH CLAIMS, EXPLICITLY.  ch3_gait_fix.mat was
+    % solved on 2026-07-28, before the NIC/NEC rows existed, so its stored
+    % enable struct has six fields and mentions none of these.  Until
+    % ch3_upgrade_params was fixed they arrived switched on by accident -- the
+    % defaults in ch3_params flipped to true in e7e101b and the merge picked
+    % them up -- which is why the header above describes them as already
+    % enforced.  They ARE what this march is meant to hold (the seed satisfies
+    % every one of them; measured max c = -5.2e-04), so state that here rather
+    % than inherit it from a default that moved once and can move again.
+    for g = {'friction', 'grf', 'clearance', 'height', 'swing_clear', ...
+             'liftoff', 'impact', 'hzd', 'phase_mono', 'decoupling'}
+        p.limits.enable.(g{1}) = true;
+    end
+
     k0 = 1;  hist = {};
     ch3_logln(LOG, sprintf('=== REALIZABILITY march: %d stages ===', numel(stages)));
 
@@ -82,6 +100,9 @@ for k = k0:numel(stages)
             p.limits.enable.impulse = true;
             p.limits.impulse_max = st.target;
         case 'final'
+            % The deliverable of this march is literally named "full
+            % constrained", so it above all must not assert a limit it misses.
+            chk = ch3_assert_limits(z, p, FINAL, LOG);
             R = ch3_report(z, p, struct('stability', true, 'simulate', 5));
             save(FINAL, 'z', 'p', 'R');
             [X, ~, alpha] = ch3_col_unpack(z, p);
@@ -94,7 +115,7 @@ for k = k0:numel(stages)
             ch3_logln(LOG, sprintf('FINAL rho=%.4f  speed=%.4f m/s  file=%s', ...
                                R.rho, R.speed, FINAL));
             k_done = k; %#ok<NASGU>
-            save(STATE, 'k_done', 'z', 'p', 'hist');
+            save(STATE, 'k_done', 'z', 'p', 'hist', 'chk');
             ch3_logln(LOG, 'MARKER_ALLDONE');
             return;
     end
@@ -126,29 +147,45 @@ for k = k0:numel(stages)
     end
 
     E = ch3_col_eval(z_new, p);
+    chk = ch3_col_check_limits(z_new, p);
     peak_u = max(max(abs(E.u(:))), max(abs(E.um(:))));
     ch3_logln(LOG, sprintf(['    N=%d  J=%.2f  exitflag=%d  max|ceq|=%.2e  max c=%.2e\n' ...
                         '    peak|u|=%.3f Nm  ||impulse||=%.3f Ns  speed=%.4f m/s\n' ...
-                        '    verify %.3e (ok=%d)   %.0f s'], ...
+                        '    verify %.3e (ok=%d)  limits ok=%d   %.0f s'], ...
                        size(E.X,2), out.fval, out.exitflag, out.max_ceq, out.max_c, ...
-                       peak_u, norm(E.impulse), E.L_step/E.T, V.max_dev, V.ok, toc(t0)));
+                       peak_u, norm(E.impulse), E.L_step/E.T, V.max_dev, V.ok, ...
+                       chk.ok, toc(t0)));
 
     hist{end+1} = struct('k', k, 'kind', st.kind, 'target', st.target, ...
                          'z', z_new, 'N', size(E.X,2), 'peak_u', peak_u, ...
                          'impulse_norm', norm(E.impulse), 'speed', E.L_step/E.T, ...
-                         'verify_dev', V.max_dev, 'verify_ok', V.ok); %#ok<AGROW>
+                         'verify_dev', V.max_dev, 'verify_ok', V.ok, ...
+                         'limits_ok', chk.ok, 'limits_max_c', chk.max_c); %#ok<AGROW>
 
     if ~V.ok
         ch3_logln(LOG, sprintf('STOP at stage %d: did not verify (%.3e)', k, V.max_dev));
         ch3_logln(LOG, 'MARKER_STOPPED');
         k_done = k - 1; %#ok<NASGU>
-        save(STATE, 'k_done', 'z', 'p', 'hist');
+        save(STATE, 'k_done', 'z', 'p', 'hist', 'chk');
+        return;
+    end
+
+    % A STAGE THAT LEAVES ITS OWN ENABLED LIMITS VIOLATED HAS NOT SUCCEEDED,
+    % even with exitflag > 0 and a clean verify -- fmincon can stop on
+    % StepTolerance while still infeasible. Stop here rather than warm-start
+    % the next rung from a point outside the feasible set.
+    if ~chk.ok
+        ch3_logln(LOG, sprintf('    %s', chk.report));
+        ch3_logln(LOG, sprintf('STOP at stage %d: violates its own enabled limits', k));
+        ch3_logln(LOG, 'MARKER_STOPPED');
+        k_done = k - 1; %#ok<NASGU>
+        save(STATE, 'k_done', 'z', 'p', 'hist', 'chk');
         return;
     end
 
     z = z_new;
     k_done = k; %#ok<NASGU>
-    save(STATE, 'k_done', 'z', 'p', 'hist');
+    save(STATE, 'k_done', 'z', 'p', 'hist', 'chk');
 end
 
 end

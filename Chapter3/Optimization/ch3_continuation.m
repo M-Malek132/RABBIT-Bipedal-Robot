@@ -1,8 +1,9 @@
-function [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0, logfile)
+function [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0, logfile, opts_override)
 %CH3_CONTINUATION  March the walking speed, warm-starting each solve.
 %
 %   [z, hist] = ch3_continuation(p, v_targets)
 %   [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0, logfile)
+%   [z, hist] = ch3_continuation(..., logfile, opts_override)
 %
 % Solves the gait at each speed in v_targets in turn, seeding every solve from
 % the previous converged result.
@@ -30,6 +31,19 @@ function [z, hist] = ch3_continuation(p, v_targets, iters_per_step, z0, logfile)
 %   logfile        : optional path; progress is appended and flushed after
 %                    every step (ch3_logln), so a long march run under -batch
 %                    can be watched instead of staying silent until it exits
+%   opts_override  : optional optimoptions overrides passed straight to
+%                    ch3_col_solve. The reason this is exposed rather than left
+%                    to the caller's p: a speed step that OVERSHOOTS cannot be
+%                    detected from out.exitflag -- fmincon reports the same 0
+%                    for "ran out of iterations while converging" and for "has
+%                    been climbing away from the solution for 300 iterations".
+%                    Measured on the lean+tall gait, a 0.05 m/s step drove J
+%                    from 2.2e3 to 2.8e6 over 400 iterations (~3 h) and only
+%                    then reported a miss. An OutputFcn that stops on a cost
+%                    blow-up turns that into minutes, which is what makes a
+%                    bisecting march affordable. Note this REPLACES the
+%                    checkpoint OutputFcn ch3_col_solve installs from
+%                    p.checkpoint_file.
 %
 % Outputs
 %   z    : decision vector at the final speed reached
@@ -47,6 +61,7 @@ p = ch3_upgrade_params(p);
 if nargin < 3 || isempty(iters_per_step), iters_per_step = p.max_iter; end
 if nargin < 4 || isempty(z0), z0 = ch3_col_seed(p); end
 if nargin < 5, logfile = ''; end
+if nargin < 6, opts_override = []; end
 
 hist = struct('v_des', {}, 'z', {}, 'fval', {}, 'exitflag', {}, ...
               'max_ceq', {}, 'verify_dev', {}, 'verify_ok', {}, 'speed', {});
@@ -66,7 +81,7 @@ for k = 1:numel(v_targets)
     ch3_logln(logfile, sprintf('===== continuation step %d/%d : v_des = %.4f m/s =====', ...
                                k, numel(v_targets), pk.v_des));
 
-    [z_new, out] = ch3_col_solve(pk, z);
+    [z_new, out] = ch3_col_solve(pk, z, opts_override);
 
     E = ch3_col_eval(z_new, pk);
     V = ch3_col_verify(z_new, pk, false);
