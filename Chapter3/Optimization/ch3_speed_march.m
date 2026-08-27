@@ -98,7 +98,7 @@ if ~exist(resd, 'dir'), mkdir(resd); end
 
 STATE = fullfile(resd, 'ch3_speed_march_state.mat');
 LOG   = fullfile(resd, 'ch3_speed_march.log');
-SEED  = fullfile(resd, 'ch3_gait_lean_partial.mat');
+SEED  = fullfile(resd, 'ch3_gait_lean_tall_constrained.mat');
 FINAL = fullfile(resd, 'ch3_speed_family.mat');
 
 % --- start or resume ------------------------------------------------------
@@ -150,10 +150,10 @@ else
     p.limits.hip_h     = 0.9000;
     p.limits.hip_h_tol = 0.0550;      % band [0.8450 0.9550]
     k0 = 1;  hist = {};  dead = '';  z_split = [];
-    stages = ladder();              % the whole chain, known up front
 
     E0 = ch3_col_eval(z, p);
     V0 = ch3_col_verify(z, p, false);
+    stages = ladder(E0.L_step / E0.T);   % ladder is anchored to the seed speed
     lam0 = [E0.lam, E0.lamm];
     ch3_logln(LOG, sprintf(['=== SPEED march: %d iters/speed rung, %d/posture rung, ' ...
                             'all four limits ON ==='], iters, iters_posture));
@@ -170,8 +170,8 @@ else
                            norm(E0.impulse), p.limits.impulse_max));
     ch3_logln(LOG, sprintf(['    hip ceiling raised 0.9250 -> 0.9550 (it was a 5th ' ...
                             'active constraint, pinning the gait)']));
-    ch3_logln(LOG, sprintf(['    plan: speed DOWN to 0.35 (slack), lean to +0.080 there, ' ...
-                            'then speed UP to 1.20 until it breaks']));
+    ch3_logln(LOG, sprintf(['    plan: lean is DONE (qt floor +0.080); march speed UP ' ...
+                            'from %.4f to 1.20 m/s until it breaks'], E0.L_step/E0.T));
 end
 
 % --- the campaign ---------------------------------------------------------
@@ -231,10 +231,17 @@ while k <= numel(stages)
             [z_new, out] = ch3_col_solve(p, z);
             V = out.verify;
 
-            % ONE RETRY on a bigger budget. At N = 61 the mesh is not the
-            % suspect -- a miss is exhausted iterations, the same reasoning
-            % ch3_realizability_march uses. Restart from the PRE-rung gait.
-            if ~V.ok
+            % ONE RETRY on a bigger budget, on EITHER failure mode. At N = 61
+            % the mesh is not the suspect -- a miss is exhausted iterations,
+            % the same reasoning ch3_realizability_march uses. Restart from the
+            % PRE-rung gait.
+            %
+            % "Verified but did not move" is its own failure and needs the
+            % retry just as much: fmincon can return exitflag -2 after two
+            % iterations having changed nothing, and the unchanged gait then
+            % verifies perfectly. Gating the retry on verification alone let
+            % that case through untried.
+            if ~V.ok || ~target_met(st, ch3_col_eval(z_new, p), p)
                 ch3_logln(LOG, sprintf(['    rung missed (verify %.3e); retrying ' ...
                                         'with %d iterations'], V.max_dev, 2*iters));
                 p2 = ch3_col_budget(p, 2*iters, z);
@@ -244,6 +251,24 @@ while k <= numel(stages)
             end
             ok  = V.ok;
             dev = V.max_dev;
+    end
+
+    % DID THE RUNG ACTUALLY DO ANYTHING?  Verification asks whether the nodes
+    % lie on a real trajectory. It does NOT ask whether this rung reached the
+    % target it was set. When fmincon bails immediately -- exitflag -2, z
+    % returned essentially unchanged -- the UNCHANGED gait still verifies,
+    % because it is the previous rung's already-verified result. The rung then
+    % records as a success having achieved nothing.
+    %
+    % That is not hypothetical: five up-leg rungs asking for 0.65-0.85 m/s all
+    % "succeeded" in 15 seconds each while sitting at 1.0616 m/s, and were
+    % written into the family labelled with speeds they never reached. The
+    % family is the deliverable, so a mislabelled member is worse than a
+    % missing one.
+    Etmp = ch3_col_eval(z_new, p);
+    if ok && ~target_met(st, Etmp, p)
+        ok = false;
+        ch3_logln(LOG, '    rung did NOT reach its target (solver made no useful progress)');
     end
 
     % --- measure whatever the rung produced --------------------------------
@@ -331,6 +356,25 @@ ch3_logln(LOG, marker(stopped));
 end
 
 % ---------------------------------------------------------------- helpers
+function tf = target_met(st, E, p)
+%TARGET_MET  Did this rung achieve what it was set, not merely stay valid?
+tol = 2e-3;
+switch st.kind
+    case 'speed'
+        tf = abs(E.L_step/E.T - st.target) <= tol;
+    case 'posture'
+        tf = true;
+        if isfield(st.opt,'qt_range') && ~isempty(st.opt.qt_range)
+            tf = tf && min(E.X(3,:)) >= st.opt.qt_range(1) - tol;
+        end
+        if isfield(st.opt,'hip_h') && ~isempty(st.opt.hip_h)
+            tf = tf && min(-E.X(2,:)) >= (p.limits.hip_h - p.limits.hip_h_tol) - tol;
+        end
+    otherwise
+        tf = true;
+end
+end
+
 function m = marker(stopped)
 % The wrapper greps for these: ALLDONE ends the run, STOPPED ends it too but
 % says the campaign halted itself rather than finishing the ladder.
@@ -349,7 +393,7 @@ r = struct('v', E.L_step/E.T, 'v_target', target, 'branch', branch, ...
            'peak_u', peak_u, 'impulse', norm(E.impulse), 'verify_dev', dev);
 end
 
-function stages = ladder()
+function stages = ladder(v0)
 % ONE CONTINUOUS CHAIN, ordered so each leg is solved where it is cheapest.
 %
 % The first attempt marched the lean at ~1.0 m/s and hit a wall: rung 1
@@ -378,31 +422,24 @@ function stages = ladder()
 stages = struct('kind', {}, 'desc', {}, 'opt', {}, 'target', {}, ...
                 'branch', {}, 'restart', {});
 
-% leg 1: speed down, 0.10 steps from the banked 1.0054 m/s
-for v = 1.00:-0.05:0.35
-    stages(end+1) = mks(v, 'down'); %#ok<AGROW>
-end
-
-% leg 2: the lean, at 0.35 m/s where the limits have margin
-for lo = [-0.040 -0.020 0.000 0.020 0.040 0.060 0.080]
-    hi = max(0.250, lo + 0.170);
-    stages(end+1) = mkp(sprintf('lean: qt box [%+.3f %+.3f]', lo, hi), ...
-                        struct('qt_range', [lo hi])); %#ok<AGROW>
-end
-% Lock the height in by raising the FLOOR, leaving the ceiling free at 0.955
-% so the gait is never pinned against it again.
-stages(end+1) = mkp('height: hip band [0.885 0.955]', ...
-                    struct('hip_h', 0.9200, 'hip_h_tol', 0.0350, 'height', true));
-
-% leg 3: speed back up at the full lean, until it stops verifying
-for v = 0.40:0.05:1.20
+% THE LEAN IS DONE. Results/ch3_gait_lean_tall_constrained.mat holds it:
+% qt [+0.0800 +0.1561] rad, hip [0.9282 0.9550] m, v = 1.0616 m/s, with
+% Fz 50.0, |Fx|/Fz 0.4000, |u| 85.6 and ||I|| 15.00 all inside their caps and
+% NEC4/NEC5 at -1.19/-0.49. Only the speed ceiling is left to find.
+%
+% THE GRID IS RELATIVE TO THE SEED, NOT ABSOLUTE. The previous ladder hardcoded
+% an up leg starting at 0.65 m/s on the assumption the lean would finish near
+% 0.600. It finished at 1.0616 -- speed floats during posture rungs, and the
+% forward lean made the gait want to go faster -- so the first up rung demanded
+% a 0.41 m/s DECREASE and fmincon gave up in 15 seconds. Anchoring the ladder
+% to the seed's measured speed removes that whole class of failure.
+% 0.02 STEPS, NOT 0.05. The first attempt jumped 1.0616 -> 1.100 and fmincon
+% called the QP infeasible in 45 seconds. A 0.038 m/s step failing that fast is
+% suggestive of a wall but not proof of one, and near a ceiling the honest
+% thing is to walk up to it in small steps and let it stop the march itself.
+for v = (ceil(v0/0.02)*0.02) : 0.02 : 1.20
     stages(end+1) = mks(v, 'up'); %#ok<AGROW>
 end
-end
-
-function s = mkp(desc, opt)
-s = struct('kind', 'posture', 'desc', desc, 'opt', opt, 'target', [], ...
-           'branch', '', 'restart', false);
 end
 
 function s = mks(target, branch)
