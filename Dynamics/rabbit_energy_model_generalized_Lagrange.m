@@ -151,135 +151,102 @@ G = matlabFunction(G,'File','G','var',{theta});
 %% +++++++++++++++++++++++++++++++++++++++++ %%
 function [m, com, I] = Mass_Properties()
 % +++++++++ %% +++++++++ %% +++++++++ %
-
-Mt = 10; %Kg
-
+Mt = 47; %Kg
 % Center of mass: ( meters )
 	X = 0;
 	Y = -0.75/2;
 	Z = 0;
 comt = [X Y Z]';
-
 % Moments of inertia: (Kgrams *  square meters )
-% Taken at the  COM
-	Ixx = 0.2	;Ixy = 0	;Ixz = 0;
-	Iyx = 0	;Iyy = 0.05;	Iyz = 0;
-	Izx = 0	;Izy = 0	;Izz = 0.2;
-    
+% Taken at the  COM  (scaled 4.7x from base, proportional to Mt)
+	Ixx = 0.94	;Ixy = 0	;Ixz = 0;
+	Iyx = 0	;Iyy = 0.235;	Iyz = 0;
+	Izx = 0	;Izy = 0	;Izz = 0.94;
     Ixx = Ixx + Mt*(Y^2+Z^2);
     Iyy = Iyy + Mt*(X^2+Z^2);
     Izz = Izz + Mt*(Y^2+X^2);
-
     I_t = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             Mt*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              Mt*Y; ...
 	        Izx                 Izy         (Ixx+Iyy-Izz)/2         Mt*Z; ...
             Mt*X                Mt*Y                Mt*Z             Mt];
-
-    % +++++++++ %% +++++++++ %% +++++++++ %
-
-
-M1 = 5; %Kg
-
+% +++++++++ %% +++++++++ %% +++++++++ %
+M1 = 10; %Kg
 % Center of mass: ( meters )
 	X = 0;
 	Y = 0.5/2;
 	Z = 0;
 com1 = [X Y Z]';
-
 % Moments of inertia: (Kgrams *  square meters )
-% Taken at the COM
-	Ixx = 0.1	;Ixy = 0	;Ixz = 0;
-	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
-	Izx = 0	;Izy = 0	;Izz = 0.1;
-    
+% Taken at the COM  (scaled 2.0x from base, proportional to M1)
+	Ixx = 0.2	;Ixy = 0	;Ixz = 0;
+	Iyx = 0	;Iyy = 0.04;	Iyz = 0;
+	Izx = 0	;Izy = 0	;Izz = 0.2;
     Ixx = Ixx + M1*(Y^2+Z^2);
     Iyy = Iyy + M1*(X^2+Z^2);
     Izz = Izz + M1*(Y^2+X^2);
-
     I_1 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M1*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M1*Y; ...
 	        Izx                 Izy         (Ixx+Iyy-Izz)/2         M1*Z; ...
             M1*X                M1*Y                M1*Z             M1];
-
 % +++++++++ %% +++++++++ %% +++++++++ %
-
-M2 = 5; %Kg
-
+M2 = 3.5; %Kg
 % Center of mass: (meters )
 	X = 0;
 	Y = 0.5/2;
 	Z = 0;
 com2 = [X Y Z]';
-
 % Moments of inertia: (Kgrams *  square meters )
-% Taken at the COM
-	Ixx = 0.1	;Ixy = 0	;Ixz = 0;
-	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
-	Izx = 0	;Izy = 0	;Izz = 0.1;
-    
+% Taken at the COM  (scaled 0.7x from base, proportional to M2)
+	Ixx = 0.07	;Ixy = 0	;Ixz = 0;
+	Iyx = 0	;Iyy = 0.014;	Iyz = 0;
+	Izx = 0	;Izy = 0	;Izz = 0.07;
     Ixx = Ixx + M2*(Y^2+Z^2);
     Iyy = Iyy + M2*(X^2+Z^2);
     Izz = Izz + M2*(Y^2+X^2);
-
     I_2 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M2*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M2*Y; ...
 	        Izx                 Izy         (Ixx+Iyy-Izz)/2         M2*Z; ...
             M2*X                M2*Y                M2*Z             M2];
-
-    % +++++++++ %% +++++++++ %% +++++++++ %
-
-
-M3 = 5; %Kg
-
+% +++++++++ %% +++++++++ %% +++++++++ %
+M3 = 10; %Kg
 % Center of mass: ( meters )
 	X = 0;
 	Y = 0.5/2;
 	Z = 0;
 com3 = [X Y Z]';
-
 % Moments of inertia: (Kgrams *  square meters )
-% Taken at the COM
-	Ixx = 0.1	;Ixy = 0	;Ixz = 0;
-	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
-	Izx = 0	;Izy = 0	;Izz = 0.1;
-    
+% Taken at the COM  (scaled 2.0x from base, proportional to M3)
+	Ixx = 0.2	;Ixy = 0	;Ixz = 0;
+	Iyx = 0	;Iyy = 0.04;	Iyz = 0;
+	Izx = 0	;Izy = 0	;Izz = 0.2;
     Ixx = Ixx + M3*(Y^2+Z^2);
     Iyy = Iyy + M3*(X^2+Z^2);
     Izz = Izz + M3*(Y^2+X^2);
-
     I_3 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M3*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M3*Y; ...
 	        Izx                 Izy         (Ixx+Iyy-Izz)/2         M3*Z; ...
             M3*X                M3*Y                M3*Z             M3];
-
 % +++++++++ %% +++++++++ %% +++++++++ %
-
-M4 = 5; %Kg
-
+M4 = 3.5; %Kg
 % Center of mass: (meters )
 	X = 0;
 	Y = 0.5/2;
 	Z = 0;
 com4 = [X Y Z]';
-
 % Moments of inertia: (Kgrams *  square meters )
-% Taken at the COM
-	Ixx = 0.1	;Ixy = 0	;Ixz = 0;
-	Iyx = 0	;Iyy = 0.02;	Iyz = 0;
-	Izx = 0	;Izy = 0	;Izz = 0.1;
-    
+% Taken at the COM  (scaled 0.7x from base, proportional to M4)
+	Ixx = 0.07	;Ixy = 0	;Ixz = 0;
+	Iyx = 0	;Iyy = 0.014;	Iyz = 0;
+	Izx = 0	;Izy = 0	;Izz = 0.07;
     Ixx = Ixx + M4*(Y^2+Z^2);
     Iyy = Iyy + M4*(X^2+Z^2);
     Izz = Izz + M4*(Y^2+X^2);
-
     I_4 = [	(-Ixx+Iyy+Izz)/2    Ixy                 Ixz             M4*X; ...
 	        Iyx             (Ixx-Iyy+Izz)/2        Iyz              M4*Y; ...
 	        Izx                 Izy         (Ixx+Iyy-Izz)/2         M4*Z; ...
             M4*X                M4*Y                M4*Z             M4];
-
 m = [Mt M1 M2 M3 M4]';
 com = [comt com1 com2 com3 com4];
 com = [com; ones(1,5)];
 I(:,:,1) = I_t;     I(:,:,2) = I_1;     I(:,:,3) = I_2;     I(:,:,4) = I_3;     I(:,:,5) = I_4;
-
 end
