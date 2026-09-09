@@ -62,7 +62,15 @@ q  = x_minus(1:nq);
 dq = x_minus(nq+1:2*nq);
 
 % --- 1. plastic impact on the perturbed inertia --------------------------
-M_mat = s * M(q);
+% M_mat comes from the SAME per-case, independently rederived mass matrix as
+% ch4_control_affine (ch4_case_dynamics) rather than a local s*M(q) -- see
+% that function's header for why the scaling is rederived rather than applied
+% algebraically.
+if s == 1
+    M_mat = M(q);
+else
+    M_mat = ch4_case_dynamics(s, q);
+end
 if mL ~= 0
     M_mat(1,1) = M_mat(1,1) + mL;
     M_mat(2,2) = M_mat(2,2) + mL;

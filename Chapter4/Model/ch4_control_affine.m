@@ -16,18 +16,19 @@ function [f, g, aux] = ch4_control_affine(x, p, unc)
 % model is not a re-derivation of Chapter 3 that could drift out of sync with
 % it -- it IS Chapter 3, called directly.
 %
-% WHY THESE TWO PERTURBATIONS AND NO OTHERS.  Both are exactly representable in
-% terms of the existing symbolic M, V, G, so the true model needs no new
-% generated code and introduces no new approximation.
+% WHAT THE TWO PERTURBATIONS DO.
 %
 %   mass_scale s.  Scaling every link mass and inertia by s scales the kinetic
-%   energy by s and the potential energy by s, hence
-%
-%       M -> s M,     V -> s V,     G -> s G,     B unchanged.
-%
-%   V here is the pure Coriolis vector -- verified quadratic in dq, with no
-%   friction term hiding in it -- so it is linear in the mass parameters just
-%   as M and G are. B is unchanged because actuators are not links.
+%   energy by s and the potential energy by s, so ALGEBRAICALLY M -> sM,
+%   V -> sV, G -> sG (B unchanged, since actuators are not links). Rather than
+%   apply that scaling to the nominal M/V/G in place, each scale the chapter
+%   uses is rederived from scratch: rabbit_generate_case_dynamics reruns the
+%   same Lagrangian trace construction that produced the nominal M.m/V.m/G.m,
+%   with Mass_Properties_scaled(s) from the start, and writes a dedicated
+%   M_<tag>/V_<tag>/G_<tag> per case. ch4_case_dynamics dispatches to them.
+%   This does not take "linear in mass, so scaling commutes" on faith --
+%   ch4_test_model compares the independently-rederived case against s*M(q)
+%   etc. numerically.
 %
 %   Note what this does NOT do: it does not scale the torque limits. That is
 %   the point of Case IV (s = 3), where a 3x robot must be driven by the same
@@ -80,9 +81,13 @@ q  = x(1:nq);
 dq = x(nq+1:2*nq);
 
 % --- perturbed dynamics terms --------------------------------------------
-M_mat = s * M(q);
-V_vec = s * V([q; dq]);
-G_vec = s * G(q);
+if s == 1
+    M_mat = M(q);
+    V_vec = V([q; dq]);
+    G_vec = G(q);
+else
+    [M_mat, V_vec, G_vec] = ch4_case_dynamics(s, q, dq);
+end
 B_mat = input_matrix();
 
 if mL ~= 0
