@@ -15,16 +15,26 @@ function out = ch4_main(varargin)
 %   (4) figures                             ch4_plot_uncertainty
 %   (5) animation                           ch4_animate
 %
+% STEP 0 REFUSES A GAIT THAT IS NOT AN ORBIT OF THE CURRENT DYNAMICS. Every
+% number below measures a controller AGAINST the gait, so a gait that is no
+% longer periodic on the model on the path turns every table and figure into a
+% measurement of the reference instead. ch4_load_gait re-evaluates it
+% (meta.orbit); this stops rather than producing a full, plausible-looking
+% result set on it -- which is what happened for ten days after the
+% 2026-09-02 dynamics regeneration.
+%
 % STEP 1 IS NOT OPTIONAL AND IT COMES FIRST FOR A REASON. The robust
 % controller's guarantee is conditional on Delta1max, Delta2max actually
 % bounding the uncertainty; a robust controller run outside its own bound is
 % not a robust controller, it is an aggressive one. So the bounds are measured
-% against the gait before anything is run with them, and the measurement is
-% reported next to the numbers in p.rclf so a mismatch is visible rather than
-% buried.
+% against the gait before anything is run with them, and -- unless the caller
+% set rclf.delta1_max / rclf.delta2_max explicitly -- the measured bounds over
+% the sweep's Cases I-III ARE the bounds used. Fixed defaults are fitted to
+% one particular gait and need not cover another; a sweep that only printed
+% "covers: NO" and ran anyway would certify nothing.
 %
 % Options (name/value)
-%   'gait'      path to a Chapter-3 result .mat (default the upright gait)
+%   'gait'      path to a Chapter-3 result .mat (default ch4_load_gait's)
 %   'presets'   cell of {'robust','l1'} (default both)
 %   'n_steps'   steps per run (default 3, matching the chapter's figures)
 %   'plot'      draw and save figures (default true)
@@ -65,9 +75,22 @@ stamp = datestr(now, 'yyyy-mm-dd_HH-MM-SS'); %#ok<TNOW1,DATST>
 
 fprintf('\n================ CHAPTER 4 ================\n');
 fprintf(' gait   %s\n', meta.file);
-fprintf(' T = %.4f s, L = %.4f m, v = %.4f m/s\n', meta.T, meta.L_step, meta.v_avg);
+fprintf(' T = %.4f s, L = %.4f m, v = %.4f m/s, peak |u| %.1f Nm\n', ...
+        meta.T, meta.L_step, meta.v_avg, p.gait_u_peak);
+fprintf(' orbit on current dynamics: defect %.1e, periodicity %.1e, ||eta+|| %.1e (tol %.0e)\n', ...
+        meta.orbit.defect, meta.orbit.periodicity, meta.orbit.eta_post, meta.orbit.tol);
 fprintf(' control at %.0f Hz, eps %.2f, CLF via %s\n', ...
         1/p.control_dt, p.eps, p.clf_construction);
+
+%% --- (0) the gait must be an orbit of the robot on the path --------------
+if ~meta.orbit.ok
+    error('ch4_main:notAnOrbit', ...
+          ['"%s" is not a periodic orbit of the current dynamics (see the ' ...
+           'residuals above), so every Chapter-4 number would measure the ' ...
+           'reference rather than the controllers. Re-solve the gait in ' ...
+           'Chapter 3, or pass ''gait'' pointing at one that verifies.'], ...
+          meta.file);
+end
 
 %% --- (1) measure the uncertainty before designing against it ------------
 % Sample along an actual rollout of the baseline rather than the collocation
@@ -83,19 +106,43 @@ if sim_b.n_ok == 0
            'no trajectory to measure uncertainty along.'], sim_b.reason);
 end
 
+SAFETY = 1.2;
 B = ch4_delta_bounds(sim_b.x(:, 1:4:end), alpha, p, [1 0.7 1.5 3], ...
-                     struct('n_jitter', 0, 'safety', 1.2));
+                     struct('n_jitter', 0, 'safety', SAFETY));
 
-fprintf(' p.rclf in use: delta1_max %.1f, delta2_max %.3f (%s)\n', ...
-        p.rclf.delta1_max, p.rclf.delta2_max, p.rclf.delta2_model);
-covered_1 = p.rclf.delta1_max >= max([B.per_scale(2:3).n1]);
-covered_2 = p.rclf.delta2_max >= max([B.per_scale(2:3).n2]);
+% Adopt what was measured over the cases the sweeps actually run. Case IV
+% (scale 3) is measured for the record only: folding it in would size the
+% bounds -- and so the aggressiveness of the robust law -- for a perturbation
+% Cases I-III never face. A bound the caller set explicitly is kept as given.
+in_sweep = ismember([B.per_scale.mass_scale], [1 0.7 1.5]);
+need_1   = max([B.per_scale(in_sweep).n1]);
+need_2   = max([B.per_scale(in_sweep).n2]);
+
+set_by_caller = lower(pv(1:2:end));
+src = {'caller', 'caller'};
+if ~any(ismember(set_by_caller, {'rclf', 'rclf.delta1_max'}))
+    p.rclf.delta1_max = SAFETY * need_1;
+    src{1} = sprintf('measured x %.1f', SAFETY);
+end
+if ~any(ismember(set_by_caller, {'rclf', 'rclf.delta2_max'}))
+    p.rclf.delta2_max = SAFETY * need_2;
+    src{2} = sprintf('measured x %.1f', SAFETY);
+end
+
+fprintf(' p.rclf in use: delta1_max %.1f (%s), delta2_max %.3f (%s), %s model\n', ...
+        p.rclf.delta1_max, src{1}, p.rclf.delta2_max, src{2}, p.rclf.delta2_model);
+covered_1 = p.rclf.delta1_max >= need_1;
+covered_2 = p.rclf.delta2_max >= need_2;
 fprintf(' covers Cases I-III on the orbit: Delta1 %s, Delta2 %s\n', ...
         yn(covered_1), yn(covered_2));
 if ~(covered_1 && covered_2)
     fprintf([' NOTE: a bound below the measured value means the robust\n' ...
              ' guarantee does not cover these cases. ch4_report flags each\n' ...
              ' run that leaves the set.\n']);
+end
+if p.rclf.delta2_max >= 1
+    fprintf([' NOTE: delta2_max >= 1 -- the robust CLF-QP is not pointwise\n' ...
+             ' feasible and will report every sample infeasible.\n']);
 end
 
 out = struct('p', p, 'x0', x0, 'alpha', alpha, 'meta', meta, 'bounds', B, ...
@@ -149,6 +196,23 @@ if o.animate
     for s = o.anim_scales
         pa = p;
         pa.uncertainty.mass_scale = s;
+
+        % The boxes the sweeps used at this scale, so each panel is the
+        % controller its table row scored rather than one at a default box.
+        k = [];
+        if ~isempty(out.robust), k = find([out.robust.mass_scale] == s, 1); end
+        if ~isempty(k)
+            pa.limits.u_max = out.robust(k).u_box;
+        elseif any(ismember(o.anim_controllers, {'clfqp_con', 'rclfqp_con'}))
+            fprintf([' ch4_animate: no robust sweep at scale %.2f, so the ' ...
+                     'constrained robust laws animate at limits.u_max %.0f Nm\n'], ...
+                    s, pa.limits.u_max);
+        end
+        if ~isempty(out.l1)
+            k = find([out.l1.mass_scale] == s, 1);
+            if ~isempty(k), pa.l1.u_max = out.l1(k).u_box; end
+        end
+
         gif = fullfile(results_dir, ...
                        sprintf('ch4_walk_%s_scale%03.0f.gif', stamp, s*100));
         try

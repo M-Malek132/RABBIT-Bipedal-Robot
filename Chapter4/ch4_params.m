@@ -38,18 +38,20 @@ p = ch3_params();
 % eps sets the required convergence rate (c3/eps): it has to be fast enough
 % that the outputs re-converge between impacts, since each footstrike expands
 % eta and the controller gets exactly one step to beat that expansion. At
-% eps = 0.5 the Chapter-3 min-norm CLF-QP does NOT manage it on this gait even
-% with a PERFECT model -- measured step times 0.370, 0.383, 0.445 s against a
-% nominal 0.368, i.e. drifting away rather than settling.
+% eps = 0.5 the Chapter-3 min-norm CLF-QP does NOT manage it even with a
+% PERFECT model. Measured on posture_195 at 1 kHz over four steps, the
+% post-impact error ||eta+|| reads 0.34, 0.32, 0.19, 0.39 at eps = 0.5 --
+% never settling -- against 0.24, 0.09, 0.19, 0.01 at eps = 0.35. (Some of
+% that per-impact kick is the 1 kHz sample-and-hold itself, not the model:
+% ||eta+|| after the first step is 0.24 / 0.12 / 0.05 at a 1 / 0.5 / 0.2 ms
+% period, with a perfect model and continuous control giving 1.7e-4.)
 %
 % That matters here more than it did in Chapter 3, because the L1 controller's
 % REFERENCE MODEL IS THAT CONTROLLER (Section 4.2.2). L1 promises to make the
 % perturbed system behave like the reference model; if the reference model is
 % itself impact-marginal, L1 faithfully reproduces marginal behaviour and the
 % Section 4.2.4 comparison measures the reference model rather than the
-% adaptation. At eps = 0.35 the same controller holds 0.370, 0.380, 0.418 and
-% the robust controller holds the nominal 0.368 across every perturbation --
-% which is the regime the chapter's figures depict.
+% adaptation.
 %
 % Raise it back to 0.5 to reproduce the Chapter-3 defaults exactly; expect the
 % baselines to fail earlier if you do.
@@ -70,15 +72,16 @@ p.controller = 'clfqp';
 
 %% ------------------------------------------------- the true-vs-nominal gap
 % How the TRUE plant differs from the NOMINAL model the controller holds.
-% Both perturbations are exactly representable, so no dynamics are regenerated
-% and the nominal model is untouched -- see ch4_control_affine.
+% The nominal model is untouched either way -- see ch4_control_affine.
 %
 %   mass_scale  Multiply every link mass and inertia by this factor. Sections
 %               4.1.4 and 4.2.4 both sweep it: 1 (no uncertainty), 1.5, 0.7,
-%               and 3 for the extreme Case IV. Because M, the Coriolis vector
-%               and gravity are all LINEAR in the mass parameters, this scales
-%               all three by the same factor and nothing else -- which is why
-%               the perturbation can be applied without re-deriving anything.
+%               and 3 for the extreme Case IV. M, the Coriolis vector and
+%               gravity are all LINEAR in the mass parameters, so this scales
+%               all three by the same factor and nothing else. Each scale is
+%               nonetheless re-derived from scratch rather than applied as sM
+%               (ch4_case_dynamics; registered: 0.5, 0.7, 1.5, 3), and
+%               ch4_test_model's KKT-split check is what confirms the two agree.
 %
 %   load_mass   A point mass rigidly attached at the torso base [kg], for the
 %               "carrying unknown mass on the torso" study in Section 4.2.4
@@ -99,10 +102,15 @@ p.load_random_range = [];        % e.g. [0 30] for the Fig. 4.11a experiment
 %
 % HOW TO CHOOSE THEM.  Do not guess. ch4_uncertainty measures the actual
 % Delta1, Delta2 along a gait for a given mass_scale, and ch4_delta_bounds
-% turns that measurement into these two numbers. The defaults below are the
-% measured values along the reference gait for Cases I-III (mass scale 1, 1.5,
-% 0.7) with a 1.2 safety factor; run ch4_delta_bounds for any other operating
-% point.
+% turns that measurement into these two numbers. The defaults below are that
+% measurement for the default gait (posture_195), along a nominal CLF-QP
+% rollout, over Cases I-III (mass scale 1, 1.5, 0.7), with a 1.2 safety
+% factor: max ||Delta1|| 232.6 and ||Delta2|| 0.4286, both from Case III.
+% They matter only when p is used standalone -- ch4_main re-measures on
+% whatever gait it loads and adopts the result unless these are set
+% explicitly, since a bound fitted to one gait need not fit another (the
+% previous defaults, 250 and 0.45, were fitted to the old upright gait and
+% leave this one 7% and 5% of margin instead of the intended 20%).
 %
 % WHAT THE MEASUREMENT REVEALS, and it is worth knowing before tuning these.
 % For a uniform mass/inertia scale s, the constrained dynamics split exactly
@@ -119,13 +127,14 @@ p.load_random_range = [];        % e.g. [0 30] for the Fig. 4.11a experiment
 %   * Delta1 is proportional to the OUTPUT DRIFT Lftil^2 y, which grows away
 %     from the orbit. A single constant delta1_max valid over a neighborhood is
 %     therefore several times larger than the value valid on the orbit (measured
-%     here: 226 on the gait, ~914 with the state jittered by 0.05). Since the
+%     on posture_195: 232.6 along the rollout, 1140.6 with the sampled states
+%     jittered by sd 0.05 -- 4.9x). Since the
 %     commanded ||mu|| scales as delta1_max/(1 - delta2_max), that difference is
 %     the whole of the "unnecessarily aggressive" limitation Section 4.1.4
 %     closes on -- in a form you can put a number to.
 p.rclf = struct();
-p.rclf.delta1_max = 250;         % ||Delta1|| bound          [rad/s^2]
-p.rclf.delta2_max = 0.45;        % ||Delta2|| bound          [-]
+p.rclf.delta1_max = 279.1;       % ||Delta1|| bound          [rad/s^2]
+p.rclf.delta2_max = 0.5143;      % ||Delta2|| bound          [-]
 
 % HOW THE MAX IN (4.11) IS TAKEN OVER THE Delta2 BALL.
 %
@@ -146,6 +155,13 @@ p.rclf.delta2_max = 0.45;        % ||Delta2|| bound          [-]
 % 'scalar' is the default because it is what makes (4.12) a QP. Use 'matrix'
 % to check how much of the guarantee rests on that structural assumption.
 p.rclf.delta2_model = 'scalar';
+
+% CONTACT ROWS: p.limits.enable.friction / .grf stay ON, as ch3_params sets
+% them. In the constrained CLF-QPs they add the friction cone and the
+% normal-force floor of (4.13), written on the NOMINAL model (Remark 4.4). They
+% are not optional decoration: without the floor, the robust law's chattering
+% worst-case term pulls the true stance foot into the ground for 17-42% of the
+% samples in each case -- see ch4_run_params for the measurement.
 
 %% ------------------------------------------ L1 adaptive control (Sect. 4.2)
 p.l1 = struct();
@@ -185,9 +201,10 @@ p.l1.proj_eps  = 0.1;            % smoothing band of the projection, in (0,1]
 % reports that overshoot rather than hiding it.
 %
 % 65 Nm is below the peak torque of every gait in Results/ (195-465 Nm), so
-% ch4_load_gait raises it to the gait's own peak; see the note there for what
-% a starved box does to the adaptation. This value stands for a gait that
-% fits inside it.
+% ch4_load_gait raises it to 1.25x the gait's own peak (243.8 Nm on
+% posture_195); see the note there for what a starved box does to the
+% adaptation, and why the headroom. This value stands for a gait that fits
+% inside it.
 p.l1.u_max = 65;
 
 % Peak joint torque of the loaded gait, filled in by ch4_load_gait. Empty

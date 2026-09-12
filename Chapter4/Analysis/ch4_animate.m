@@ -29,7 +29,9 @@ function out = ch4_animate(x0, alpha, p, controllers, n_steps, gifpath)
 %
 % Inputs
 %   x0, alpha   : the gait (ch4_load_gait)
-%   p           : parameter struct; p.uncertainty is what all runs share
+%   p           : parameter struct; p.uncertainty is what all runs share, and
+%                 p.limits.u_max / p.l1.u_max are the boxes of the laws that
+%                 carry one (set them to the sweep's, as ch4_main does)
 %   controllers : cell of controller names. Default {'clfqp','rclfqp_con','l1'}
 %   n_steps     : steps to attempt (default 4)
 %   gifpath     : optional .gif to write
@@ -60,13 +62,10 @@ fprintf('ch4_animate: mass scale %.2f, load %.1f kg\n', ...
         p.uncertainty.mass_scale, p.uncertainty.load_mass);
 
 for ic = 1:nC
-    pc = p;
-    pc.controller = controllers{ic};
-    % Only the laws whose formulation carries a box are told about one, exactly
-    % as in ch4_compare_controllers -- otherwise the picture would not match
-    % the table.
-    pc.limits.enable.torque = any(strcmpi(controllers{ic}, ...
-                                          {'clfqp_con', 'rclfqp_con'}));
+    % Configured by the same function as the sweep's runs, so the picture
+    % races exactly the controllers the table scores. The boxes are whatever
+    % p carries: ch4_main copies in the ones the sweep used at this scale.
+    pc = ch4_run_params(p, controllers{ic}, p.uncertainty.mass_scale, []);
 
     sim = ch4_simulate(x0, alpha, pc, n_steps);
 
