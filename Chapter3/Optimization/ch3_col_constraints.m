@@ -36,7 +36,7 @@ function [c, ceq] = ch3_col_constraints(z, p)
 %   NEC1 -- average walking rate                                    (1)
 %       L_step / T = v_des
 %
-% INEQUALITIES (c), always length 17 regardless of what is enabled:
+% INEQUALITIES (c), always length 18 regardless of what is enabled:
 %
 %       row  constraint                                  gate           source
 %      ----  ------------------------------------------  -------------  ------
@@ -57,6 +57,7 @@ function [c, ceq] = ch3_col_constraints(z, p)
 %       15   stability of the fixed point                hzd            NEC5
 %       16   theta strictly monotonic                    phase_mono     HH6
 %       17   decoupling matrix invertible on Z           decoupling     HH2
+%       18   swing-foot height ceiling                   clearance_max  style
 %
 %   GATED CONSTRAINTS ARE HELD AT -1, NOT REMOVED.  A disabled inequality is
 %   trivially satisfied but still present, so c has a constant length and
@@ -157,7 +158,7 @@ end
 ceq = [ceq_start; ceq_dyn; ceq_end; ceq_per; ceq_rate];
 
 %% ============================= INEQUALITIES =============================
-c = -ones(17, 1);
+c = -ones(18, 1);
 
 % 1. swing-foot clearance at mid-step (NIC3): height >= clearance
 k_mid = max(2, min(N-1, round((N+1)/2)));
@@ -340,6 +341,28 @@ end
 %     collapses and another blows up.
 if p.limits.enable.decoupling
     c(17) = p.limits.dec_min - E.dec_min;
+end
+
+% 18. Swing-foot height CEILING.  Row 1 is a FLOOR and nothing else in the
+%     problem bounds how high the foot goes, so no term opposes lifting it.
+%     Measured over the stored gaits: the swing knee folds to 1.4-1.9 rad, the
+%     leg retracts to 60-76% of its 1.0 m length, and the toe peaks 21-35 cm up
+%     against the 10-15 cm a real biped uses.  That is not the optimizer going
+%     wrong -- the swing leg is only 5-17% of the torque-squared budget, so
+%     lifting it is nearly free and the objective barely sees the swing
+%     trajectory at all.  An unopposed direction needs a bound; changing the
+%     objective to notice it is the wrong repair, since the hardware limit this
+%     expresses is a constraint, not a preference.
+%
+%     Unlike row 1 this is a UNIVERSAL ("the foot is never higher than this"),
+%     so max() aggregates it EXACTLY -- the same conjunction that lets rows 2
+%     and 9 aggregate with min(). Row 1 cannot be written this way because it
+%     is an existential, which is why it samples a single node instead.
+%     Midpoints are included for the reason row 4 gives: a Hermite-Simpson
+%     midpoint is a real point of the trajectory and can overshoot both of the
+%     nodes bracketing it.
+if p.limits.enable.clearance_max
+    c(18) = max([E.sw_h, E.sw_hm]) - p.limits.clearance_max;
 end
 
 end

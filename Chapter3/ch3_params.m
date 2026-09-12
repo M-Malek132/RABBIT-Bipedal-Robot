@@ -54,6 +54,7 @@ p.limits.impulse_max = 15;      % ||impact impulse||_2 <= impulse_max [Ns]
 p.limits.mu_s        = 0.4;     % |Fx| <= mu_s * Fz     NIC2        [-]
 p.limits.Fz_min      = 50;      % Fz >= Fz_min          NIC1        [N]
 p.limits.clearance   = 0.05;    % swing-foot height at mid-step     [m]
+p.limits.clearance_max = 0.15;  % swing-foot height CEILING, whole step [m]
 
 %% Section 6.3.4 constraint set (NIC / NEC)
 p.limits.sw_clear_min   = 1e-3; % strict swing-foot clearance, interior  [m]
@@ -71,6 +72,7 @@ p.limits.enable = struct('torque',  true, ...
                          'friction',true, ...   % NIC2
                          'grf',     true, ...   % NIC1
                          'clearance', true, ...
+                         'clearance_max', true, ...
                          'height',  true, ...
                          'swing_clear', true, ...  % NIC3
                          'liftoff',     true, ...  % NEC2
@@ -92,6 +94,12 @@ p.N_nodes  = 41;                % Hermite-Simpson nodes per step
 p.T_min    = 0.20;              % step duration bounds [s]
 p.T_max    = 1.50;
 p.dq_max   = 20;                % box on joint velocities
+
+p.scale_problem = false;        % fmincon ScaleProblem. FALSE keeps the reported
+                                % Feasibility directly comparable to
+                                % ConstraintTolerance (see ch3_col_solve); set
+                                % TRUE when a march stalls at exitflag -2 on a
+                                % badly scaled rung.
 
 p.max_iter      = 300;
 p.max_fun_evals = 3e5;

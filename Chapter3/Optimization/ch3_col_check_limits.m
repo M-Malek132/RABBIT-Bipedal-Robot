@@ -22,7 +22,7 @@ function chk = ch3_col_check_limits(z, p, tol)
 % in whatever direction the missing row constrains.
 %
 % WHY THE GATES MATTER AND DISABLED ROWS DO NOT.  ch3_col_constraints holds a
-% disabled row at -1 rather than removing it, so c always has length 17 and the
+% disabled row at -1 rather than removing it, so c always has length 18 and the
 % row indices below are stable regardless of what is on.  A disabled row is
 % therefore trivially satisfied and cannot appear here: this function only ever
 % complains about a limit the params themselves claim to be enforcing, which is
@@ -79,7 +79,8 @@ names = { ...
     'existence of the fixed point      NEC4 [hzd]', ...
     'stability of the fixed point      NEC5 [hzd]', ...
     'theta strictly monotonic          HH6  [phase_mono]', ...
-    'decoupling matrix invertible on Z HH2  [decoupling]'};
+    'decoupling matrix invertible on Z HH2  [decoupling]', ...
+    'swing-foot height ceiling              [clearance_max]'};
 
 [c, ceq] = ch3_col_constraints(z, p);
 

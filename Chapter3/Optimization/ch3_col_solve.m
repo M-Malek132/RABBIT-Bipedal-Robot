@@ -18,8 +18,11 @@ function [z_opt, out] = ch3_col_solve(p, z0, opts_override)
 %   * Central finite differences.  The constraint values pass through a KKT
 %     solve and a matrix inversion, so forward differences at the default step
 %     lose too many digits near a well-conditioned solution.
-%   * ScaleProblem off, so the Feasibility number fmincon reports is directly
-%     comparable to ConstraintTolerance rather than to a rescaled surrogate.
+%   * ScaleProblem off BY DEFAULT (p.scale_problem), so the Feasibility number
+%     fmincon reports is directly comparable to ConstraintTolerance rather than
+%     to a rescaled surrogate. Turn it on for a rung that stalls at exitflag -2:
+%     a badly scaled subproblem is exactly where SQP runs away from a gait it
+%     had already converged.
 %
 % WARM STARTING.  Pass z0 from a previous solve to enable a Table 3.1 limit
 % incrementally.  The recommended order is GRF first (get Fz > 0), then
@@ -57,7 +60,7 @@ options = optimoptions('fmincon', ...
     'ConstraintTolerance',     1e-6, ...
     'StepTolerance',           1e-10, ...
     'FiniteDifferenceType',    'central', ...
-    'ScaleProblem',            false);
+    'ScaleProblem',            p.scale_problem);
 
 % CHECKPOINTING.  A solve here runs for minutes and the only artifact is the
 % final z, so anything that kills the process -- including causes that have

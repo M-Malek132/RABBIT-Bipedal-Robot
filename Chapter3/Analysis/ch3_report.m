@@ -85,6 +85,7 @@ end
 R.impulse     = norm(E.impulse);
 R.clearance   = E.sw_h(max(2, min(N-1, round((N+1)/2))));
 R.sw_h_min    = min(E.sw_h(2:N-1));
+R.clearance_pk = max([E.sw_h, E.sw_hm]);   % peak swing-foot height (row 18)
 
 % --- Section 6.3.4 quantities, measured ----------------------------------
 % Same measure-before-you-constrain rule as Table 3.1: every one of these is
@@ -209,6 +210,7 @@ prow('impact impulse',     R.impulse,    p.limits.impulse_max, '<=', 'Ns', p.lim
 prow('friction demanded',  R.mu_max,     p.limits.mu_s,        '<=', '-',  p.limits.enable.friction);
 prow('min vertical GRF',   R.Fz_min,     p.limits.Fz_min,      '>=', 'N',  p.limits.enable.grf);
 prow('mid-step clearance', R.clearance,  p.limits.clearance,   '>=', 'm',  p.limits.enable.clearance);
+prow('peak clearance',    R.clearance_pk,p.limits.clearance_max,'<=', 'm',  p.limits.enable.clearance_max);
 prow('hip-height dev',     R.hip_dev,    p.limits.hip_h_tol,   '<=', 'm',  p.limits.enable.height);
 fprintf('   (max Fz %.1f N, min swing-foot height over the step %.4f m)\n', R.Fz_max, R.sw_h_min);
 
