@@ -183,7 +183,16 @@ p.l1.proj_eps  = 0.1;            % smoothing band of the projection, in (0,1]
 % CLF-QP component mu1 only, NOT on the adaptive component mu2. The realized
 % torque can therefore leave the box by whatever mu2 contributes; ch4_forces
 % reports that overshoot rather than hiding it.
+%
+% 65 Nm is below the peak torque of every gait in Results/ (195-465 Nm), so
+% ch4_load_gait raises it to the gait's own peak; see the note there for what
+% a starved box does to the adaptation. This value stands for a gait that
+% fits inside it.
 p.l1.u_max = 65;
+
+% Peak joint torque of the loaded gait, filled in by ch4_load_gait. Empty
+% when p is built standalone, since a bare parameter struct has no gait.
+p.gait_u_peak = [];
 
 % PREDICTOR RESET AT IMPACT.  eta jumps discontinuously at every footstrike,
 % so eta_hat must be told about it or eta_tilde = eta_hat - eta would register

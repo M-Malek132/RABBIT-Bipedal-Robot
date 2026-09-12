@@ -68,9 +68,14 @@ switch lower(preset)
                      'scales',      [1 1.5 0.7], ...
                      'u_box',       [80 150 60]);
     case 'l1'
+        % The box comes from p, not from a constant here: ch4_load_gait has
+        % already raised it to the gait's own peak torque if the Section
+        % 4.2.4 figure of 65 Nm could not execute this gait. Hard-coding 65
+        % would undo that on every run and starve the inner QP -- see the
+        % note in ch4_load_gait for what that does to the adaptation.
         def = struct('controllers', {{'clfqp', 'l1', 'l1_con'}}, ...
                      'scales',      [1 0.7 1.5], ...
-                     'u_box',       [65 65 65]);
+                     'u_box',       repmat(p.l1.u_max, 1, 3));
     otherwise
         error('ch4_compare_controllers:preset', ...
               'Unknown preset "%s" (expected robust|l1).', preset);
