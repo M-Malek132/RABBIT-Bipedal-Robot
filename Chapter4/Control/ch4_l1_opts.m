@@ -4,18 +4,20 @@ function o = ch4_l1_opts(p)
 %   o = ch4_l1_opts(p)
 %
 % The L1 law reads its structural options -- which predictor, the predictor's
-% error-injection rate, alpha's own adaptation gain and regressor cap, and
-% whether the constrained law bounds the torque it actually applies -- through
-% here rather than from p.l1 directly, for one reason: a parameter struct saved
-% before these options existed (an old ch4_result .mat) does not carry them,
-% and re-analysing it must reproduce the controller that run actually used. So
-% a missing field resolves to the Section 4.2 formulation: the thesis
-% predictor, one gain for both estimates, no cap, and the box on mu1 alone.
+% error-injection rate, alpha's own adaptation gain, the two limits on the
+% estimator loop's speed, and whether the constrained law bounds the torque it
+% actually applies -- through here rather than from p.l1 directly, for one
+% reason: a parameter struct saved before these options existed (an old
+% ch4_result .mat) does not carry them, and re-analysing it must reproduce the
+% controller that run actually used. So a missing field resolves to the
+% Section 4.2 formulation: the thesis predictor, one gain for both estimates,
+% no cap, no normalization, and the box on mu1 alone.
 %
 % Output
 %   o : struct .predictor ('thesis' | 'plant') .predictor_rate [rad/s]
 %              .Gamma .Gamma_alpha
 %              .phi_max (cap on alpha's regressor; Inf for none)
+%              .loop_gain_max (normalization ceiling [rad^2/s^2]; Inf for none)
 %              .constrain_applied
 %
 % See also CH4_PARAMS, CH4_L1_DERIV, CH4_L1_ADVANCE, CH4_CTRL_L1.
@@ -53,6 +55,21 @@ if kappa > 0 && p.control_dt > 0 && o.Gamma_alpha > 0
                'sample.'], kappa, sqrt(o.Gamma) * p.control_dt);
     end
     o.phi_max = sqrt(room / o.Gamma_alpha);
+end
+
+% Normalized adaptation's ceiling on the loop gain Gamma + Gamma_alpha phi^2,
+% from p.l1.normalized_rate in radians per control sample (see ch4_l1_deriv).
+% The loop cannot be held below the beta channel's own speed sqrt(Gamma)
+% without slowing it at zero tracking error too, so any rate at or below
+% sqrt(Gamma)*dt resolves to that: m^2 = 1 + (Gamma_alpha/Gamma) phi^2, the
+% textbook normalization. None for continuous control or the rate unset.
+o.loop_gain_max = Inf;
+kappa_n = 0;
+if isfield(p.l1, 'normalized_rate') && ~isempty(p.l1.normalized_rate)
+    kappa_n = p.l1.normalized_rate;
+end
+if kappa_n > 0 && p.control_dt > 0
+    o.loop_gain_max = max(kappa_n / p.control_dt, sqrt(o.Gamma))^2;
 end
 if isfield(p.l1, 'constrain_applied') && ~isempty(p.l1.constrain_applied)
     o.constrain_applied = logical(p.l1.constrain_applied);

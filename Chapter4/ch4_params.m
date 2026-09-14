@@ -257,6 +257,14 @@ p.l1.Gamma_alpha = [];
 % max||eta|| 18-48. CH4_UNCERTAINTY.md §5a has the rest.
 p.l1.alpha_regressor_rate = 0;
 
+% NORMALIZED ADAPTATION, the other limit on the estimator loop's speed [rad per
+% control sample]; 0 or [] for none. Both adaptation laws are divided by
+% m^2 = max(1, (Gamma + Gamma_alpha ||eta||^2) / (rate/dt)^2), so the loop never
+% runs faster than the rate while theta_hat keeps alpha_hat*||eta|| in full.
+% At or below sqrt(Gamma)*dt (0.32 here) it is the textbook form
+% m^2 = 1 + (Gamma_alpha/Gamma) ||eta||^2. See ch4_l1_deriv.
+p.l1.normalized_rate = 0;
+
 % WHAT 'l1_con' CONSTRAINS.  false: Section 4.2.3 as written -- the torque box
 % on mu1 alone, no contact rows, so mu2 is applied outside every constraint.
 % true: mu2 enters the QP as a known offset, and the box and the friction and

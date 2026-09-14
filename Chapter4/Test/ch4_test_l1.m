@@ -33,6 +33,8 @@ function ch4_test_l1()
 %      bias that freezing it puts on theta_hat
 %  10. at a post-impact tracking error the uncapped estimator loop outruns
 %      the 1 kHz advance and never settles; capping alpha's regressor settles it
+%  11. normalized adaptation divides the adaptation laws by m^2 and touches
+%      nothing else, and it settles the loop of check 10 without the cap
 
 fprintf('\n=== ch4_test_l1 ===\n');
 pass = true;
@@ -405,6 +407,70 @@ fprintf(['  [%s] %-30s ||eta|| = 13: uncapped peak ||theta_hat|| %.0f, ' ...
         tf(ok10), 'estimator loop at large eta', th_peak(1), th_rms(1), ...
         phi10(2), th_rms(2));
 pass = pass && ok10;
+
+%% 11. normalized adaptation
+% p.l1.normalized_rate = kappa must scale the two adaptation laws by 1/m^2 and
+% leave the predictor and the filter rows exactly as they were. Three cases
+% at the defaults: kappa = 1 rad/sample with the loop under its ceiling
+% (m^2 = 1, the plain law), kappa = 1 above it (m^2 = loop gain/(kappa/dt)^2),
+% and a kappa under sqrt(Gamma)*dt, which must give the textbook form
+% m^2 = 1 + (Gamma_alpha/Gamma)||eta||^2. Then the held error of check 10,
+% which diverges uncapped, must settle at both kappas with alpha_hat*||eta||
+% kept in full.
+p11 = p; p11.l1.predictor = 'plant';
+o11 = ch4_l1_opts(p11);
+[G11, Ga11, T11] = deal(o11.Gamma, o11.Gamma_alpha, p11.control_dt);
+assert(G11*T11^2 > 0.01 && G11*T11^2 < 1 && Ga11 > 0 && ...
+       (G11 + Ga11*13^2)*T11^2 > 1, ...
+       'check 11 assumes Gamma*dt^2 in (0.01, 1) and Gamma_alpha > 0');
+eta_under = 0.5 * sqrt(((1/T11)^2 - G11) / Ga11);    % loop gain under (1/dt)^2
+cases11 = {1,   eta_under, 1
+           1,   13,        (G11 + Ga11*13^2) * T11^2
+           0.1, 13,        1 + (Ga11/G11) * 13^2};
+e11 = 0;
+for c = 1:size(cases11, 1)
+    [kap, ne, m2_expect] = cases11{c, :};
+    pn = p11; pn.l1.normalized_rate = kap;
+    for k = 1:5
+        eta = randn(2*ny,1); eta = ne * eta / norm(eta);
+        xi  = ch4_l1_state('pack', p11, struct('eta_hat', eta + 0.1*randn(2*ny,1), ...
+                  'alpha_hat', randn(ny,1), 'beta_hat', randn(ny,1), ...
+                  'mu2', randn(ny,1)));
+        sig = struct('eta', eta, 'mu', randn(ny,1), 'mu1_hat', []);
+        s0 = ch4_l1_state('unpack', p11, ch4_l1_deriv(xi, sig, clf, p11));
+        [xd, d1] = ch4_l1_deriv(xi, sig, clf, pn);
+        s1 = ch4_l1_state('unpack', pn, xd);
+        e11 = max([e11, norm(s1.eta_hat - s0.eta_hat, inf), ...
+                   norm(s1.mu2 - s0.mu2, inf), ...
+                   abs(d1.m2 - m2_expect) / m2_expect, ...
+                   norm(s1.alpha_hat - s0.alpha_hat / m2_expect) / norm(s0.alpha_hat), ...
+                   norm(s1.beta_hat  - s0.beta_hat  / m2_expect) / norm(s0.beta_hat)]);
+    end
+end
+pass = report('normalization scales laws only', e11, 1e-12, pass);
+
+kap11 = [1, 0.1];
+th_peak11 = zeros(1, 2); th_rms11 = zeros(1, 2);
+for mode = 1:2
+    pn = p10; pn.l1.normalized_rate = kap11(mode);
+    xi  = ch4_l1_state('init', pn, eta10);
+    smp = struct('eta', eta10, 'eta_next', eta10, 'mu', -theta10, 'mu1_hat', []);
+    err = nan(1, K10);
+    for k = 1:K10
+        xi  = ch4_l1_advance(xi, smp, clf, pn, T10);
+        s11 = ch4_l1_state('unpack', pn, xi);
+        th  = s11.alpha_hat * norm(eta10) + s11.beta_hat;
+        th_peak11(mode) = max(th_peak11(mode), norm(th));
+        err(k) = norm(th - theta10) / norm(theta10);
+    end
+    th_rms11(mode) = sqrt(mean(err(end-99:end).^2));
+end
+ok11 = all(isfinite(th_rms11) & th_rms11 < 1e-3) && all(th_peak11 < 2 * norm(theta10));
+fprintf(['  [%s] %-30s ||eta|| = 13: peak ||theta_hat||/||theta|| %.2f / %.2f, ' ...
+         'late error %.1e / %.1e (kappa 1 / textbook)\n'], ...
+        tf(ok11), 'normalized loop at large eta', th_peak11 / norm(theta10), ...
+        th_rms11(1), th_rms11(2));
+pass = pass && ok11;
 
 fprintf('--- ch4_test_l1: %s ---\n\n', tf(pass));
 end

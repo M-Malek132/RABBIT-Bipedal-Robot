@@ -104,6 +104,22 @@ function [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %    phi_max = sqrt((kappa/dt)^2 - Gamma) / sqrt(Gamma_alpha); capping removes
 %    most falls at 1 kHz too, at a price in tracking (see ch4_params).
 %
+%    OR NORMALIZE BOTH LAWS, p.l1.normalized_rate = kappa_n: divide them by
+%
+%       m^2 = max(1, (Gamma + Gamma_alpha phi^2) / (kappa_n/dt)^2)
+%
+%    The loop then runs at no more than kappa_n/dt at any tracking error, the
+%    law is untouched wherever it was already slower, and theta_hat keeps
+%    alpha_hat*||eta|| in full -- which also means that, unlike the cap, it
+%    does nothing about the jump alpha_hat*(change in ||eta||) a footstrike
+%    puts straight into theta_hat. Under 'plant', the cancellation behind
+%    (4.27) survives with the prediction error weighted by 1/m^2:
+%    V = eta_tilde'eta_tilde/m^2 + alpha_tilde'alpha_tilde/Gamma_alpha
+%    + beta_tilde'beta_tilde/Gamma has
+%    Vdot <= -(2a + d(ln m^2)/dt) ||eta_tilde||^2 / m^2, so the bound on the
+%    prediction error loosens by the factor m, and holds only while m^2 decays
+%    slower than exp(-2at), which a footstrike's jump in ||eta|| can break.
+%
 % 4. LOW-PASS FILTER (4.23)
 %
 %       mu2_dot = omega_c (-theta_hat - mu2)      i.e.  mu2 = -C(s) theta_hat
@@ -129,7 +145,7 @@ function [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %
 % Outputs
 %   xidot : 5ny x 1
-%   d     : struct .theta_hat .eta_tilde .y_alpha .y_beta, for analysis
+%   d     : struct .theta_hat .eta_tilde .y_alpha .y_beta .m2, for analysis
 %
 % See also CH4_CTRL_L1, CH4_L1_ADVANCE, CH4_L1_OPTS, CH4_PROJ, CH4_L1_STATE.
 
@@ -160,10 +176,13 @@ end
 y_beta  = -GP_eta_tilde;
 y_alpha =  y_beta * nrm_eta;
 
-alpha_hat_dot = o.Gamma_alpha * ch4_proj(s.alpha_hat, y_alpha, ...
-                                         p.l1.alpha_max, p.l1.proj_eps);
-beta_hat_dot  = o.Gamma       * ch4_proj(s.beta_hat,  y_beta,  ...
-                                         p.l1.beta_max,  p.l1.proj_eps);
+% normalization: exactly 1 when off or when the loop is under its ceiling
+m2 = max(1, (o.Gamma + o.Gamma_alpha * nrm_eta^2) / o.loop_gain_max);
+
+alpha_hat_dot = o.Gamma_alpha / m2 * ch4_proj(s.alpha_hat, y_alpha, ...
+                                              p.l1.alpha_max, p.l1.proj_eps);
+beta_hat_dot  = o.Gamma / m2       * ch4_proj(s.beta_hat,  y_beta,  ...
+                                              p.l1.beta_max,  p.l1.proj_eps);
 
 % --- 4. low-pass filter ---------------------------------------------------
 mu2_dot = p.l1.omega_c * (-theta_hat - s.mu2);
@@ -172,7 +191,7 @@ xidot = [eta_hat_dot; alpha_hat_dot; beta_hat_dot; mu2_dot];
 
 if nargout > 1
     d = struct('theta_hat', theta_hat, 'eta_tilde', eta_tilde, ...
-               'y_alpha', y_alpha, 'y_beta', y_beta);
+               'y_alpha', y_alpha, 'y_beta', y_beta, 'm2', m2);
 end
 
 end
