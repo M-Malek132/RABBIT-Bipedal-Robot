@@ -266,13 +266,14 @@ entries once:
 | `beta_hat` | n_y | estimate of the constant part of θ |
 | `mu2` | n_y | filter output — the adaptive control applied |
 
-### Three fixes to §4.2's formulation
+### Four fixes to §4.2's formulation
 
 Run as written, §4.2's controller does not reproduce its own claim here. Over 25
 steps at ε = 0.20 it tracks no better than its reference model under either
 perturbation, and at ×1.5 it falls where the reference model does not. It also
 needs the ground to pull the foot down on 11–14% of the samples. Three changes
-follow, each an option in `p.l1`. The thesis form stays one setting away:
+make it hold over 25 steps, and a fourth over long runs. Each is an option in
+`p.l1`, and the thesis form stays one setting away:
 [`ch4_l1_opts`](../Chapter4/Control/ch4_l1_opts.m) resolves the options, and a
 parameter struct saved before they existed resolves to the thesis form.
 
@@ -330,7 +331,27 @@ Because the box now bounds the total torque, the L₁ preset scales it with the
 robot, `u_max · max(1, s)`. A 1.5× robot needs 1.5× the torque for the same
 motion, and a 244 Nm box is below the 293 Nm its feedforward alone needs.
 
-§5a has the measured effect.
+**4. The adaptation is normalized for the sampled loop**
+(`p.l1.normalized_rate` = ρ, 0.75 rad per sample). The loop from prediction error
+to estimates runs at about √(Γ + Γ_α‖η‖²) rad/s, so it speeds up as tracking
+degrades. After a bad footstrike, at ‖η‖ = 13, it reaches 4.1 rad per 1 ms
+sample, faster than a 1 kHz controller can realize. Each of the long-run falls
+re-simulated sample by sample began that way.
+
+Both adaptation laws are divided by m² = max(1, (Γ + Γ_α‖η‖²)/(ρ/Δt)²). That
+holds the loop at ρ rad per sample and leaves the law untouched while the loop
+is slower. θ̂ = α̂‖η‖ + β̂ is not changed. It is a sampled-data fix, off for
+continuous control (`p.control_dt = 0`).
+
+The Lyapunov argument survives, in weakened form. With the prediction error
+weighted by 1/m² the cross terms still cancel. The prediction-error bound
+loosens by the factor m, and holds only while m² decays slower than e^(−2at),
+which a footstrike can break. ρ sits inside a window, 0.75–1, that §5a
+measures. Over the thesis's 25 steps it changes the mass-scale sweep little,
+but it costs the random-load run a larger excursion. What it buys is survival
+on the long runs.
+
+§5a has the measured effect of all four.
 
 ### Why the pieces are what they are
 
@@ -526,11 +547,18 @@ on the current 74 kg model. T = 0.2733 s, L = 0.427 m, v = 1.56 m/s, and its own
 collocation residuals re-evaluated on today's dynamics are 7.6e-7 (defect),
 7.6e-9 (periodicity) and 1.2e-6 (‖η⁺‖). **25 steps per run**, ε = 0.20, control
 at 1 kHz, `Δ₁max = 279.1` and `Δ₂max = 0.514` (measured along a nominal rollout,
-×1.2), robust boundary layer κ = 1. L₁ with the three fixes of §4: plant-input
-predictor at a = 800, Γ = 1e5, both estimates, rows on the applied torque. Result
-set `Results/ch4_{robust,l1}_2026-09-13_20-45-50/`; Case IV, with its own
-bounds, `Results/ch4_case4_2026-09-14_13-50-53/`; the load study
-`Results/ch4_load_2026-09-14_14-40-48/`.
+×1.2), robust boundary layer κ = 1. L₁ with the four fixes of §4: plant-input
+predictor at a = 800, Γ = 1e5, both estimates, rows on the applied torque, and
+adaptation normalized above ρ = 0.75 rad per sample. Result sets:
+
+- robust: `Results/ch4_robust_2026-09-13_20-45-50/`;
+- Case IV, with its own bounds: `Results/ch4_case4_2026-09-14_13-50-53/`;
+- L₁: `Results/ch4_l1_2026-09-14_22-33-20/`;
+- the load study: `Results/ch4_load_2026-09-14_22-37-57/`.
+
+The L₁ and load sets were rerun when normalization became the default; the
+sets they replace, without it, are `ch4_l1_2026-09-13_20-45-50` and
+`ch4_load_2026-09-14_14-40-48`. Tables that ran without normalization say so.
 
 Each cell reads **steps · max‖η‖ · min Fz** over the whole run. A fall is named
 by the step `ch4_simulate` rejected.
@@ -653,17 +681,21 @@ C's max‖η‖ grows to about 10.9, and it holds there to step 120 (the plateau
 table above). So at ×3 the robust law walks indefinitely, with a steady error
 about twice the ×0.7 and ×1.5 plateaus.
 
-### §4.2.4 — with the three fixes, L₁ holds its convergence where the baseline does not
+### §4.2.4 — with the four fixes, L₁ holds its convergence where the baseline does not
 
 | controller | ×1 (box 244 Nm) | ×0.7 (box 244 Nm) | ×1.5 (box 366 Nm) |
 |---|---|---|---|
 | A `clfqp` | 25 · 0.25 · 32 N | 25 · 14.5 · **−1734 N** | 25 · 16.6 · **−134 N** |
-| B `l1` | 25 · **0.14** · 50 N | 25 · **4.81** · **−362 N** | 25 · **2.17** · **−210 N** |
-| C `l1_con` | 25 · **0.15** · 50 N | 25 · **4.58** · 23 N | 25 · **4.51** · 90 N |
+| B `l1` | 25 · **0.14** · 50 N | 25 · **3.74** · **−288 N** | 25 · **2.35** · **−210 N** |
+| C `l1_con` | 25 · **0.15** · 50 N | 25 · **4.57** · 23 N | 25 · **4.77** · 90 N |
 | *C, thesis form* | *25 · 0.38 · 49 N* | *25 · 14.5 · −1403 N* | ***falls in step 14*** · *18.7 · −978 N* |
 
 The last row is §4.2 as written: `predictor = 'thesis'`, Γ = 1e4, the box on μ₁
 alone. It comes from `Results/ch4_l1_2026-09-13_18-26-49/`.
+
+Normalization moves this table only slightly. With the first three fixes alone,
+B read 4.81 · −362 N at ×0.7 and 2.17 at ×1.5, and C read 4.58 and 4.51; every
+other cell was the same. At ×1 it never engages.
 
 **With a perfect model L₁ is at least the CLF-QP.** Its max‖η‖ is 0.14 against
 0.25, and its CLF between impacts is about four times lower. The estimate is not
@@ -673,11 +705,11 @@ drift within each period. L₁ cancels part of that intersample error.
 **Under either perturbation it holds:**
 
 - **Steps:** both laws walk all 25 steps.
-- **Tracking:** max‖η‖ 2.2–4.8, against the baseline's 14.5–16.6.
-- **Timing:** step times stay within 0.256–0.291 s (the baseline wanders over
+- **Tracking:** max‖η‖ 2.3–4.8, against the baseline's 14.5–16.6.
+- **Timing:** step times stay within 0.257–0.292 s (the baseline wanders over
   0.184–0.340 s).
 - **Convergence:** the per-step CLF peak does not grow. For `l1_con` at ×1.5 it
-  moves 0.078 → 0.17 over the run, where the robust law's grows 0.0073 → 0.54
+  moves 0.078 → 0.18 over the run, where the robust law's grows 0.0073 → 0.54
   (§4.1.4).
 
 In Figure 1 both L₁ curves sit one to two orders of magnitude below the baseline
@@ -690,7 +722,7 @@ in both perturbed cases. In the thesis form θ̂ overshot 3–5×.
 
 **`l1_con` is realizable; `l1` is not quite.** With the rows on the applied
 torque, `l1_con` keeps the true normal force at ≥ 23 N (×0.7) and ≥ 90 N
-(×1.5). `l1` has no rows, and still asks the ground to pull on 1.6% / 1.3% of
+(×1.5). `l1` has no rows, and still asks the ground to pull on 2.2% / 1.0% of
 the samples, against 11–14% in the thesis form.
 
 **×1.5 sits near an edge, so the sweep behind the default is reported, not just
@@ -699,19 +731,25 @@ scaled and default projection balls:
 
 | predictor rate a | 500 | 632 (critical) | 700 | **800** | 900 |
 |---|---|---|---|---|---|
-| `l1` | falls in step 16 | falls in step 16 | 25 · 2.2 | **25 · 2.2** | 25 · 2.3 |
-| `l1_con` | 25 · 6.3 | 25 · 12.6 | falls in step 12 | **25 · 4.3** | 25 · 2.8 |
+| `l1` | 25 · 6.18 | 25 · 7.05 | 25 · 2.24 | **25 · 2.35** | 25 · 2.29 |
+| `l1_con` | 25 · 6.70 | 25 · 6.43 | 25 · 8.03 | **25 · 4.77** | 25 · 2.89 |
+| *`l1`, without normalization* | *falls in step 16* | *falls in step 16* | *25 · 2.2* | *25 · 2.2* | *25 · 2.3* |
+| *`l1_con`, without normalization* | *25 · 6.3* | *25 · 12.6* | *falls in step 12* | *25 · 4.3* | *25 · 2.8* |
 
-`l1` needs a ≥ 700, and there it walks every time. `l1_con` walks at four of the
-five rates. Doubling the projection balls changes which runs fall, and at the
-default balls `l1_con`'s α estimate presses its ball (‖α̂‖ 208.5 of 210). So at
-×1.5 `l1_con`'s result belongs to this tuning rather than to a margin. Its
-max‖η‖ here is measured on every tenth solver point, hence 4.3 against the
-table's 4.51.
+- **With normalization nothing falls at any rate**, for either law. Without it,
+  `l1` fell below a = 700 and `l1_con` fell at 700.
+- **The rate still sets the tracking.** `l1` holds max‖η‖ 2.2–2.4 at a ≥ 700 and
+  6.2–7.1 below. `l1_con` spans 2.9–8.0 without a monotone trend, so its ×1.5 tracking
+  belongs to this tuning rather than to a margin.
+- **Grids differ.** The normalized rows are measured on the table's own grid;
+  a = 800 is the table's cell. The rows without normalization were measured on
+  every tenth solver point, hence 4.3 against their table's 4.51. Without
+  normalization, doubling the projection balls also changed which runs fell.
 
-**Past 25 steps `l1_con` holds on a mass scale, and plain `l1` does not.** The
-same runs with the same parameters and boxes, extended to 60 steps (120 for
-`l1` at ×1.5). Ranges are over 10-step blocks:
+**Without normalization, past 25 steps `l1_con` holds on a mass scale and plain
+`l1` does not.** These are the same runs with the same parameters and boxes,
+extended to 60 steps (120 for `l1` at ×1.5), measured before normalization
+existed. Ranges are over 10-step blocks:
 
 | case | controller | steps | max‖η‖ per block | mean per-step V peak | true contact |
 |---|---|---|---|---|---|
@@ -733,7 +771,18 @@ same runs with the same parameters and boxes, extended to 60 steps (120 for
   absorbing the sample-and-hold error. That is far from its bound, but it does
   not settle.
 
-### §4.2.4, Fig 4.11 — L₁ carries 94% of body weight for 25 steps where a box-matched CLF-QP cannot, but not for 60
+**With normalization, plain `l1` at ×1.5 holds too.** The normalization screen
+below measured the same runs with it on, on every third solver point, without
+contact:
+
+- **`l1` at ×1.5** walks all 120 steps, at max‖η‖ 2.0–2.9 per block.
+- **`l1_con` at ×1 and ×0.7** reads 0.1–0.2 and 4.0–5.5.
+- **`l1_con` at ×1.5 does not settle the way it did without normalization:**
+  4.8 in steps 1–10 and 2.2–2.4 through step 40, then 3.5 and 5.5.
+
+The screen did not run plain `l1` at ×1 or ×0.7.
+
+### §4.2.4, Fig 4.11 — L₁ carries 94% of body weight where a box-matched CLF-QP cannot: for 25 steps in every case, for 60 in nine random sequences of ten
 
 The robot carries a mass at the hip that no controller is told about. It is
 redrawn every step from 0–70 kg (Fig 4.11a), or fixed at 23 / 35 / 46 kg
@@ -773,8 +822,8 @@ force computed under the load each step carried:
 |---|---|---|---|---|
 | A `clfqp` (no box) | 25 · 8.95 · 38 N | 25 · 5.79 · 39 N | 25 · 5.61 · 18 N | 25 · 5.33 · **−29 N** |
 | A′ `clfqp_con` (box, rows) | **falls in step 10** · 8.45 · 30 N | **falls in step 7** · 20.3 · **−13 N** | **falls in step 3** · 6.92 · 48 N | **falls in step 4** · 23.9 · **−131 N** |
-| B `l1` | **falls in step 15** · 8.98 · **−306 N** | 25 · 2.63 · 75 N | 25 · 5.06 · **−164 N** | 25 · 9.23 · **−274 N** |
-| **C `l1_con`** | 25 · 9.06 · 6 N | 25 · **2.41** · 102 N | 25 · 4.86 · **−23 N** | 25 · 5.22 · **−51 N** |
+| B `l1` | **falls in step 15** · 12.5 · **−1047 N** | 25 · 2.63 · 75 N | 25 · 6.98 · **−339 N** | 25 · 10.4 · **−120 N** |
+| **C `l1_con`** | 25 · 13.8 · **−58 N** | 25 · **2.41** · 115 N | 25 · 5.31 · **−30 N** | 25 · 5.03 · **−35 N** |
 
 **Over 25 steps, at the same torque budget, the adaptation is what walks.**
 `l1_con` completes all 25 steps of every case, the random 0–70 kg draw
@@ -782,31 +831,95 @@ included, which is the thesis's claim. `clfqp_con`, with the same box and rows,
 falls in every case within 3–10 steps. The unconstrained `clfqp` also walks
 everything, by drawing 2–3.5× the peak torque.
 
-**Over 60 steps the random load brings `l1_con` down.**
+**Normalization costs the random run within those 25 steps.** Without it:
+
+| without normalization | 0–70 kg random | 23 kg | 35 kg | 46 kg |
+|---|---|---|---|---|
+| B `l1` | falls in step 15 · 8.98 · −306 N | 25 · 2.63 · 75 N | 25 · 5.06 · −164 N | 25 · 9.23 · −274 N |
+| C `l1_con` | 25 · 9.06 · 6 N | 25 · 2.41 · 102 N | 25 · 4.86 · −23 N | 25 · 5.22 · −51 N |
+
+`l1_con`'s worst step under the random load grows from 9.06 to 13.8, and one
+sample of 15 067 asks the ground to pull the foot down, by 58 N. At the fixed
+loads its worst step moves by less than 10% either way. Plain `l1` gets worse at
+35 kg, and in its worst step at 46 kg.
+
+**Over 60 steps, normalization is what keeps `l1_con` walking.**
 
 | random 0–70 kg, 60 steps | seed 11 (the draws above) | seed 1 | seed 2 | seed 3 |
 |---|---|---|---|---|
-| `l1_con` (box 556 Nm) | **falls in step 43** | **falls in step 33** | **falls in step 55** | **falls in step 57** |
+| `l1_con` (box 556 Nm) | 60 | 60 | 60 | 60 |
+| `l1_con`, without normalization | **falls in step 43** | **falls in step 33** | **falls in step 55** | **falls in step 57** |
 | `clfqp` (no box) | 60 | 60 | 60 | 60 |
 
-- **`l1_con` falls under every draw sequence,** and its α̂ sits at the
-  projection bound (≥ 207 of 210) in nearly every 10-step block. The falls
-  follow no single pattern in the load: the steps before them include both
-  drops and rises.
+- **With normalization `l1_con` walks all four sequences,** and five of six
+  further ones (seeds 4–9, next section). Its α̂ still reaches the projection
+  bound (209.8 of 210) in every random run.
+- **Without it `l1_con` falls under every sequence,** with α̂ at the bound
+  (≥ 207 of 210) in nearly every 10-step block. The falls follow no single
+  pattern in the load: the steps before them include both drops and rises.
 - **The unconstrained CLF-QP walks all 60 steps of all four sequences,** at
   max‖η‖ 3.7–12.2 per block. Over the first 25 steps it drew 2–3 times
   `l1_con`'s torque.
-- **Under the fixed 46 kg load `l1_con` holds for 60 steps** (max‖η‖ 4.2–5.2
-  per block, true Fz negative on 0.07% of two blocks' samples), but also with
-  α̂ at its bound.
+- **Under the fixed 46 kg load `l1_con` holds for 60 steps either way**, with α̂
+  at its bound. Per block, max‖η‖ is 4.7–5.3 with normalization and 4.2–5.2
+  without. Contact was recorded only without it: true Fz was negative on 0.07%
+  of two blocks' samples.
 
-So the thesis's load claim survives its own horizon here, not a longer one. An
-estimate pinned at its projection bound is also what preceded plain `l1`'s fall
-at ×1.5. Larger balls are not the fix: at ten times the size, the random case
-fell by step 17. The other sequences are `p.load_seed` 1, 2 and 3; the default,
-11, is the sequence the load study draws.
+So without normalization the thesis's load claim survives its own horizon here
+and not a longer one. With it, the claim reaches 60 steps in nine random
+sequences of ten, paid for by the excursion above. Without normalization,
+larger projection balls were not the fix: at ten times the size, the random
+case fell by step 17. The other sequences are `p.load_seed` 1–9; the default,
+11, is the sequence the load study draws. The 60-step rows are the screens of
+the next section, which measure max‖η‖ on every third solver point.
 
-### Why L₁ falls in the long runs, and what does not fix it
+**Beyond the lightest load, L₁ does not track better than the unconstrained
+baseline:**
+
+| `clfqp` / `l1_con` | 0–70 kg | 23 kg | 35 kg | 46 kg |
+|---|---|---|---|---|
+| typical step: median per-step max‖η‖ | 3.10 / 3.32 | 2.38 / 1.97 | 2.29 / 4.27 | 2.47 / 4.17 |
+| peak torque [Nm] | 1797 / 556 | 729 / 360 | 1146 / 412 | 1598 / 458 |
+| per-step peak ‖u‖, mean [Nm] (Fig 4.11b) | 914 / 485 | 643 / 378 | 1031 / 476 | 1451 / 525 |
+
+- **23 kg:** `l1_con` more than halves the worst error and tracks the typical
+  step better, on about half the torque.
+- **35 and 46 kg:** its worst step matches the baseline's, but its typical step
+  is worse.
+- **Random load:** the typical step is level (3.32 against 3.10), but
+  `l1_con`'s worst step is larger (13.8 against 8.95).
+
+As in the thesis's Fig 4.11b, L₁'s torque grows with the load (378 → 476 →
+525 Nm per-step peak).
+
+**Contact.** `l1_con` keeps the true normal force positive except on 1, 3 and 2
+samples of about 15 000: under the random load, at 35 kg and at 46 kg (minimum
+−58, −30 and −35 N; without normalization 0, 3 and 7 samples). The
+unconstrained `l1` asks the ground to pull on 4.7% of samples at 35 kg and 10.5%
+at 46 kg (0.2% and 11.2% without). Under the random load it falls in step 15,
+the first step after the load drops from 60 kg to 12 kg. The estimates do follow
+the uncertainty: median ‖θ̂‖/‖θ‖ is 0.99–1.05 for `l1_con`.
+
+**The thesis form is worse again.** Measured separately at the same boxes, §4.2's
+formulation (thesis predictor, Γ = 1e4, box on μ₁ only) reached max‖η‖ of about
+27 at 46 kg and about 103 at 70 kg, with θ̂ overshooting θ 2–4×. Its
+constrained law fell in step 3 at 70 kg.
+
+**Loads reshape the gait, but these runs cannot say by how much** (Figure 3).
+Under the same load the two walking controllers settle on very different torso
+cycles:
+
+- the unconstrained baseline's is 2–3° lower in pitch than nominal: −1.2…2.1°
+  over the last five steps, against 1.72…4.55°;
+- `l1_con`'s grows to 0.6…6.0°, with pitch rates reaching +68°/s against the
+  nominal +25.
+
+A load changes M non-uniformly, so unlike a mass scale it can move the orbit
+itself. But the gap between two controllers under the same load is tracking
+error, and separating it from the load's own effect would take a controller
+that is told the true load.
+
+### Why L₁ fell in the long runs, and what was tried
 
 **The drift is real but it is a symptom.** θ̂ = α̂‖η‖ + β̂ is redundant: while
 ‖η‖ stays near a value, every split of θ between α̂ and β̂ predicts equally well,
@@ -838,10 +951,10 @@ What was tried, over the nine long runs above: 60 steps of `l1_con` at ×1, ×0.
 | normalized adaptation, ceiling 0.5 / 0.75 / 1 / 1.5 / 2 rad per sample | 2 / 0 / 0 / 2 / 2 | at 0.75 and 1, `l1_con` at ×1.5 has a typical step (median per-step max‖η‖) of 2.15 / 2.39 against 1.85 as written (4.44 with the cap at 0.5); at 1 it takes a transient to 16.5 |
 
 **Normalized adaptation** (`p.l1.normalized_rate`, `ch4_l1_deriv`) divides both
-adaptation laws by m² = max(1, (Γ + Γ_α‖η‖²)/(κ/Δt)²). That holds the
-estimator loop at no more than κ rad per sample, while θ̂ keeps α̂‖η‖ in full
+adaptation laws by m² = max(1, (Γ + Γ_α‖η‖²)/(ρ/Δt)²). That holds the
+estimator loop at no more than ρ rad per sample, while θ̂ keeps α̂‖η‖ in full
 and the law is unchanged wherever the loop was already slower. `ch4_test_l1`
-check 11 holds check 10's error and shows it settling at κ = 1 and in the
+check 11 holds check 10's error and shows it settling at ρ = 1 and in the
 textbook form. On the robot it works as a window. The textbook form, which holds the loop at √Γ at every error, makes
 the loop overdamped under the predictor rate a = 800 and slows the estimate
 in ordinary walking: in the runs with uncertainty the median per-step peak of
@@ -850,7 +963,7 @@ normalization rarely engages, and the falls return in runs that fell as
 written. The limit that matters in closed loop, about 1 rad per sample, is
 well under the RK4 advance's own 2.8; this analysis does not derive it.
 
-**Out of sample.** κ was picked on the nine runs above, so the candidates were
+**Out of sample.** ρ was picked on the nine runs above, so the candidates were
 rerun on six further 0–70 kg sequences (`p.load_seed` 4–9, `l1_con`, 60 steps):
 
 | six new random-load sequences | falls | typical step, median per-step max‖η‖ | largest max‖η‖, runs that walk |
@@ -872,54 +985,10 @@ rerun on six further 0–70 kg sequences (`p.load_seed` 4–9, `l1_con`, 60 step
 - **Only the faster loop is both safe and flat.** At 0.5 ms the law as written
   fell once in twelve runs and never left max‖η‖ 16 on the new sequences.
 
-The regressor cap and normalization stay in the code as
-`p.l1.alpha_regressor_rate` and `p.l1.normalized_rate`, both off by default.
-The leakage and footstrike variants were removed after these runs. Every
-other result in this section runs the law as written at 1 kHz.
-
-**Beyond the lightest load, L₁ does not track better than the unconstrained
-baseline:**
-
-| `clfqp` / `l1_con` | 0–70 kg | 23 kg | 35 kg | 46 kg |
-|---|---|---|---|---|
-| typical step: median per-step max‖η‖ | 3.10 / 3.00 | 2.38 / 1.97 | 2.29 / 3.96 | 2.47 / 4.07 |
-| peak torque [Nm] | 1797 / 556 | 729 / 360 | 1146 / 412 | 1598 / 458 |
-| per-step peak ‖u‖, mean [Nm] (Fig 4.11b) | 914 / 458 | 643 / 378 | 1031 / 467 | 1451 / 521 |
-
-- **23 kg:** `l1_con` more than halves the worst error and tracks the typical
-  step better, on about half the torque.
-- **35 and 46 kg:** its worst step matches the baseline's, but its typical step
-  is worse.
-- **Random load:** the two are level.
-
-As in the thesis's Fig 4.11b, L₁'s torque grows with the load (378 → 467 →
-521 Nm per-step peak).
-
-**Contact.** `l1_con` keeps the true normal force positive throughout, except on
-3 and 7 samples of about 15 000 at 35 and 46 kg (minimum −23 and −51 N). The
-unconstrained `l1` asks the ground to pull on 0.2% of samples at 35 kg and 11.2%
-at 46 kg. Under the random load it falls in step 15, the first step after the
-load drops from 60 kg to 12 kg. The estimates do follow the uncertainty: median
-‖θ̂‖/‖θ‖ is 1.00–1.05 for `l1_con`.
-
-**The thesis form is worse again.** Measured separately at the same boxes, §4.2's
-formulation (thesis predictor, Γ = 1e4, box on μ₁ only) reached max‖η‖ of about
-27 at 46 kg and about 103 at 70 kg, with θ̂ overshooting θ 2–4×. Its
-constrained law fell in step 3 at 70 kg.
-
-**Loads reshape the gait, but these runs cannot say by how much** (Figure 3).
-Under the same load the two walking controllers settle on very different torso
-cycles:
-
-- the unconstrained baseline's is 2–3° lower in pitch than nominal: −1.2…2.1°
-  over the last five steps, against 1.72…4.55°;
-- `l1_con`'s grows to 0.7…6.1°, with pitch rates reaching +65°/s against the
-  nominal +25.
-
-A load changes M non-uniformly, so unlike a mass scale it can move the orbit
-itself. But the gap between two controllers under the same load is tracking
-error, and separating it from the load's own effect would take a controller
-that is told the true load.
+**Normalization was adopted after these runs**, at ρ = 0.75
+(`p.l1.normalized_rate`), and the §4.2.4 and Fig 4.11 tables above were rerun
+with it. The regressor cap stays in the code as `p.l1.alpha_regressor_rate`,
+off by default. The leakage and footstrike variants were removed.
 
 ### Known rough edges
 
@@ -947,7 +1016,8 @@ that is told the true load.
   results stamped before 2026-09-13 14:48 ran the exact law and chatter,
   everything stamped before 18:26 that day ran ε = 0.35 over three steps, and L₁
   results stamped before 20:45 ran the thesis-form L₁. The 20-27-10 set is the
-  fixed L₁ at a = 632, superseded by the sweep above.
+  fixed L₁ at a = 632, superseded by the sweep above. L₁ and load results
+  stamped before 2026-09-14 22:33 ran without normalized adaptation.
 
 ---
 

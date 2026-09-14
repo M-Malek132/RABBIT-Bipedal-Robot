@@ -128,8 +128,14 @@ if opts.verbose
     l1o = ch4_l1_opts(p);
     fprintf('\n%s\n CHAPTER 4 -- unknown load (Fig. 4.11), %d steps per run\n', ...
             repmat('=',1,105), opts.n_steps);
-    fprintf(' L1: Gamma %.0e, filter %.0f rad/s, predictor %s\n', ...
-            p.l1.Gamma, p.l1.omega_c, l1o.predictor);
+    if isfinite(l1o.loop_gain_max)
+        nrm = sprintf('adaptation normalized above %.2f rad/sample', ...
+                      sqrt(l1o.loop_gain_max) * p.control_dt);
+    else
+        nrm = 'adaptation not normalized';
+    end
+    fprintf(' L1: Gamma %.0e, filter %.0f rad/s, predictor %s, %s\n', ...
+            p.l1.Gamma, p.l1.omega_c, l1o.predictor, nrm);
     fprintf(' %-16s %14s %10s %10s %14s %9s\n', 'case', 'feedfwd peak', ...
             '||Delta2||', 'isotropic', 'min eig(I+D2)', 'box');
     for c = cases

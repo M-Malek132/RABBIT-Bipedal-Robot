@@ -31,8 +31,9 @@ function ch4_test_l1()
 %   8. the L1 state survives the impact the way ch4_l1_state documents
 %   9. sampled advance: reading eta at both ends of the period removes the
 %      bias that freezing it puts on theta_hat
-%  10. at a post-impact tracking error the uncapped estimator loop outruns
-%      the 1 kHz advance and never settles; capping alpha's regressor settles it
+%  10. at a post-impact tracking error the estimator loop as written (no cap,
+%      no normalization) outruns the 1 kHz advance and never settles; capping
+%      alpha's regressor settles it
 %  11. normalized adaptation divides the adaptation laws by m^2 and touches
 %      nothing else, and it settles the loop of check 10 without the cap
 
@@ -377,7 +378,8 @@ pass = pass && ok9;
 % velocity (so F eta = 0), let the plant's input cancel a constant theta, start
 % the estimates at zero, and advance half a second. Uncapped, theta_hat must
 % never settle; with p.l1.alpha_regressor_rate = 1 it must settle on theta.
-p10 = p; p10.l1.predictor = 'plant';
+% Normalization, on by default, is turned off: this is the law as written.
+p10 = p; p10.l1.predictor = 'plant'; p10.l1.normalized_rate = 0;
 theta10 = [40; -25; 10; 30];
 eta10   = [13/2 * ones(ny,1); zeros(ny,1)];       % ||eta|| = 13, ydot = 0
 T10 = p10.control_dt; K10 = round(0.5 / T10);
@@ -417,7 +419,7 @@ pass = pass && ok10;
 % m^2 = 1 + (Gamma_alpha/Gamma)||eta||^2. Then the held error of check 10,
 % which diverges uncapped, must settle at both kappas with alpha_hat*||eta||
 % kept in full.
-p11 = p; p11.l1.predictor = 'plant';
+p11 = p; p11.l1.predictor = 'plant'; p11.l1.normalized_rate = 0;   % the plain law
 o11 = ch4_l1_opts(p11);
 [G11, Ga11, T11] = deal(o11.Gamma, o11.Gamma_alpha, p11.control_dt);
 assert(G11*T11^2 > 0.01 && G11*T11^2 < 1 && Ga11 > 0 && ...

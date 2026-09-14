@@ -104,7 +104,8 @@ function [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %    phi_max = sqrt((kappa/dt)^2 - Gamma) / sqrt(Gamma_alpha); capping removes
 %    most falls at 1 kHz too, at a price in tracking (see ch4_params).
 %
-%    OR NORMALIZE BOTH LAWS, p.l1.normalized_rate = kappa_n: divide them by
+%    OR NORMALIZE BOTH LAWS, p.l1.normalized_rate = kappa_n (the default, at
+%    0.75 rad per sample -- ch4_params has the measurements): divide them by
 %
 %       m^2 = max(1, (Gamma + Gamma_alpha phi^2) / (kappa_n/dt)^2)
 %

@@ -209,8 +209,15 @@ if opts.verbose
                      'hypothesis.\n'], p.rclf.delta2_max, d2_need, scales(iw));
         end
     end
-    fprintf(' L1: Gamma %.0e, filter %.0f rad/s, sample %.0f Hz\n', ...
-            p.l1.Gamma, p.l1.omega_c, 1/p.control_dt);
+    l1n = ch4_l1_opts(p);
+    if isfinite(l1n.loop_gain_max)
+        nrm = sprintf('adaptation normalized above %.2f rad/sample', ...
+                      sqrt(l1n.loop_gain_max) * p.control_dt);
+    else
+        nrm = 'adaptation not normalized';
+    end
+    fprintf(' L1: Gamma %.0e, filter %.0f rad/s, sample %.0f Hz, %s\n', ...
+            p.l1.Gamma, p.l1.omega_c, 1/p.control_dt, nrm);
     if measure_box
         fprintf(' box per case: max(%.2f x clfqp peak, scale x %.1f Nm feedforward peak)\n', ...
                 opts.box_frac, u_ff_peak);
