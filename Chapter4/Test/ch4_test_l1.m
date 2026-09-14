@@ -31,6 +31,8 @@ function ch4_test_l1()
 %   8. the L1 state survives the impact the way ch4_l1_state documents
 %   9. sampled advance: reading eta at both ends of the period removes the
 %      bias that freezing it puts on theta_hat
+%  10. at a post-impact tracking error the uncapped estimator loop outruns
+%      the 1 kHz advance and never settles; capping alpha's regressor settles it
 
 fprintf('\n=== ch4_test_l1 ===\n');
 pass = true;
@@ -364,6 +366,45 @@ fprintf(['  [%s] %-30s RMS |theta_hat - theta|/|theta| %.1e both ends, ' ...
          '%.1e frozen\n'], tf(ok9), 'sampled advance reads both ends', ...
         err9(1), err9(2));
 pass = pass && ok9;
+
+%% 10. the estimator loop at a large tracking error, with and without the cap
+% After a bad footstrike ||eta|| reaches 12-14, and the loop from prediction
+% error to estimates runs at about sqrt(Gamma + Gamma_alpha ||eta||^2) rad/s:
+% about 4 rad per 1 ms sample at the defaults, past the RK4 advance's
+% stability limit (see ch4_l1_deriv). Hold eta at ||eta|| = 13 with zero
+% velocity (so F eta = 0), let the plant's input cancel a constant theta, start
+% the estimates at zero, and advance half a second. Uncapped, theta_hat must
+% never settle; with p.l1.alpha_regressor_rate = 1 it must settle on theta.
+p10 = p; p10.l1.predictor = 'plant';
+theta10 = [40; -25; 10; 30];
+eta10   = [13/2 * ones(ny,1); zeros(ny,1)];       % ||eta|| = 13, ydot = 0
+T10 = p10.control_dt; K10 = round(0.5 / T10);
+th_peak = zeros(1, 2); th_rms = zeros(1, 2); phi10 = zeros(1, 2);
+for mode = 1:2
+    pm = p10; pm.l1.alpha_regressor_rate = (mode == 2) * 1;
+    om = ch4_l1_opts(pm);
+    phi10(mode) = min(norm(eta10), om.phi_max);
+    xi  = ch4_l1_state('init', pm, eta10);
+    smp = struct('eta', eta10, 'eta_next', eta10, 'mu', -theta10, 'mu1_hat', []);
+    err = nan(1, K10);
+    for k = 1:K10
+        xi  = ch4_l1_advance(xi, smp, clf, pm, T10);
+        s10 = ch4_l1_state('unpack', pm, xi);
+        th  = s10.alpha_hat * phi10(mode) + s10.beta_hat;
+        th_peak(mode) = max(th_peak(mode), norm(th));
+        err(k) = norm(th - theta10) / norm(theta10);
+    end
+    th_rms(mode) = sqrt(mean(err(end-99:end).^2));
+end
+% The uncapped loop may go all the way to non-finite (the predictor and filter
+% states are not clamped, only the estimates), which counts as not settling.
+settled = isfinite(th_rms) & th_rms < 1e-3;
+ok10 = th_peak(1) > 20 * norm(theta10) && ~settled(1) && settled(2);
+fprintf(['  [%s] %-30s ||eta|| = 13: uncapped peak ||theta_hat|| %.0f, ' ...
+         'late error %.1f (NaN = diverged); capped (phi %.2f) late error %.1e\n'], ...
+        tf(ok10), 'estimator loop at large eta', th_peak(1), th_rms(1), ...
+        phi10(2), th_rms(2));
+pass = pass && ok10;
 
 fprintf('--- ch4_test_l1: %s ---\n\n', tf(pass));
 end

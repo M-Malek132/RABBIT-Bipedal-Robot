@@ -109,6 +109,10 @@ p.uncertainty = struct('mass_scale', 1.0, ...
 % this range. Empty disables the redraw and load_mass stays fixed.
 p.load_random_range = [];        % e.g. [0 30] for the Fig. 4.11a experiment
 
+% Seed of that redraw. Every controller in a comparison sees the same sequence;
+% changing the seed is how a result is checked against more than one sequence.
+p.load_seed = 11;
+
 %% --------------------------------------------- robust CLF-QP (Section 4.1)
 % Bounds (4.10) on the induced uncertainty (4.4).  These are bounds on the
 % I/O-LINEARIZED uncertainty, not on the mass error: Delta1 has units of
@@ -241,6 +245,17 @@ p.l1.predictor_rate = 800;
 % (25 steps, eps 0.20) -- at Gamma = 1e4 'l1' fell at 1.5x in step 10 with
 % beta alone and walked all 25 steps at max||eta|| 2.5 with both.
 p.l1.Gamma_alpha = [];
+
+% CAP ON alpha's REGRESSOR, as the fastest the estimator loop may run [rad per
+% control sample]; 0 or [] for no cap, the law as written. See ch4_l1_deriv.
+%
+% OFF BY DEFAULT BECAUSE IT TRADES, measured over 60-120 steps at 1 kHz (plain
+% l1 at 1.5x; l1_con at 1, 0.7, 1.5, 46 kg and four random 0-70 kg sequences):
+% runs falling, of nine -- 5 uncapped, 3 at 1.5, 2 at 1, 1 at 0.5 -- while at
+% 0.5 l1_con's error at 1.5x rises from 2.0-4.5 to 6.0-7.4 per 10-step block
+% and the random-load runs that survive pass through excursions to
+% max||eta|| 18-48. CH4_UNCERTAINTY.md §5a has the rest.
+p.l1.alpha_regressor_rate = 0;
 
 % WHAT 'l1_con' CONSTRAINS.  false: Section 4.2.3 as written -- the torque box
 % on mu1 alone, no contact rows, so mu2 is applied outside every constraint.

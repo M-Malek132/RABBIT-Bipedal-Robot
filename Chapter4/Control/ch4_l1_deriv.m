@@ -77,6 +77,33 @@ function [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %    to. Gamma_alpha = 0 freezes alpha_hat at its initial zero and leaves beta
 %    to carry theta, which (4.17) says it can.
 %
+%    THE PARAMETRIZATION (4.17) IS REDUNDANT, and the adaptation cannot see the
+%    redundancy: while ||eta|| stays near a value m, every pair with
+%    alpha m + beta = theta estimates theta equally well, so nothing holds the
+%    split. Over long runs alpha_hat and beta_hat drift into near-opposite
+%    directions (median cosine -0.9 at 0.7x and 1.5x) and alpha_hat presses its
+%    projection bound. That drift is real but it is a symptom, not what makes
+%    L1 fall: leaking alpha_hat back to zero (2-50 /s), or keeping theta_hat
+%    continuous across footstrikes, made the long runs fall sooner.
+%
+%    AND AN OPTIONAL CAP ON ITS REGRESSOR, p.l1.alpha_regressor_rate = kappa:
+%    in pieces 1 and 3, ||eta|| is replaced by phi = min(||eta||, phi_max), the
+%    same phi in both, so (4.24)-(4.31) go through unchanged and (4.17) still
+%    holds as an existence statement (any bounded phi admits some alpha, beta).
+%
+%    What does make L1 fall is the estimator loop's speed against the sample
+%    rate. Under 'plant' the coupled prediction error and estimates oscillate at
+%    about sqrt(Gamma + Gamma_alpha phi^2) rad/s, so alpha's share grows with
+%    the tracking error. After a bad footstrike ||eta|| reaches 12-14: about
+%    4100 rad/s at the defaults, 4.1 rad per 1 ms sample, past the RK4 advance's
+%    stability limit (about 2.8) and past what a 1 kHz loop can realize. In the
+%    three long-run L1 falls re-simulated sample by sample, theta_hat reached
+%    ~2700-2900 within 1-3 samples of such an impact, against a true theta of
+%    30-300, and the step collapsed. At a 0.5 ms control period, with no cap,
+%    most of the long-run falls do not happen. ch4_l1_opts turns kappa into
+%    phi_max = sqrt((kappa/dt)^2 - Gamma) / sqrt(Gamma_alpha); capping removes
+%    most falls at 1 kHz too, at a price in tracking (see ch4_params).
+%
 % 4. LOW-PASS FILTER (4.23)
 %
 %       mu2_dot = omega_c (-theta_hat - mu2)      i.e.  mu2 = -C(s) theta_hat
@@ -110,7 +137,7 @@ o  = ch4_l1_opts(p);
 s  = ch4_l1_state('unpack', p, xi);
 
 eta     = sig.eta;
-nrm_eta = norm(eta, 2);
+nrm_eta = min(norm(eta, 2), o.phi_max);     % alpha's regressor, capped
 
 % --- 1. estimated uncertainty --------------------------------------------
 theta_hat = s.alpha_hat * nrm_eta + s.beta_hat;

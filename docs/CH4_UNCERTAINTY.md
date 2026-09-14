@@ -803,7 +803,41 @@ everything, by drawing 2–3.5× the peak torque.
 So the thesis's load claim survives its own horizon here, not a longer one. An
 estimate pinned at its projection bound is also what preceded plain `l1`'s fall
 at ×1.5. Larger balls are not the fix: at ten times the size, the random case
-fell by step 17.
+fell by step 17. The other sequences are `p.load_seed` 1, 2 and 3; the default,
+11, is the sequence the load study draws.
+
+### Why L₁ falls in the long runs, and what does not fix it
+
+**The drift is real but it is a symptom.** θ̂ = α̂‖η‖ + β̂ is redundant: while
+‖η‖ stays near a value, every split of θ between α̂ and β̂ predicts equally well,
+so nothing holds the split. Over long runs the two estimates drift into
+near-opposite directions (median cosine −0.91 at ×0.7 and −0.95 at ×1.5), and
+α̂ presses its projection bound.
+
+**The falls are the estimator loop outrunning the sample rate.** Three of the
+five long-run L₁ falls were re-simulated sample by sample (plain `l1` at ×1.5 in
+step 76, `l1_con` under two random load sequences). Each starts within a few
+milliseconds of a footstrike that leaves ‖η‖ at 12–14. The prediction-error loop
+runs at about √(Γ + Γ_α‖η‖²) rad/s, which at ‖η‖ = 13 is about 4100 rad/s:
+4.1 rad per 1 ms sample, past the RK4 advance's stability limit of about 2.8.
+Within 1–3 samples θ̂ reaches about 2700–2900 against a true θ of 30–300, the
+adaptive torque swamps the QP, and the step collapses. `ch4_test_l1` check 10
+isolates the loop at ‖η‖ = 13.
+
+What was tried, over the nine long runs above: 60 steps of `l1_con` at ×1, ×0.7,
+×1.5 and 46 kg, 120 steps of `l1` at ×1.5, and the four random load sequences.
+
+| change | runs that fall, of 9 | what it costs |
+|---|---|---|
+| none | 5 | — |
+| leakage pulling α̂ to zero, 2 / 10 / 50 /s | 6 / 3 / 3 | `l1_con` at ×1.5 falls in steps 14–19 at every rate: at ×1.5 α̂ does real work within a step |
+| θ̂ kept continuous across footstrikes / θ̂ folded into β̂ there | 6 / 4 | continuity drops ×0.7 in step 6 |
+| cap on α's regressor, 1.5 / 1 / 0.5 rad per sample | 3 / 2 / 1 | at 0.5, `l1_con` at ×1.5 tracks at max‖η‖ 6.0–7.4 per block instead of 2.0–4.5, and the random-load runs that survive pass through excursions to 18–48 |
+| 0.5 ms control period, no cap (6 of the 9 runs) | 1 of 6 | plain `l1` at ×1.5 walks 120 flat steps; `l1_con` at ×1.5 takes a transient to 19; twice the runtime |
+
+The regressor cap stays in the code as `p.l1.alpha_regressor_rate`, off by
+default. The leakage and footstrike variants were removed after these runs.
+Every other result in this section runs the uncapped law at 1 kHz.
 
 **Beyond the lightest load, L₁ does not track better than the unconstrained
 baseline:**
