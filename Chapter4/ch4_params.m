@@ -263,6 +263,16 @@ p.l1.alpha_regressor_rate = 0;
 % runs faster than the rate while theta_hat keeps alpha_hat*||eta|| in full.
 % At or below sqrt(Gamma)*dt (0.32 here) it is the textbook form
 % m^2 = 1 + (Gamma_alpha/Gamma) ||eta||^2. See ch4_l1_deriv.
+%
+% OFF BY DEFAULT, THOUGH IT IS THE BEST 1 kHz REMEDY MEASURED, over the cap's
+% nine long runs plus six more random 0-70 kg sequences (seeds 4-9): runs
+% falling, of 15 -- 9 as written, 4 with the cap at 0.5, 1 at 0.75, 2 at 1.
+% It is a window: at 0.5, 1.5 and 2 two of the first nine fall again, and the
+% textbook form loses seven of them. At 0.75 'l1_con' at 1.5x keeps its
+% typical step (median per-step max||eta|| 2.15, against 1.85 as written and
+% 4.44 capped), but random-load runs can pass through excursions to
+% max||eta|| ~50. A 0.5 ms control period without it fell in 1 of 12 and
+% tracked flatter. CH4_UNCERTAINTY.md §5a has the tables.
 p.l1.normalized_rate = 0;
 
 % WHAT 'l1_con' CONSTRAINS.  false: Section 4.2.3 as written -- the torque box

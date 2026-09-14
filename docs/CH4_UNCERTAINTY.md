@@ -834,10 +834,48 @@ What was tried, over the nine long runs above: 60 steps of `l1_con` at ×1, ×0.
 | θ̂ kept continuous across footstrikes / θ̂ folded into β̂ there | 6 / 4 | continuity drops ×0.7 in step 6 |
 | cap on α's regressor, 1.5 / 1 / 0.5 rad per sample | 3 / 2 / 1 | at 0.5, `l1_con` at ×1.5 tracks at max‖η‖ 6.0–7.4 per block instead of 2.0–4.5, and the random-load runs that survive pass through excursions to 18–48 |
 | 0.5 ms control period, no cap (6 of the 9 runs) | 1 of 6 | plain `l1` at ×1.5 walks 120 flat steps; `l1_con` at ×1.5 takes a transient to 19; twice the runtime |
+| normalized adaptation, textbook form (loop held at √Γ, 0.32 rad per sample) | 7 | falls where the law as written walks: ×1.5 in step 37, 46 kg in step 4 |
+| normalized adaptation, ceiling 0.5 / 0.75 / 1 / 1.5 / 2 rad per sample | 2 / 0 / 0 / 2 / 2 | at 0.75 and 1, `l1_con` at ×1.5 has a typical step (median per-step max‖η‖) of 2.15 / 2.39 against 1.85 as written (4.44 with the cap at 0.5); at 1 it takes a transient to 16.5 |
 
-The regressor cap stays in the code as `p.l1.alpha_regressor_rate`, off by
-default. The leakage and footstrike variants were removed after these runs.
-Every other result in this section runs the uncapped law at 1 kHz.
+**Normalized adaptation** (`p.l1.normalized_rate`, `ch4_l1_deriv`) divides both
+adaptation laws by m² = max(1, (Γ + Γ_α‖η‖²)/(κ/Δt)²). That holds the
+estimator loop at no more than κ rad per sample, while θ̂ keeps α̂‖η‖ in full
+and the law is unchanged wherever the loop was already slower. `ch4_test_l1`
+check 11 holds check 10's error and shows it settling at κ = 1 and in the
+textbook form. On the robot it works as a window. The textbook form, which holds the loop at √Γ at every error, makes
+the loop overdamped under the predictor rate a = 800 and slows the estimate
+in ordinary walking: in the runs with uncertainty the median per-step peak of
+m² runs 8–53. At 1.5 and 2
+normalization rarely engages, and the falls return in runs that fell as
+written. The limit that matters in closed loop, about 1 rad per sample, is
+well under the RK4 advance's own 2.8; this analysis does not derive it.
+
+**Out of sample.** κ was picked on the nine runs above, so the candidates were
+rerun on six further 0–70 kg sequences (`p.load_seed` 4–9, `l1_con`, 60 steps):
+
+| six new random-load sequences | falls | typical step, median per-step max‖η‖ | largest max‖η‖, runs that walk |
+|---|---|---|---|
+| law as written | 4 (steps 21, 32, 47, 49) | 2.92–3.76 | 7.5–7.8 |
+| cap on α's regressor, 0.5 | 3 (steps 24, 30, 44) | 3.35–7.96 | 12.8–39.9 |
+| normalized, 0.75 | 1 (step 52) | 3.34–5.53 | 7.9–49.8 |
+| normalized, 1 | 2 (steps 11, 44) | 3.28–3.92 | 7.7–26.7 |
+| 0.5 ms control period, neither | 0 | 3.11–3.37 | 7.1–16.0 |
+
+- **Across all fifteen long runs, normalization at 0.75 falls once**, against 9
+  as written and 4 with the cap. The one fall is seed 6, which the law as
+  written walks, and which brings down all three 1 kHz limits tried on it.
+  Both kinds of limit slow the estimator most when the error is largest,
+  which is also when a changed load has to be learned. That is the likely
+  reason; it has not been checked sample by sample.
+- **What survives is not always clean.** Two of the new sequences pass
+  through excursions to max‖η‖ 20–50 at 0.75 and still walk.
+- **Only the faster loop is both safe and flat.** At 0.5 ms the law as written
+  fell once in twelve runs and never left max‖η‖ 16 on the new sequences.
+
+The regressor cap and normalization stay in the code as
+`p.l1.alpha_regressor_rate` and `p.l1.normalized_rate`, both off by default.
+The leakage and footstrike variants were removed after these runs. Every
+other result in this section runs the law as written at 1 kHz.
 
 **Beyond the lightest load, L₁ does not track better than the unconstrained
 baseline:**
