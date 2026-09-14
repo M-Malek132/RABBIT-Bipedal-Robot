@@ -46,6 +46,15 @@ function C = ch4_compare_controllers(x0, alpha, p, preset, opts)
 %           rclfqp_con in step 1, while at the 195 Nm floor both walk all
 %           three. Pass opts.u_box to fix the boxes by hand instead.
 %
+% 'case4'   Section 4.1.4's Case IV: the same three controllers at mass scale 3,
+%           boxes measured by the same rule. It is a separate preset because it
+%           needs separate BOUNDS. For a uniform scale s, ||Delta2|| is exactly
+%           |1/s - 1| -- 2/3 at s = 3, against 3/7 for the worst of Cases I-III
+%           -- so bounds sized for Cases I-III leave Case IV outside the robust
+%           law's own hypothesis, while sizing every case for Case IV would make
+%           Cases I-III measure a law tuned for a perturbation they never face.
+%           ch4_main runs it with bounds measured at scale 3.
+%
 % READ Vend/Vmx LOOSELY FOR 'rclfqp_con' WITH p.rclf.boundary_layer = 0. The
 % exact law's worst-case term chatters at the sample rate (see
 % ch4_ctrl_rclf_qp), so V at the final sample lands anywhere in an
@@ -88,17 +97,19 @@ function C = ch4_compare_controllers(x0, alpha, p, preset, opts)
 % Inputs
 %   x0, alpha : an optimized gait (ch3_col_unpack of a solved z)
 %   p         : parameter struct
-%   preset    : 'robust' (default) or 'l1'
+%   preset    : 'robust' (default), 'case4' or 'l1'
 %   opts      : struct overriding .controllers .scales .u_box .box_frac
-%               .n_steps .verbose .store_traj. u_box = [] (the 'robust'
-%               default) measures the boxes as above; a scalar or one value
-%               per scale fixes them.
+%               .n_steps .verbose .store_traj. u_box = [] (the 'robust' and
+%               'case4' default) measures the boxes as above; a scalar or one
+%               value per scale fixes them.
 %
 % Output
 %   C : struct array, one entry per (controller, scale), with
 %         .name .mass_scale .u_box .steps_completed .peak_torque
 %         .box_violation .max_eta .final_eta .V0 .Vend .V_ratio
 %         .delta_max .qp_infeasible .int_u2 .Fz_min .grf_pred_error .reason
+%         .step_T .step_L   duration [s] and length [m] of each completed step,
+%                           so whether a run slows down can be read directly
 %         .traj (t, y, u, V, theta_hat) when opts.store_traj
 %
 % See also CH4_SIMULATE, CH4_FORCES, CH4_PLOT_UNCERTAINTY, CH3_COMPARE_CONTROLLERS.
@@ -111,6 +122,11 @@ switch lower(preset)
         % u_box empty = measured per case from controller A, see the header.
         def = struct('controllers', {{'clfqp', 'clfqp_con', 'rclfqp_con'}}, ...
                      'scales',      [1 1.5 0.7], ...
+                     'u_box',       []);
+    case 'case4'
+        % Case IV alone. p must carry bounds that cover it -- see the header.
+        def = struct('controllers', {{'clfqp', 'clfqp_con', 'rclfqp_con'}}, ...
+                     'scales',      3, ...
                      'u_box',       []);
     case 'l1'
         % The box comes from p, not from a constant here: ch4_load_gait has
@@ -125,7 +141,7 @@ switch lower(preset)
                      'u_box',       []);
     otherwise
         error('ch4_compare_controllers:preset', ...
-              'Unknown preset "%s" (expected robust|l1).', preset);
+              'Unknown preset "%s" (expected robust|case4|l1).', preset);
 end
 
 def.box_frac   = 0.8;
@@ -173,13 +189,24 @@ C = struct('name', {}, 'mass_scale', {}, 'u_box', {}, 'steps_completed', {}, ...
            'peak_torque', {}, 'box_violation', {}, 'max_eta', {}, ...
            'final_eta', {}, 'V0', {}, 'Vend', {}, 'V_ratio', {}, ...
            'delta_max', {}, 'qp_infeasible', {}, 'int_u2', {}, ...
-           'Fz_min', {}, 'grf_pred_error', {}, 'reason', {}, 'traj', {});
+           'Fz_min', {}, 'grf_pred_error', {}, 'reason', {}, ...
+           'step_T', {}, 'step_L', {}, 'traj', {});
 
 if opts.verbose
     fprintf('\n%s\n CHAPTER 4 -- preset "%s", %d steps per run\n', ...
             repmat('=',1,105), preset, opts.n_steps);
     fprintf(' robust bounds: delta1_max %.1f, delta2_max %.3f (%s model)\n', ...
             p.rclf.delta1_max, p.rclf.delta2_max, p.rclf.delta2_model);
+    % A pure mass scale fixes ||Delta2|| = |1/s - 1| exactly, so a robust law
+    % about to run outside its own bound can be named before it runs.
+    if any(strncmpi(names, 'rclfqp', 6)) && p.uncertainty.load_mass == 0
+        [d2_need, iw] = max(abs(1 ./ scales - 1));
+        if p.rclf.delta2_max < d2_need
+            fprintf([' NOTE: delta2_max %.3f is below ||Delta2|| = %.3f at ' ...
+                     'scale %.2g: the robust law runs there outside its own ' ...
+                     'hypothesis.\n'], p.rclf.delta2_max, d2_need, scales(iw));
+        end
+    end
     fprintf(' L1: Gamma %.0e, filter %.0f rad/s, sample %.0f Hz\n', ...
             p.l1.Gamma, p.l1.omega_c, 1/p.control_dt);
     if measure_box
@@ -271,7 +298,9 @@ entry = struct('name', name, 'mass_scale', scale, ...
                'V0', NaN, 'Vend', NaN, 'V_ratio', NaN, ...
                'delta_max', NaN, 'qp_infeasible', NaN, ...
                'int_u2', NaN, 'Fz_min', NaN, 'grf_pred_error', NaN, ...
-               'reason', sim.reason, 'traj', []);
+               'reason', sim.reason, ...
+               'step_T', [sim.steps.T], 'step_L', [sim.steps.L_step], ...
+               'traj', []);
 
 if sim.n_ok == 0, return; end
 

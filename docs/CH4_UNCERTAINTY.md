@@ -397,7 +397,8 @@ Pipeline:
 |---|---|---|
 | 0 | `ch4_load_gait` — **refuses a gait that is not an orbit of today's dynamics** | — |
 | 1 | `ch4_delta_bounds` — **measure, then adopt** | (4.4), (4.10) |
-| 2 | `ch4_compare_controllers(..., 'robust')` | §4.1.4 |
+| 2 | `ch4_compare_controllers(..., 'robust')` | §4.1.4, Cases I–III |
+| 2b | `ch4_compare_controllers(..., 'case4')`, with its own bounds | §4.1.4, Case IV (Fig 4.5) |
 | 3 | `ch4_compare_controllers(..., 'l1')` | §4.2.4 |
 | 4 | `ch4_plot_uncertainty` | Figs 4.2–4.10 |
 | 5 | `ch4_animate` | — |
@@ -410,20 +411,26 @@ Stage 1 is not optional and comes first: a robust controller run outside its own
 bound is not a robust controller, it is an aggressive one. Its result is also
 what runs. Unless you pass `rclf.delta1_max` / `rclf.delta2_max`, `ch4_main` sets
 the bounds to 1.2× the Cases I–III maxima measured along a nominal rollout of
-the loaded gait. Case IV (scale 3) is measured and printed but not folded in,
-since it would size the robust law for a perturbation the sweeps never apply.
+the loaded gait. Case IV (scale 3) is not folded in, since it would size the
+robust law for a perturbation Cases I–III never apply. It runs as its own sweep
+(stage 2b) with bounds measured the same way at scale 3: Δ₁max = 434.2 and
+Δ₂max = 0.800. For a uniform scale ‖Δ₂‖ = |1/s − 1| exactly, so at s = 3 it is
+2/3, and the Cases I–III bound of 0.514 would run Case IV outside the law's own
+hypothesis. `ch4_compare_controllers` prints a note whenever a robust law is
+about to do that.
 
 **The sweeps run 25 steps.** Three steps — the horizon of the thesis's
 Figs 4.2–4.4 — separate a controller that falls at once from one that does not,
 but not one that converges from one that drifts. At the old ε = 0.35 every
 three-step row of the robust law looked converged, and over 25 steps it fell in
 step 21 of Case I with a perfect model. 25 is also Fig. 4.6's horizon. The full
-study takes about ten minutes at 1 kHz, and `n_steps` = 3 gives the thesis-style
-figures. The GIFs keep their own `anim_steps` (default 4), because a GIF is a
-fixed 150 frames.
+study takes about ten minutes at 1 kHz plus about two for Case IV, and
+`n_steps` = 3 gives the thesis-style figures. The GIFs keep their own
+`anim_steps` (default 4), because a GIF is a fixed 150 frames.
 
 ```matlab
 ch4_main('n_steps', 3)                      % thesis-style three-step figures
+ch4_main('presets', {'case4'}, 'animate', false)   % Case IV alone
 ch4_main('presets', {'l1'}, 'n_steps', 5)
 ch4_main('rclf.delta2_model', 'matrix')     % nested fields take dotted names
 ch4_main('rclf.boundary_layer', 0)          % the exact robust law, chatter included
@@ -519,7 +526,8 @@ collocation residuals re-evaluated on today's dynamics are 7.6e-7 (defect),
 at 1 kHz, `Δ₁max = 279.1` and `Δ₂max = 0.514` (measured along a nominal rollout,
 ×1.2), robust boundary layer κ = 1. L₁ with the three fixes of §4: plant-input
 predictor at a = 800, Γ = 1e5, both estimates, rows on the applied torque. Result
-set `Results/ch4_{robust,l1}_2026-09-13_20-45-50/`.
+set `Results/ch4_{robust,l1}_2026-09-13_20-45-50/`, and for Case IV, with its own
+bounds, `Results/ch4_case4_2026-09-14_13-50-53/`.
 
 Each cell reads **steps · max‖η‖ · min Fz** over the whole run. A fall is named
 by the step `ch4_simulate` rejected.
@@ -549,7 +557,7 @@ peak starts about two orders of magnitude below both baselines' and is still
 rule reads A's peak over the run, 1372 Nm over 25 steps.
 
 **Its convergence is not unchanged, though, and Remark 4.7 holds only early.**
-The robust law's per-step V peak still grows across the run:
+The robust law's per-step V peak grows across the sweep's 25 steps:
 
 | case | V peak, step 1 → step 25 |
 |---|---|
@@ -566,6 +574,30 @@ vanishes with D₁ = 0, so it comes from the robust term itself. The gait is not
 `posture_195`'s hybrid zero dynamics are stable, δ²_zero = 0.746. At ε = 0.20
 the growth is slower, not gone.
 
+**The growth levels off.** Run past the sweep's horizon, with each case's own
+bounds and box, the robust law settles within 30–50 steps onto a bounded
+plateau. It keeps walking at nominal speed, and no case falls:
+
+| case | steps run | plateau: mean per-step V peak · max‖η‖ | settled by | speed, last 10 steps |
+|---|---|---|---|---|
+| ×1 (perfect model) | 60 | 0.065 · 1.7 | step ~45 | 1.548 m/s |
+| ×0.7 | 60 | 0.63–0.74 · 5.5 | step ~30 | 1.552 m/s |
+| ×1.5 | 60 | 0.86 · 5.6 | step ~35 | 1.575 m/s |
+| ×3 (Case IV) | 120 | 2.9–3.0 · 10.9 | step ~50 | 1.563 m/s |
+
+So the drift is a transient toward ultimate boundedness, not a divergence. The
+25-step maxima of 4.1 and 4.4 above are on their way to 5.6 and 5.5. Two things
+follow:
+
+- **Remark 4.6 does not hold in the long run.** The steady error grows with the
+  perturbation (1.7 / 5.5 / 5.6 / 10.9), though gracefully. Even the 60-step
+  maxima under perturbation stay below what the baselines reach within 25 steps
+  (14.5–16.6).
+- **The price of robustness is a steady error with a perfect model.** In Case I
+  the robust law settles at max‖η‖ 1.7, against A's 0.25 over 25 steps.
+  Remark 4.7's advantage is lost by step 10 and does not return within 60
+  steps.
+
 **The robust law's three cases walk one orbit.** Figure 4 is the analogue of
 Fig. 4.6: 25 steps of each controller in each case. The thesis describes three
 different orbits there. Here the robust law's three cases lie on top of each
@@ -577,6 +609,46 @@ virtual constraints walks the nominal orbit whatever s is.
 The baselines' orbits do move, by up to about 6° of torso pitch at ×1.5. That
 displacement is their tracking error, not a new orbit of the robot. Only the
 torso-load study, which changes M non-uniformly, can move the orbit itself.
+
+### §4.1.4, Case IV — the robust law survives ×3 where both baselines fall, and does not stop
+
+Case IV runs as its own sweep with bounds measured at scale 3, ×1.2:
+`Δ₁max = 434.2` and `Δ₂max = 0.800`, against an exact ‖Δ₂‖ of 2/3. The box
+follows the same rule: 0.8 × A's 2243 Nm peak = 1794 Nm. The thesis used 300 Nm
+on its 32 kg robot. Figures 2 and 3 of the result set are Fig. 4.5.
+
+| controller | Case IV, ×3 (box 1794 Nm) |
+|---|---|
+| A `clfqp` | **falls in step 4** · 19.6 · 5 N |
+| B `clfqp_con` | **falls in step 4** · 20.2 · 142 N |
+| **C `rclfqp_con`** | 25 · **1.86** · 96 N |
+
+**A and B fail as the thesis says.** Both take three steps whose durations
+collapse (0.26 s, then 0.14 and 0.12–0.13 s) while V climbs to 28–30. Their
+fourth step is shorter than the 0.15 m floor.
+
+**C regulates the outputs with a slight degradation, as the thesis says — over
+the sweep's 25 steps.**
+
+- **Tracking:** max‖η‖ 1.86, against 1.13 in Case I.
+- **Contact and torque:** the true normal force stays ≥ 96 N, the torque peaks
+  at 1243 Nm so the box never binds, and no QP fails.
+- **Residual error:** output y₂ holds a steady offset of 1.5–2°, and the torso
+  cycle settles about 1° lower in pitch than the nominal one (Figure 4, and
+  0.46–3.59° over the last five steps against 1.69–4.55°). That is tracking
+  error, since a uniform scale cannot move the orbit.
+
+**It does not slow to a stop.** The thesis reports walking that "slows down after
+several steps to a complete stop", which it attributes to an unstable orbit. C
+averages 1.576 m/s over the first three steps and 1.541 m/s over the last five,
+against a nominal 1.563, and a 120-step run is still at 1.563 m/s. The orbit
+explanation cannot apply to this model. A uniform mass scale leaves the hybrid
+zero dynamics exactly invariant, and `posture_195`'s are stable.
+
+**Past step 25 the degradation stops being slight.** Between steps 25 and 50,
+C's max‖η‖ grows to about 10.9, and it holds there to step 120 (the plateau
+table above). So at ×3 the robust law walks indefinitely, with a steady error
+about twice the ×0.7 and ×1.5 plateaus.
 
 ### §4.2.4 — with the three fixes, L₁ holds its convergence where the baseline does not
 
@@ -752,8 +824,8 @@ Chapter4/
     ch4_forces.m            torques, TRUE forces, estimator signals
     ch4_report.m            one controller vs one perturbed model
     ch4_run_params.m        one comparison run's params: law, perturbation, box, rows
-    ch4_compare_controllers.m   the §4.1.4 / §4.2.4 sweeps; measures the robust boxes
-    ch4_plot_uncertainty.m  Figs 4.2, 4.3, 4.4, 4.6, 4.8, 4.9, 4.10
+    ch4_compare_controllers.m   the §4.1.4 (Cases I-III, Case IV) / §4.2.4 sweeps; measures the robust boxes
+    ch4_plot_uncertainty.m  Figs 4.2, 4.3, 4.4, 4.5, 4.6, 4.8, 4.9, 4.10
     ch4_animate.m           controllers racing on one perturbed robot
   Test/
     ch4_test_model.m        true-vs-nominal split and the Δ terms
