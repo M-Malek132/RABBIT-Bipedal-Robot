@@ -1,11 +1,12 @@
-function [xidot, d] = ch4_l1_deriv(xi, eta, mu1, mu1_hat, clf, p)
+function [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %CH4_L1_DERIV  Time derivative of the L1 controller state.
 %
-%   [xidot, d] = ch4_l1_deriv(xi, eta, mu1, mu1_hat, clf, p)
+%   [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %
 % The four coupled pieces of Section 4.2.2, in one place so that the control
 % law (ch4_ctrl_l1) and the sampled-data advance (ch4_l1_advance) cannot drift
-% apart.
+% apart. p.l1.predictor selects between two state predictors (piece 2); the
+% other three pieces are shared.
 %
 % 1. UNCERTAINTY PARAMETRIZATION (4.17), (4.20)
 %
@@ -16,33 +17,65 @@ function [xidot, d] = ch4_l1_deriv(xi, eta, mu1, mu1_hat, clf, p)
 %    is not restricting what it can represent; it is choosing coordinates in
 %    which the adaptation is linear and the projection bounds are meaningful.
 %
-% 2. STATE PREDICTOR (4.19)
+% 2a. THE THESIS PREDICTOR (4.19), p.l1.predictor = 'thesis'
 %
 %       eta_hat_dot = F eta_hat + G mu1_hat + G (mu2 + theta_hat)
 %
-%    Compare the true transverse dynamics (4.16), eta_dot = F eta + G(mu + theta)
-%    with mu = mu1 + mu2. The predictor is the SAME system with the estimated
-%    uncertainty in place of the real one and its own CLF-QP output mu1_hat in
-%    place of mu1. Subtracting gives (4.24) exactly:
+%    with mu1_hat the CLF-QP solved on eta_hat. Subtracting the true dynamics
+%    (4.16), eta_dot = F eta + G(mu1 + mu2 + theta), gives (4.24) exactly:
 %
 %       eta_tilde_dot = F eta_tilde + G mu1_tilde + G(alpha_tilde||eta|| + beta_tilde)
 %
-%    which is why the prediction error is driven by, and only by, the
-%    estimation error. That is the whole reason the predictor exists: eta_tilde
-%    is measurable, alpha_tilde and beta_tilde are not.
+%    THE STEP FROM (4.24) TO (4.28) DOES NOT FOLLOW. (4.28) needs
+%    F eta_tilde + G mu1_tilde to decrease Peps along eta_tilde. What the two
+%    CLF-QPs guarantee is a decrease along eta and along eta_hat separately, and
+%    the min-norm law is nonlinear, so mu1(eta_hat) - mu1(eta) is not the law
+%    evaluated at eta_tilde. The difference forces eta_tilde exactly as a model
+%    error would, and the adaptation absorbs it. Measured on posture_195 at
+%    eps = 0.35: theta_hat overshot the true theta 3-5x under perturbation, and
+%    matched its size only when a faster reference model (eps = 0.25) shrank
+%    the mismatch.
 %
-% 3. ADAPTATION LAWS (4.26) with the functions (4.30)
+% 2b. THE PLANT-INPUT PREDICTOR, p.l1.predictor = 'plant'
 %
-%       y_alpha = -G' Peps eta_tilde ||eta||,   y_beta = -G' Peps eta_tilde
-%       alpha_hat_dot = Gamma Proj(alpha_hat, y_alpha)
-%       beta_hat_dot  = Gamma Proj(beta_hat,  y_beta)
+%       eta_hat_dot = F eta + G (mu + theta_hat) - a (eta_hat - eta)
 %
-%    These are not free choices. Differentiating the composite Lyapunov
-%    function (4.27) produces the cross term 2 eta_tilde' Peps G (alpha_tilde
-%    ||eta|| + beta_tilde), and (4.30) is exactly the y that cancels it against
-%    the parameter terms, leaving (4.31). G'Peps eta_tilde is recovered here as
-%    LgV(eta_tilde)'/2 from ch3_clf_eval rather than rebuilding Peps, so there
-%    is one definition of Peps in the repository and not two.
+%    with mu = mu1 + mu2 the input the plant actually received and
+%    a = p.l1.predictor_rate. This is the standard L1 state predictor. Against
+%    the true dynamics the F eta and G mu terms cancel identically, leaving
+%
+%       eta_tilde_dot = -a eta_tilde + G (alpha_tilde||eta|| + beta_tilde)
+%
+%    a stable linear system driven by the estimation error and by nothing else.
+%    The reference model is no longer inside the predictor at all: it acts
+%    through mu1 on the real robot, and the predictor only has to explain what
+%    the plant did with the input it was given.
+%
+% 3. ADAPTATION LAWS (4.26)
+%
+%       alpha_hat_dot = Gamma_alpha Proj(alpha_hat, y_beta ||eta||)
+%       beta_hat_dot  = Gamma       Proj(beta_hat,  y_beta)
+%
+%    y is not a free choice: it is the one that cancels the cross term
+%    2 eta_tilde' P G (alpha_tilde||eta|| + beta_tilde) in the composite
+%    Lyapunov function (4.27), with P the matrix that certifies the predictor's
+%    error dynamics:
+%
+%       thesis:  y_beta = -G' Peps eta_tilde    (4.30), Peps from the CLF --
+%                recovered as LgV(eta_tilde)'/2 from ch3_clf_eval, so there is
+%                one definition of Peps in the repository, not two
+%       plant:   y_beta = -G' eta_tilde         P = I, since -aI is its own
+%                Lyapunov certificate: (-aI)'I + I(-aI) = -2aI
+%
+%    Under 'plant' this is the velocity prediction error, and the beta channel
+%    closes a second-order loop s^2 + a s + Gamma: natural frequency
+%    sqrt(Gamma), damping a/(2 sqrt(Gamma)).
+%
+%    ALPHA HAS ITS OWN GAIN, p.l1.Gamma_alpha (empty: Gamma). Its regressor is
+%    ||eta||, so its loop gain is Gamma_alpha*||eta||^2: the alpha channel
+%    stiffens exactly when tracking degrades, which is when it can least afford
+%    to. Gamma_alpha = 0 freezes alpha_hat at its initial zero and leaves beta
+%    to carry theta, which (4.17) says it can.
 %
 % 4. LOW-PASS FILTER (4.23)
 %
@@ -52,50 +85,58 @@ function [xidot, d] = ch4_l1_deriv(xi, eta, mu1, mu1_hat, clf, p)
 %    mu2 -> -theta_hat and the uncertainty is cancelled, which is (4.22).
 %
 %    This filter is the difference between L1 adaptive control and ordinary
-%    fast adaptation. Gamma is deliberately huge, so theta_hat is fast and
+%    fast adaptation. Gamma is deliberately large, so theta_hat is fast and
 %    ragged; feeding it straight to the joints would put that content into the
 %    ground reaction force and lift the foot. The filter separates HOW FAST WE
 %    ESTIMATE from HOW FAST WE ACT, and only the second has to respect the
 %    contact.
 %
 % Inputs
-%   xi       : 5ny x 1 controller state (see ch4_l1_state)
-%   eta      : 2ny x 1 REAL transverse state
-%   mu1      : ny x 1 CLF-QP output for the real system
-%   mu1_hat  : ny x 1 CLF-QP output for the predictor
-%   clf      : struct from ch3_res_clf
-%   p        : parameter struct
+%   xi  : 5ny x 1 controller state (see ch4_l1_state)
+%   sig : struct of what the controller sees at this instant --
+%           .eta      2ny x 1 REAL transverse state
+%           .mu       ny x 1  input the plant received, mu1 + mu2 ('plant')
+%           .mu1_hat  ny x 1  CLF-QP output for the predictor ('thesis')
+%   clf : struct from ch3_res_clf
+%   p   : parameter struct
 %
 % Outputs
 %   xidot : 5ny x 1
 %   d     : struct .theta_hat .eta_tilde .y_alpha .y_beta, for analysis
 %
-% See also CH4_CTRL_L1, CH4_L1_ADVANCE, CH4_PROJ, CH4_L1_STATE.
+% See also CH4_CTRL_L1, CH4_L1_ADVANCE, CH4_L1_OPTS, CH4_PROJ, CH4_L1_STATE.
 
-ny = p.ny;
+o  = ch4_l1_opts(p);
 s  = ch4_l1_state('unpack', p, xi);
 
+eta     = sig.eta;
 nrm_eta = norm(eta, 2);
 
 % --- 1. estimated uncertainty --------------------------------------------
 theta_hat = s.alpha_hat * nrm_eta + s.beta_hat;
-
-% --- 2. state predictor ---------------------------------------------------
-eta_hat_dot = clf.F * s.eta_hat + clf.G * mu1_hat + clf.G * (s.mu2 + theta_hat);
-
-% --- 3. adaptation --------------------------------------------------------
 eta_tilde = s.eta_hat - eta;
 
-[~, ~, LgV_t] = ch3_clf_eval(eta_tilde, clf, p.eps);
-GP_eta_tilde  = LgV_t.' / 2;                 % = G' Peps eta_tilde   (ny x 1)
+% --- 2. state predictor, and the P that certifies its error ---------------
+switch o.predictor
+    case 'thesis'
+        eta_hat_dot = clf.F * s.eta_hat + clf.G * sig.mu1_hat ...
+                      + clf.G * (s.mu2 + theta_hat);
+        [~, ~, LgV_t] = ch3_clf_eval(eta_tilde, clf, p.eps);
+        GP_eta_tilde  = LgV_t.' / 2;          % = G' Peps eta_tilde
+    case 'plant'
+        eta_hat_dot = clf.F * eta + clf.G * (sig.mu + theta_hat) ...
+                      - o.predictor_rate * eta_tilde;
+        GP_eta_tilde  = clf.G.' * eta_tilde;  % = G' eta_tilde   (P = I)
+end
 
-y_alpha = -GP_eta_tilde * nrm_eta;
+% --- 3. adaptation --------------------------------------------------------
 y_beta  = -GP_eta_tilde;
+y_alpha =  y_beta * nrm_eta;
 
-alpha_hat_dot = p.l1.Gamma * ch4_proj(s.alpha_hat, y_alpha, ...
-                                      p.l1.alpha_max, p.l1.proj_eps);
-beta_hat_dot  = p.l1.Gamma * ch4_proj(s.beta_hat,  y_beta,  ...
-                                      p.l1.beta_max,  p.l1.proj_eps);
+alpha_hat_dot = o.Gamma_alpha * ch4_proj(s.alpha_hat, y_alpha, ...
+                                         p.l1.alpha_max, p.l1.proj_eps);
+beta_hat_dot  = o.Gamma       * ch4_proj(s.beta_hat,  y_beta,  ...
+                                         p.l1.beta_max,  p.l1.proj_eps);
 
 % --- 4. low-pass filter ---------------------------------------------------
 mu2_dot = p.l1.omega_c * (-theta_hat - s.mu2);

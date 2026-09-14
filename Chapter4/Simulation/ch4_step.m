@@ -117,6 +117,12 @@ dt = p.control_dt;
 stateful = ch4_is_stateful(p);
 clf      = ch3_res_clf(p);
 
+plant_predictor = false;
+if stateful
+    l1o = ch4_l1_opts(p);
+    plant_predictor = strcmp(l1o.predictor, 'plant');
+end
+
 t_all  = 0;
 X_all  = x0(:);
 XI_all = xi0(:);
@@ -172,9 +178,17 @@ while tk < T_cap - eps(T_cap)
     xk = s.y(:, end);
 
     % ---- advance the controller state over the SAME interval ------------
+    % The plant-input predictor is also told where eta ended up: xk has
+    % already advanced, so sampling it here is what a digital controller
+    % does at t_{k+1}, before it computes the next control (ch4_l1_advance).
     if stateful
-        xik = ch4_l1_advance(xik, ci.eta, ci.l1.mu1, ci.l1.mu1_hat, ...
-                             clf, p, dt_actual);
+        smp = struct('eta', ci.eta, 'eta_next', [], 'mu', ci.mu, ...
+                     'mu1_hat', ci.l1.mu1_hat);
+        if plant_predictor
+            [~, ~, o_next] = ch3_outputs(xk, alpha, p);
+            smp.eta_next   = o_next.eta;
+        end
+        xik = ch4_l1_advance(xik, smp, clf, p, dt_actual);
         XI_all = [XI_all, xik];         %#ok<AGROW>
         t_xi   = [t_xi, tk];            %#ok<AGROW>
     end

@@ -33,15 +33,26 @@ function out = ch4_main(varargin)
 % one particular gait and need not cover another; a sweep that only printed
 % "covers: NO" and ran anyway would certify nothing.
 %
+% THE SWEEPS RUN 25 STEPS, NOT THE THREE THE CHAPTER'S FIGURES SHOW. Three
+% steps is long enough to separate a controller that falls at once from one
+% that does not, and too short to separate one that converges from one that
+% drifts. At the old eps = 0.35 the robust law's three-step rows looked
+% converged in every case, while over 25 steps it fell in step 21 of Case I --
+% with a perfect model. 25 is also the horizon of the chapter's own Fig. 4.6.
+% Pass 'n_steps', 3 for the thesis-style three-step figures.
+%
 % Options (name/value)
 %   'gait'      path to a Chapter-3 result .mat (default ch4_load_gait's)
 %   'presets'   cell of {'robust','l1'} (default both)
-%   'n_steps'   steps per run (default 3, matching the chapter's figures)
+%   'n_steps'   steps per run (default 25; see above)
 %   'plot'      draw and save figures (default true)
 %   'save'      write a .mat of everything (default true)
 %   'animate'   write comparison GIFs (default true)
 %   'anim_scales'      mass scales to animate (default [1.5 0.7])
 %   'anim_controllers' who to race (default clfqp / rclfqp_con / l1)
+%   'anim_steps'       steps per GIF (default 4). Separate from n_steps
+%                      because the GIF is a fixed 150 frames: 26 steps in
+%                      it would be six frames a step.
 %   any ch4_params field, including dotted nested names, e.g.
 %   ch4_main('l1.omega_c', 100, 'rclf.delta2_model', 'matrix')
 %
@@ -52,11 +63,12 @@ function out = ch4_main(varargin)
 
 %% --- split our own options from ch4_params overrides --------------------
 own = {'gait','presets','n_steps','plot','save','animate', ...
-       'anim_scales','anim_controllers'};
-o   = struct('gait', '', 'presets', {{'robust','l1'}}, 'n_steps', 3, ...
+       'anim_scales','anim_controllers','anim_steps'};
+o   = struct('gait', '', 'presets', {{'robust','l1'}}, 'n_steps', 25, ...
              'plot', true, 'save', true, 'animate', true, ...
              'anim_scales', [1.5 0.7], ...
-             'anim_controllers', {{'clfqp','rclfqp_con','l1'}});
+             'anim_controllers', {{'clfqp','rclfqp_con','l1'}}, ...
+             'anim_steps', 4);
 
 pv = {};
 for k = 1:2:numel(varargin)
@@ -216,7 +228,7 @@ if o.animate
         gif = fullfile(results_dir, ...
                        sprintf('ch4_walk_%s_scale%03.0f.gif', stamp, s*100));
         try
-            ch4_animate(x0, alpha, pa, o.anim_controllers, o.n_steps + 1, gif);
+            ch4_animate(x0, alpha, pa, o.anim_controllers, o.anim_steps, gif);
             out.gifs{end+1} = gif;
         catch err
             fprintf(' ch4_animate skipped for scale %.2f: %s\n', s, err.message);

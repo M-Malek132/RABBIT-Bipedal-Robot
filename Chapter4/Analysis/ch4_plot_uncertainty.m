@@ -119,7 +119,13 @@ for ic = 1:nC
     end
 end
 xlabel('q_{torso} (deg)'); ylabel('dq_{torso} (deg/s)');
-title('Torso phase portrait: uncertainty moves the periodic orbit');
+% NOT "uncertainty moves the periodic orbit", which is how Fig. 4.6 reads. A
+% uniform mass scale leaves the hybrid zero dynamics exactly invariant (both
+% halves are asserted in ch4_test_model), so a controller that tracks walks
+% the same orbit in every case, and whatever separates the cases here is
+% tracking error. Only a non-uniform change such as load_mass moves the orbit.
+title('Torso phase portrait');
+subtitle('a uniform mass scale leaves the zero-dynamics orbit unchanged: spread between cases is tracking error');
 legend('Location','best','Interpreter','none');
 figs(end+1) = f4;
 
