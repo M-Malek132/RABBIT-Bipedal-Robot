@@ -709,7 +709,31 @@ default balls `l1_con`'s α estimate presses its ball (‖α̂‖ 208.5 of 210).
 max‖η‖ here is measured on every tenth solver point, hence 4.3 against the
 table's 4.51.
 
-### §4.2.4, Fig 4.11 — L₁ carries 94% of body weight; a box-matched baseline shows it is the adaptation
+**Past 25 steps `l1_con` holds on a mass scale, and plain `l1` does not.** The
+same runs with the same parameters and boxes, extended to 60 steps (120 for
+`l1` at ×1.5). Ranges are over 10-step blocks:
+
+| case | controller | steps | max‖η‖ per block | mean per-step V peak | true contact |
+|---|---|---|---|---|---|
+| ×1 | `l1` / `l1_con` | 60 / 60 | 0.09–0.14 / 0.09–0.15 | ≈ 3e-4, falling slightly | Fz ≥ 50 N |
+| ×0.7 | `l1` | 60 | 3.8–5.5 | 0.15–0.35 | **Fz < 0 on 1.3–2.7% in every block** |
+| ×0.7 | `l1_con` | 60 | 4.2–5.4 | 0.25–0.51 | Fz ≥ 23 N |
+| ×1.5 | `l1` | **falls in step 76** | 2.0–2.2 to step 40, then 3.3, 4.2, 6.5, 9.4 | 0.15 → 2.2 | Fz < 0 on 0–1.4% |
+| ×1.5 | `l1_con` | 60 | 4.5 in steps 1–10, 2.0–2.3 from step 21 | 0.44 → 0.16 | Fz ≥ 90 N |
+
+- **`l1_con` holds its convergence.** It is flat with a perfect model, bounded
+  without a trend at ×0.7, and at ×1.5 its 25-step max of 4.5 turns out to be
+  the early transient: it settles at max‖η‖ ≈ 2.1 from step 21. The true normal
+  force stays positive in every block.
+- **Plain `l1` at ×1.5 fails slowly.** It runs as well as `l1_con` for 40
+  steps. Then its α̂ reaches the projection bound (206 of 210), and the error
+  grows block by block until it falls in step 76. At ×0.7 its demand for a
+  negative normal force is persistent, not a transient.
+- **Even with a perfect model α̂ creeps**, from about 1.6 to 5–6 over 60 steps,
+  absorbing the sample-and-hold error. That is far from its bound, but it does
+  not settle.
+
+### §4.2.4, Fig 4.11 — L₁ carries 94% of body weight for 25 steps where a box-matched CLF-QP cannot, but not for 60
 
 The robot carries a mass at the hip that no controller is told about. It is
 redrawn every step from 0–70 kg (Fig 4.11a), or fixed at 23 / 35 / 46 kg
@@ -752,11 +776,34 @@ force computed under the load each step carried:
 | B `l1` | **falls in step 15** · 8.98 · **−306 N** | 25 · 2.63 · 75 N | 25 · 5.06 · **−164 N** | 25 · 9.23 · **−274 N** |
 | **C `l1_con`** | 25 · 9.06 · 6 N | 25 · **2.41** · 102 N | 25 · 4.86 · **−23 N** | 25 · 5.22 · **−51 N** |
 
-**At the same torque budget, the adaptation is what walks.** `l1_con` completes
-all 25 steps of every case, the random 0–70 kg draw included, which is the
-thesis's claim. `clfqp_con`, with the same box and rows, falls in every case
-within 3–10 steps. The unconstrained `clfqp` also walks everything, by drawing
-2–3.5× the peak torque.
+**Over 25 steps, at the same torque budget, the adaptation is what walks.**
+`l1_con` completes all 25 steps of every case, the random 0–70 kg draw
+included, which is the thesis's claim. `clfqp_con`, with the same box and rows,
+falls in every case within 3–10 steps. The unconstrained `clfqp` also walks
+everything, by drawing 2–3.5× the peak torque.
+
+**Over 60 steps the random load brings `l1_con` down.**
+
+| random 0–70 kg, 60 steps | seed 11 (the draws above) | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|---|
+| `l1_con` (box 556 Nm) | **falls in step 43** | **falls in step 33** | **falls in step 55** | **falls in step 57** |
+| `clfqp` (no box) | 60 | 60 | 60 | 60 |
+
+- **`l1_con` falls under every draw sequence,** and its α̂ sits at the
+  projection bound (≥ 207 of 210) in nearly every 10-step block. The falls
+  follow no single pattern in the load: the steps before them include both
+  drops and rises.
+- **The unconstrained CLF-QP walks all 60 steps of all four sequences,** at
+  max‖η‖ 3.7–12.2 per block. Over the first 25 steps it drew 2–3 times
+  `l1_con`'s torque.
+- **Under the fixed 46 kg load `l1_con` holds for 60 steps** (max‖η‖ 4.2–5.2
+  per block, true Fz negative on 0.07% of two blocks' samples), but also with
+  α̂ at its bound.
+
+So the thesis's load claim survives its own horizon here, not a longer one. An
+estimate pinned at its projection bound is also what preceded plain `l1`'s fall
+at ×1.5. Larger balls are not the fix: at ten times the size, the random case
+fell by step 17.
 
 **Beyond the lightest load, L₁ does not track better than the unconstrained
 baseline:**
