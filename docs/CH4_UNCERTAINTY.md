@@ -400,7 +400,8 @@ Pipeline:
 | 2 | `ch4_compare_controllers(..., 'robust')` | §4.1.4, Cases I–III |
 | 2b | `ch4_compare_controllers(..., 'case4')`, with its own bounds | §4.1.4, Case IV (Fig 4.5) |
 | 3 | `ch4_compare_controllers(..., 'l1')` | §4.2.4 |
-| 4 | `ch4_plot_uncertainty` | Figs 4.2–4.10 |
+| 3b | `ch4_load_study` — an unknown torso load, random and fixed | §4.2.4 (Fig 4.11) |
+| 4 | `ch4_plot_uncertainty`, `ch4_plot_load` | Figs 4.2–4.11 |
 | 5 | `ch4_animate` | — |
 
 Stage 0 stops the run if the gait's own collocation residuals, re-evaluated on
@@ -424,13 +425,14 @@ Figs 4.2–4.4 — separate a controller that falls at once from one that does n
 but not one that converges from one that drifts. At the old ε = 0.35 every
 three-step row of the robust law looked converged, and over 25 steps it fell in
 step 21 of Case I with a perfect model. 25 is also Fig. 4.6's horizon. The full
-study takes about ten minutes at 1 kHz plus about two for Case IV, and
-`n_steps` = 3 gives the thesis-style figures. The GIFs keep their own
+study takes about ten minutes at 1 kHz, plus about two for Case IV and four
+for the load study, and `n_steps` = 3 gives the thesis-style figures. The GIFs keep their own
 `anim_steps` (default 4), because a GIF is a fixed 150 frames.
 
 ```matlab
 ch4_main('n_steps', 3)                      % thesis-style three-step figures
 ch4_main('presets', {'case4'}, 'animate', false)   % Case IV alone
+ch4_main('presets', {'load'}, 'animate', false)    % the unknown-load study alone
 ch4_main('presets', {'l1'}, 'n_steps', 5)
 ch4_main('rclf.delta2_model', 'matrix')     % nested fields take dotted names
 ch4_main('rclf.boundary_layer', 0)          % the exact robust law, chatter included
@@ -526,8 +528,9 @@ collocation residuals re-evaluated on today's dynamics are 7.6e-7 (defect),
 at 1 kHz, `Δ₁max = 279.1` and `Δ₂max = 0.514` (measured along a nominal rollout,
 ×1.2), robust boundary layer κ = 1. L₁ with the three fixes of §4: plant-input
 predictor at a = 800, Γ = 1e5, both estimates, rows on the applied torque. Result
-set `Results/ch4_{robust,l1}_2026-09-13_20-45-50/`, and for Case IV, with its own
-bounds, `Results/ch4_case4_2026-09-14_13-50-53/`.
+set `Results/ch4_{robust,l1}_2026-09-13_20-45-50/`; Case IV, with its own
+bounds, `Results/ch4_case4_2026-09-14_13-50-53/`; the load study
+`Results/ch4_load_2026-09-14_14-40-48/`.
 
 Each cell reads **steps · max‖η‖ · min Fz** over the whole run. A fall is named
 by the step `ch4_simulate` rejected.
@@ -706,6 +709,99 @@ default balls `l1_con`'s α estimate presses its ball (‖α̂‖ 208.5 of 210).
 max‖η‖ here is measured on every tenth solver point, hence 4.3 against the
 table's 4.51.
 
+### §4.2.4, Fig 4.11 — L₁ carries 94% of body weight; a box-matched baseline shows it is the adaptation
+
+The robot carries a mass at the hip that no controller is told about. It is
+redrawn every step from 0–70 kg (Fig 4.11a), or fixed at 23 / 35 / 46 kg
+(Fig 4.11b). Those are the thesis's 0–30 kg and 10 / 15 / 20 kg scaled by this
+robot's mass (×74/32), so each load is the same share of body weight. The load
+is a point mass at the torso base, with no rotational inertia of its own.
+
+Two design choices, both measured:
+
+- **A second baseline.** Besides §4.2.4's three controllers, the study runs
+  `clfqp_con` with the same box and contact rows as `l1_con`. Under load the
+  unconstrained CLF-QP's peak torque is 2–3.5 times `l1_con`'s, so a
+  comparison against it alone cannot say whether the adaptation or the torque
+  is doing the work.
+- **The box.** It is 1.25 × the loaded robot's own feedforward peak along the
+  orbit. For a uniform scale this rule is exactly the L₁ preset's. Sized by
+  mass ratio instead, `l1_con` fell within three steps at 46 and 70 kg.
+
+**A load is not a small mass scale.** Along the orbit:
+
+| load | 23 kg | 35 kg | 46 kg | 0–70 kg (at 70) |
+|---|---|---|---|---|
+| ‖Δ₂‖ · its isotropic part | 1.99 · 0.19 | 2.30 · 0.23 | 2.47 · 0.26 | 2.72 · 0.30 |
+| min eig(I + Δ₂) | 0.49 | 0.41 | 0.37 | 0.30 |
+| loaded feedforward peak → box | 288 → 360 Nm | 330 → 412 Nm | 366 → 458 Nm | 445 → 556 Nm |
+
+A mass scale has Δ₂ = (1/s − 1)I, isotropic and below 1. A hip load distorts
+the input gain far more in some output directions than in others. Its
+eigenvalues stay real and positive, so no direction reverses, but ‖Δ₂‖ > 1 at
+every load, which is outside anything the robust CLF-QP's bound can cover. The
+study therefore leaves the robust law out, as the thesis does.
+
+Each cell reads steps · max‖η‖ · min Fz over 25 steps, with the true normal
+force computed under the load each step carried:
+
+| controller | 0–70 kg random (box 556 Nm) | 23 kg (box 360 Nm) | 35 kg (box 412 Nm) | 46 kg (box 458 Nm) |
+|---|---|---|---|---|
+| A `clfqp` (no box) | 25 · 8.95 · 38 N | 25 · 5.79 · 39 N | 25 · 5.61 · 18 N | 25 · 5.33 · **−29 N** |
+| A′ `clfqp_con` (box, rows) | **falls in step 10** · 8.45 · 30 N | **falls in step 7** · 20.3 · **−13 N** | **falls in step 3** · 6.92 · 48 N | **falls in step 4** · 23.9 · **−131 N** |
+| B `l1` | **falls in step 15** · 8.98 · **−306 N** | 25 · 2.63 · 75 N | 25 · 5.06 · **−164 N** | 25 · 9.23 · **−274 N** |
+| **C `l1_con`** | 25 · 9.06 · 6 N | 25 · **2.41** · 102 N | 25 · 4.86 · **−23 N** | 25 · 5.22 · **−51 N** |
+
+**At the same torque budget, the adaptation is what walks.** `l1_con` completes
+all 25 steps of every case, the random 0–70 kg draw included, which is the
+thesis's claim. `clfqp_con`, with the same box and rows, falls in every case
+within 3–10 steps. The unconstrained `clfqp` also walks everything, by drawing
+2–3.5× the peak torque.
+
+**Beyond the lightest load, L₁ does not track better than the unconstrained
+baseline:**
+
+| `clfqp` / `l1_con` | 0–70 kg | 23 kg | 35 kg | 46 kg |
+|---|---|---|---|---|
+| typical step: median per-step max‖η‖ | 3.10 / 3.00 | 2.38 / 1.97 | 2.29 / 3.96 | 2.47 / 4.07 |
+| peak torque [Nm] | 1797 / 556 | 729 / 360 | 1146 / 412 | 1598 / 458 |
+| per-step peak ‖u‖, mean [Nm] (Fig 4.11b) | 914 / 458 | 643 / 378 | 1031 / 467 | 1451 / 521 |
+
+- **23 kg:** `l1_con` more than halves the worst error and tracks the typical
+  step better, on about half the torque.
+- **35 and 46 kg:** its worst step matches the baseline's, but its typical step
+  is worse.
+- **Random load:** the two are level.
+
+As in the thesis's Fig 4.11b, L₁'s torque grows with the load (378 → 467 →
+521 Nm per-step peak).
+
+**Contact.** `l1_con` keeps the true normal force positive throughout, except on
+3 and 7 samples of about 15 000 at 35 and 46 kg (minimum −23 and −51 N). The
+unconstrained `l1` asks the ground to pull on 0.2% of samples at 35 kg and 11.2%
+at 46 kg. Under the random load it falls in step 15, the first step after the
+load drops from 60 kg to 12 kg. The estimates do follow the uncertainty: median
+‖θ̂‖/‖θ‖ is 1.00–1.05 for `l1_con`.
+
+**The thesis form is worse again.** Measured separately at the same boxes, §4.2's
+formulation (thesis predictor, Γ = 1e4, box on μ₁ only) reached max‖η‖ of about
+27 at 46 kg and about 103 at 70 kg, with θ̂ overshooting θ 2–4×. Its
+constrained law fell in step 3 at 70 kg.
+
+**Loads reshape the gait, but these runs cannot say by how much** (Figure 3).
+Under the same load the two walking controllers settle on very different torso
+cycles:
+
+- the unconstrained baseline's is 2–3° lower in pitch than nominal: −1.2…2.1°
+  over the last five steps, against 1.72…4.55°;
+- `l1_con`'s grows to 0.7…6.1°, with pitch rates reaching +65°/s against the
+  nominal +25.
+
+A load changes M non-uniformly, so unlike a mass scale it can move the orbit
+itself. But the gap between two controllers under the same load is tracking
+error, and separating it from the load's own effect would take a controller
+that is told the true load.
+
 ### Known rough edges
 
 - **Remark 4.4, measured.** The robust law's friction rows hold the *nominal*
@@ -824,11 +920,15 @@ Chapter4/
     ch4_forces.m            torques, TRUE forces, estimator signals
     ch4_report.m            one controller vs one perturbed model
     ch4_run_params.m        one comparison run's params: law, perturbation, box, rows
+    ch4_run_entry.m         one run -> one table row; per-step forces under a changing load
     ch4_compare_controllers.m   the §4.1.4 (Cases I-III, Case IV) / §4.2.4 sweeps; measures the robust boxes
+    ch4_load_study.m        Fig 4.11: random and fixed unknown torso loads, loaded-feedforward boxes
     ch4_plot_uncertainty.m  Figs 4.2, 4.3, 4.4, 4.5, 4.6, 4.8, 4.9, 4.10
+    ch4_plot_load.m         Figs 4.11a/b and the torso phase portrait under load
     ch4_animate.m           controllers racing on one perturbed robot
+    ch4_draw_robot.m        the stick figure, shared by ch4_animate and ch4_plot_load
   Test/
-    ch4_test_model.m        true-vs-nominal split and the Δ terms
+    ch4_test_model.m        true-vs-nominal split, the Δ terms, forces under a per-step load
     ch4_test_rclf.m         the robust guarantee, sampled over the ball
     ch4_test_l1.m           projection, error dynamics, filter, behavior
     ch4_test_all.m

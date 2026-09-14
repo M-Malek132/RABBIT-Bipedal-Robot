@@ -110,6 +110,7 @@ function C = ch4_compare_controllers(x0, alpha, p, preset, opts)
 %         .delta_max .qp_infeasible .int_u2 .Fz_min .grf_pred_error .reason
 %         .step_T .step_L   duration [s] and length [m] of each completed step,
 %                           so whether a run slows down can be read directly
+%         .load_mass .loads the carried load (ch4_run_entry)
 %         .traj (t, y, u, V, theta_hat) when opts.store_traj
 %
 % See also CH4_SIMULATE, CH4_FORCES, CH4_PLOT_UNCERTAINTY, CH3_COMPARE_CONTROLLERS.
@@ -190,7 +191,8 @@ C = struct('name', {}, 'mass_scale', {}, 'u_box', {}, 'steps_completed', {}, ...
            'final_eta', {}, 'V0', {}, 'Vend', {}, 'V_ratio', {}, ...
            'delta_max', {}, 'qp_infeasible', {}, 'int_u2', {}, ...
            'Fz_min', {}, 'grf_pred_error', {}, 'reason', {}, ...
-           'step_T', {}, 'step_L', {}, 'traj', {});
+           'step_T', {}, 'step_L', {}, 'load_mass', {}, 'loads', {}, ...
+           'traj', {});
 
 if opts.verbose
     fprintf('\n%s\n CHAPTER 4 -- preset "%s", %d steps per run\n', ...
@@ -286,71 +288,9 @@ end
 
 % ---------------------------------------------------------------------------
 function entry = run_one(x0, alpha, p, name, scale, box, opts)
-%RUN_ONE  Simulate one (controller, scale) pair and summarize it.
+%RUN_ONE  One (controller, scale) row: configure it, then simulate and score it.
 % box = [] keeps p's boxes; only the laws that carry a box read it.
-pc  = ch4_run_params(p, name, scale, box);
-sim = ch4_simulate(x0, alpha, pc, opts.n_steps);
-
-entry = struct('name', name, 'mass_scale', scale, ...
-               'u_box', NaN, 'steps_completed', sim.n_ok, ...
-               'peak_torque', NaN, 'box_violation', NaN, ...
-               'max_eta', NaN, 'final_eta', NaN, ...
-               'V0', NaN, 'Vend', NaN, 'V_ratio', NaN, ...
-               'delta_max', NaN, 'qp_infeasible', NaN, ...
-               'int_u2', NaN, 'Fz_min', NaN, 'grf_pred_error', NaN, ...
-               'reason', sim.reason, ...
-               'step_T', [sim.steps.T], 'step_L', [sim.steps.L_step], ...
-               'traj', []);
-
-if sim.n_ok == 0, return; end
-
-% ch4_forces decimates to a fixed number of points, 2000 by default -- about
-% 670 a step at the three-step horizon it was set for. Keep that density per
-% step rather than per run, or a 25-step run is analysed on a grid eight times
-% coarser and its min Fz can step over a contact-force dip the short run would
-% have caught.
-F = ch4_forces(sim.t, sim.x, alpha, pc, sim.xi, sim.t_xi, ...
-               ceil(2000 * max(opts.n_steps, 3) / 3));
-
-eta_n = vecnorm([F.y; F.ydot], 2, 1);
-
-entry.peak_torque    = F.torque_max;
-entry.max_eta        = max(eta_n);
-entry.final_eta      = eta_n(end);
-entry.delta_max      = F.delta_max;
-entry.qp_infeasible  = F.qp_infeasible;
-entry.int_u2         = F.int_u2;
-entry.Fz_min         = F.Fz_min;
-entry.grf_pred_error = F.grf_pred_error;
-
-% V is NaN for the pure-feedforward and PD laws; fall back to
-% ||eta||^2 so the column still means something for them.
-Vs = F.V;
-if all(isnan(Vs)), Vs = eta_n.^2; end
-entry.V0   = Vs(1);
-entry.Vend = Vs(end);
-
-% RECOVERED FRACTION, not Vend/V0.
-%
-% The run starts ON the periodic orbit, so V0 is essentially zero
-% and Vend/V0 is a ratio of a real number to numerical noise -- it
-% came out as 1e12 and said nothing. What the chapter's claim is
-% actually about is whether the controller RECOVERS from the
-% excursion each impact creates, so measure exactly that: the
-% residual left at the end as a fraction of the largest excursion
-% reached. Bounded in [0,1]; near 0 means converged, near 1 means
-% the controller never got the error back.
-entry.V_ratio = Vs(end) / max(max(Vs), realmin);
-
-if opts.store_traj
-    % F.t / F.x, not sim.t / sim.x: ch4_forces decimates, and every
-    % other field here lives on ITS grid.
-    entry.traj = struct('t', F.t, 'y', F.y, 'u', F.u, ...
-                        'V', F.V, 'eta_n', eta_n, ...
-                        'theta_hat', F.theta_hat, ...
-                        'theta_true', F.theta_true, ...
-                        'x', F.x, 'lambda', F.lambda);
-end
+entry = ch4_run_entry(x0, alpha, ch4_run_params(p, name, scale, box), opts);
 end
 
 % ---------------------------------------------------------------------------

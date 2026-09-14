@@ -13,7 +13,8 @@ function out = ch4_main(varargin)
 %   (2) robust CLF-QP, Cases I-III          ch4_compare_controllers Section 4.1.4
 %  (2b) robust CLF-QP, Case IV (scale 3)    ch4_compare_controllers Section 4.1.4
 %   (3) L1 adaptive sweep                   ch4_compare_controllers Section 4.2.4
-%   (4) figures                             ch4_plot_uncertainty
+%  (3b) L1 under an unknown torso load      ch4_load_study          Fig. 4.11
+%   (4) figures                             ch4_plot_uncertainty, ch4_plot_load
 %   (5) animation                           ch4_animate
 %
 % STEP 0 REFUSES A GAIT THAT IS NOT AN ORBIT OF THE CURRENT DYNAMICS. Every
@@ -45,7 +46,8 @@ function out = ch4_main(varargin)
 %
 % Options (name/value)
 %   'gait'      path to a Chapter-3 result .mat (default ch4_load_gait's)
-%   'presets'   cell of {'robust','case4','l1'} (default all three)
+%   'presets'   cell of {'robust','case4','l1','load'} (default all four; the
+%               load study's loads are ch4_load_study's defaults)
 %   'n_steps'   steps per run (default 25; see above)
 %   'plot'      draw and save figures (default true)
 %   'save'      write a .mat of everything (default true)
@@ -60,14 +62,16 @@ function out = ch4_main(varargin)
 %
 % Output
 %   out : struct .p .x0 .alpha .meta .bounds .robust .case4 .p_case4 .l1
-%                .figs .gifs .file   (p_case4: the parameters Case IV ran with)
+%                .load .figs .gifs .file
+%                (p_case4: the parameters Case IV ran with; load: the
+%                ch4_load_study rows)
 %
 % See also CH4_PARAMS, CH4_LOAD_GAIT, CH4_COMPARE_CONTROLLERS, CH4_REPORT.
 
 %% --- split our own options from ch4_params overrides --------------------
 own = {'gait','presets','n_steps','plot','save','animate', ...
        'anim_scales','anim_controllers','anim_steps'};
-o   = struct('gait', '', 'presets', {{'robust','case4','l1'}}, 'n_steps', 25, ...
+o   = struct('gait', '', 'presets', {{'robust','case4','l1','load'}}, 'n_steps', 25, ...
              'plot', true, 'save', true, 'animate', true, ...
              'anim_scales', [1.5 0.7], ...
              'anim_controllers', {{'clfqp','rclfqp_con','l1'}}, ...
@@ -181,10 +185,10 @@ if any(strcmpi('case4', o.presets))
 end
 
 out = struct('p', p, 'x0', x0, 'alpha', alpha, 'meta', meta, 'bounds', B, ...
-             'robust', [], 'case4', [], 'p_case4', [], 'l1', [], ...
+             'robust', [], 'case4', [], 'p_case4', [], 'l1', [], 'load', [], ...
              'figs', [], 'gifs', {{}}, 'file', '');
 
-%% --- (2)(2b)(3) the sweeps -----------------------------------------------
+%% --- (2)(2b)(3)(3b) the sweeps -------------------------------------------
 copts = struct('n_steps', o.n_steps, 'store_traj', true, 'verbose', true);
 
 if any(strcmpi('robust', o.presets))
@@ -196,6 +200,15 @@ if any(strcmpi('case4', o.presets))
 end
 if any(strcmpi('l1', o.presets))
     out.l1 = ch4_compare_controllers(x0, alpha, p, 'l1', copts);
+end
+
+% The unknown-load study sizes 'l1_con's box along the nominal orbit; stage 1's
+% rollout already is one, so it is handed over rather than simulated again.
+X_orbit = sim_b.x(:, 1:2:end);
+if any(strcmpi('load', o.presets))
+    lopts = copts;
+    lopts.X_orbit = X_orbit;
+    out.load = ch4_load_study(x0, alpha, p, lopts);
 end
 
 %% --- (4) figures ---------------------------------------------------------
@@ -212,6 +225,10 @@ if o.plot
     if ~isempty(out.l1)
         d = fullfile(results_dir, sprintf('ch4_l1_%s', stamp));
         figs = [figs, ch4_plot_uncertainty(out.l1, p, d)];
+    end
+    if ~isempty(out.load)
+        d = fullfile(results_dir, sprintf('ch4_load_%s', stamp));
+        figs = [figs, ch4_plot_load(out.load, p, d, struct('X_orbit', X_orbit))];
     end
     out.figs = figs;
 end
