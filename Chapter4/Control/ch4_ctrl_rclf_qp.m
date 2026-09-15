@@ -89,6 +89,75 @@ function [mu, u, qp] = ch4_ctrl_rclf_qp(Lf2y, LgLfy, u_ff, info, p, constrained)
 % happening. That is the limitation Section 4.1.4 closes on and the entire
 % motivation for the L1 controller in Section 4.2.
 %
+% ------------------------------------- the exact law is a sliding-mode law
+% Near the orbit psi is O(||eta||^2) while D1*||LgV|| is O(||eta||), so a is
+% dominated by the robust term and the closed form tends to
+%
+%       mu*  ->  - M * LgV' / ||LgV||,        M = D1 / (1 - D2),
+%
+% a correction of FIXED magnitude M (574 rad/s^2 on posture_195) along a unit
+% vector that flips whenever the state crosses the hyperplane LgV = 0, however
+% small eta is. That is unit-vector sliding-mode control. In continuous time
+% it slides; held for a sample period T it cannot, because one sample of it
+% moves LgV by
+%
+%       phi_T = ||2 P22|| * M * T,          P22 = the ydot-ydot block of Peps
+%
+% (0.029 on posture_195 at 1 kHz), and whatever was left of LgV is overshot. So
+% the sampled law chatters at the sample rate; the numbers are below.
+%
+% ---------------------------------------------------------- the boundary layer
+% The standard remedy is to replace the unit vector by a saturation over a
+% layer of thickness phi in ||LgV||:
+%
+%       D1*||LgV||   ->   D1*||LgV|| * min(1, ||LgV||/phi)
+%
+% Outside the layer nothing changes. Inside it the robust term becomes
+% D1||LgV||^2/phi, so the robust part of mu* is the LINEAR feedback
+% -(M/phi) LgV', which vanishes continuously at LgV = 0 instead of flipping.
+%
+% THE LAYER IS SIZED IN SAMPLES. One held sample of that linear feedback, on a
+% plant whose true input gain is (1 + d2) with d2 in [-D2, D2], multiplies LgV by
+%
+%       1 - (1 + d2) * phi_T / phi,
+%
+% so the thickness at which the WORST gain in the bound, d2 = D2, lands exactly
+% on LgV = 0 in one sample is (1 + D2)*phi_T. The layer is set in those units,
+%
+%       phi = kappa * (1 + D2) * phi_T,         kappa = p.rclf.boundary_layer,
+%
+% and the multiplier is at worst 1 - 1/kappa: the sampled loop along LgV
+% converges for every d2 in the bound iff kappa > 1/2, and does so WITHOUT
+% overshoot -- without chatter -- iff kappa >= 1. Sizing phi in these units
+% keeps that statement true when T, the bounds or the CLF change; a fixed phi
+% would silently re-open the chatter at a longer sample period.
+%
+% MEASURED on posture_195 at 1 kHz and eps = 0.35, the first 3 steps of
+% 'rclfqp_con' in Cases I-III (scales 1 / 1.5 / 0.7; the multiplier itself
+% does not depend on eps), as the median change in the held torque from one
+% sample to the next: 253 / 573 / 481 Nm with no layer. At kappa = 0.33 the
+% multiplier predicts -1.0 / -0.33 / -1.86 for the three true gains, and the
+% x0.7 case still chattered at 514 Nm while the other two fell to a 1-2 Nm
+% median. From kappa = 0.66 up, 1-2 Nm in every case.
+%
+% Two consequences worth knowing:
+%   * Inside the layer the robust correction -LgV'/(kappa (1+D2) ||2 P22|| T)
+%     does not depend on D1. Near the orbit a larger Delta1 bound no longer
+%     buys a larger control; only the layer's edge moves out.
+%   * kappa = 0, or control_dt = 0 (continuous control, nothing to overshoot),
+%     gives phi = 0: the exact law of (4.12)/(4.13), chatter included.
+%
+% WHAT THE GUARANTEE BECOMES. The QP now enforces the smoothed row, so the
+% robust RES condition (4.11) holds EXACTLY wherever ||LgV|| >= phi, and inside
+% the layer the worst case can exceed it by at most
+%
+%       gap = D1*||LgV||*(1 - ||LgV||/phi)  <=  D1*phi/4,
+%
+% which qp.bl_gap reports per call. Vdot <= -(c3/eps)V + D1*phi/4 (plus the
+% slack, in (4.13)) then makes the tracking error uniformly ultimately bounded
+% rather than convergent -- the honest version of "errors go to zero" for any
+% implementation that holds its control for a sample.
+%
 % -------------------------------------------------- constrained form (4.13)
 % Identical structure to Chapter 3 stage 8: decision vector [u; delta], the CLF
 % row relaxed by a penalized slack, and torque / friction / GRF rows added.
@@ -105,7 +174,8 @@ function [mu, u, qp] = ch4_ctrl_rclf_qp(Lf2y, LgLfy, u_ff, info, p, constrained)
 %
 % Inputs
 %   Lf2y, LgLfy, u_ff, info : from ch4_io_lin on the NOMINAL model
-%   p                       : parameter struct (uses p.rclf, p.eps, p.limits)
+%   p                       : parameter struct (uses p.rclf, p.eps, p.limits,
+%                             p.control_dt)
 %   constrained             : logical, eq (4.13) if true
 %
 % Outputs
@@ -113,6 +183,9 @@ function [mu, u, qp] = ch4_ctrl_rclf_qp(Lf2y, LgLfy, u_ff, info, p, constrained)
 %   u  : nu x 1 joint torque
 %   qp : struct .V .LfV .LgV .psi .a .delta .active .exitflag .feasible
 %               .margin (how much slack the robust row had) .robust_constraints
+%               .phi (boundary-layer thickness, 0 = exact law)
+%               .bl_gap (how far the worst case may exceed (4.11) at this
+%               state because of the layer; 0 outside it)
 %
 % See also CH3_CTRL_CLF_QP, CH4_UNCERTAINTY, CH4_DELTA_BOUNDS.
 
@@ -128,11 +201,31 @@ D1 = p.rclf.delta1_max;
 D2 = p.rclf.delta2_max;
 
 nrm_LgV = norm(LgV, 2);
-a       = psi + D1 * nrm_LgV;          % robustified residual
+
+% Boundary layer, sized in samples -- see the header. D2 >= 1 has no finite M
+% and is reported infeasible below, so it gets no layer. A parameter struct
+% saved before the layer existed (an old ch4_result .mat) has no field, and
+% re-analysing it must reproduce the exact law that run actually used.
+kappa = 0;
+if isfield(p.rclf, 'boundary_layer'), kappa = p.rclf.boundary_layer; end
+
+phi = 0;
+if kappa > 0 && D2 < 1 && p.control_dt > 0
+    M_rob = D1 / (1 - D2);
+    phi_T = norm(clf.PG2_eps(p.ny+1:end, :), 2) * M_rob * p.control_dt;
+    phi   = kappa * (1 + D2) * phi_T;
+end
+
+rob = D1 * nrm_LgV;                    % max over the Delta1 ball
+if nrm_LgV < phi
+    rob = rob * (nrm_LgV / phi);       % saturated inside the layer
+end
+a = psi + rob;                         % robustified residual
 
 qp = struct('V', V, 'LfV', LfV, 'LgV', LgV, 'psi', psi, 'a', a, ...
             'delta', 0, 'active', false, 'exitflag', 1, 'feasible', true, ...
-            'margin', 0, 'robust_constraints', true);
+            'margin', 0, 'robust_constraints', true, ...
+            'phi', phi, 'bl_gap', D1 * nrm_LgV - rob);
 
 if D2 >= 1
     % Report rather than divide by a non-positive number. The caller sees

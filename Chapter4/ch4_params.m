@@ -32,7 +32,7 @@ p = ch3_params();
 
 %% ---------------------------------------------------- CLF convergence rate
 % Chapter 3 ships eps = 0.5, chosen there so the PD baseline stays inside
-% RABBIT's torque envelope. Chapter 4 tightens it, and the reason is specific
+% RABBIT's torque envelope. Chapter 4 tightens it twice, for reasons specific
 % to what this chapter measures.
 %
 % eps sets the required convergence rate (c3/eps): it has to be fast enough
@@ -53,9 +53,23 @@ p = ch3_params();
 % Section 4.2.4 comparison measures the reference model rather than the
 % adaptation.
 %
+% 0.35 WAS STILL TOO SLOW FOR THE ROBUST LAW, AND ONLY A LONG RUN SHOWS IT.
+% Over three steps 'rclfqp_con' looked converged. Over 25 it drifted in every
+% case, and in Case I -- a perfect model -- it fell in step 21 (max||eta|| 17 /
+% 8.3 / 11.4 in Cases I-III). The drift is the Delta1 term against the slow
+% rate: it survived the boundary layer, the contact rows, the torque box and
+% D2 = 0, and vanished with D1 = 0. At eps = 0.20 (ch4_main, 25 steps, kappa =
+% 1) the same law walks all 25 steps in every case, max||eta|| 1.13 / 4.11 /
+% 4.38, and the nominal CLF-QP stays on the orbit (max||eta|| 0.25). The drift
+% is slower there, not gone: the per-step CLF peak still grows ~70-500x over
+% the run. The baselines change character too: under perturbation they no
+% longer fall within 25 steps but track at max||eta|| 14-17 with erratic step
+% times -- degraded walking instead of a fall, which is still the contrast
+% Remark 4.6 draws.
+%
 % Raise it back to 0.5 to reproduce the Chapter-3 defaults exactly; expect the
 % baselines to fail earlier if you do.
-p.eps = 0.35;
+p.eps = 0.20;
 
 %% ------------------------------------------------------------- controller
 % Extends the Chapter-3 list (ff | iolin_pd | clfqp | clfqp_con) with:
@@ -94,6 +108,10 @@ p.uncertainty = struct('mass_scale', 1.0, ...
 % Section 4.2.4's load experiment redraws the carried mass at every step from
 % this range. Empty disables the redraw and load_mass stays fixed.
 p.load_random_range = [];        % e.g. [0 30] for the Fig. 4.11a experiment
+
+% Seed of that redraw. Every controller in a comparison sees the same sequence;
+% changing the seed is how a result is checked against more than one sequence.
+p.load_seed = 11;
 
 %% --------------------------------------------- robust CLF-QP (Section 4.1)
 % Bounds (4.10) on the induced uncertainty (4.4).  These are bounds on the
@@ -156,15 +174,113 @@ p.rclf.delta2_max = 0.5143;      % ||Delta2|| bound          [-]
 % to check how much of the guarantee rests on that structural assumption.
 p.rclf.delta2_model = 'scalar';
 
+% BOUNDARY LAYER on the robust term (kappa in ch4_ctrl_rclf_qp).
+%
+% Near the orbit the exact robust law applies a correction of fixed magnitude
+% D1/(1 - D2) along -LgV'/||LgV||, a unit vector that flips sign whenever LgV
+% crosses zero: sliding-mode control, which a 1 kHz sample-and-hold turns into
+% chatter at the sample rate. The layer saturates that unit vector over a band
+% of ||LgV||, measured in units of the thickness at which one held sample of the
+% correction, on the worst-case input gain 1 + D2, lands exactly on LgV = 0.
+% One sample then multiplies LgV by at worst 1 - 1/kappa, so
+%
+%   kappa = 0        the exact law of (4.12)/(4.13), chatter included
+%   kappa > 1/2      the sampled loop along LgV converges for every d2 in bound
+%   kappa >= 1       ... and without overshoot, i.e. without chatter
+%
+% The price is the guarantee: (4.11) still holds exactly outside the layer, and
+% inside it the worst case may exceed it by at most D1*phi/4, which bounds the
+% tracking error instead of driving it to zero. control_dt = 0 disables the
+% layer, since continuous control has no sample to overshoot.
+p.rclf.boundary_layer = 1;
+
 % CONTACT ROWS: p.limits.enable.friction / .grf stay ON, as ch3_params sets
 % them. In the constrained CLF-QPs they add the friction cone and the
 % normal-force floor of (4.13), written on the NOMINAL model (Remark 4.4). They
-% are not optional decoration: without the floor, the robust law's chattering
-% worst-case term pulls the true stance foot into the ground for 17-42% of the
-% samples in each case -- see ch4_run_params for the measurement.
+% are not optional decoration: without the floor, the exact robust law's
+% chattering worst-case term pulled the true stance foot into the ground for
+% 17-42% of the samples in each case, and even with the boundary layer above,
+% 25 steps at mass scale 0.7 still went negative on 1.8% -- see ch4_run_params.
 
 %% ------------------------------------------ L1 adaptive control (Sect. 4.2)
 p.l1 = struct();
+
+% STATE PREDICTOR.  Section 4.2.2's predictor (4.19) is driven by its own copy
+% of the reference model, eta_hat_dot = F eta_hat + G mu1_hat + G(mu2 +
+% theta_hat), and the error dynamics (4.28) it relies on do not follow from it:
+% the min-norm CLF-QP is nonlinear, so mu1(eta_hat) - mu1(eta) reaches the
+% prediction error and the adaptation reads it as model error (ch4_l1_deriv
+% has the derivation).
+%
+%   'thesis'  (4.19) as written, with its sampled-data advance as written.
+%             Reproduces the Section 4.2 results in Results/ stamped before
+%             this option existed, with Gamma = 1e4, Gamma_alpha = [] and
+%             constrain_applied = false as well.
+%   'plant'   the standard L1 state predictor, driven by what the robot
+%             actually received:
+%                 eta_hat_dot = F eta + G(mu + theta_hat) - a(eta_hat - eta)
+%             so eta_tilde_dot = -a eta_tilde + G theta_tilde, exactly. Under
+%             sampled control it holds mu and reads eta at both ends of each
+%             period, as the plant does (ch4_l1_advance).
+p.l1.predictor = 'plant';
+
+% PREDICTOR RATE a [rad/s], 'plant' only.  With the plant predictor the beta
+% channel of the estimator closes the loop s^2 + a s + Gamma, so a sets its
+% damping: a/(2 sqrt(Gamma)); 2 sqrt(1e5) = 632 is critical.
+%
+% 800 (damping 1.26), because critical damping sits on an edge at mass scale
+% 1.5. Measured over 25 steps (eps 0.20): 'l1' fell in step 16 at a = 500 and
+% at a = 632, and walked all 25 steps at a = 700 / 800 / 900 with max||eta||
+% 2.2 / 2.2 / 2.3. 632.46 instead of 632 was already enough to flip it. At
+% a = 800, scales 1 and 0.7 read 0.14 and 4.8, as good as at 632.
+% 'l1_con' at 1.5x stays fragile at every rate: it walked at 500, 632, 800 and
+% 900 but fell in step 12 at 700 -- see CH4_UNCERTAINTY.md §5a.
+p.l1.predictor_rate = 800;
+
+% ALPHA'S OWN ADAPTATION GAIN; [] uses Gamma.  alpha_hat's regressor is
+% ||eta||, so its loop gain is Gamma_alpha*||eta||^2, which grows exactly when
+% the tracking degrades. 0 freezes alpha_hat at zero and leaves beta_hat to
+% carry theta, which (4.17) says it can. Both estimates stay on by default:
+% under the plant predictor, beta alone tracked worse in every case measured
+% (25 steps, eps 0.20) -- at Gamma = 1e4 'l1' fell at 1.5x in step 10 with
+% beta alone and walked all 25 steps at max||eta|| 2.5 with both.
+p.l1.Gamma_alpha = [];
+
+% CAP ON alpha's REGRESSOR, as the fastest the estimator loop may run [rad per
+% control sample]; 0 or [] for no cap, the law as written. See ch4_l1_deriv.
+%
+% OFF BY DEFAULT BECAUSE IT TRADES, measured over 60-120 steps at 1 kHz (plain
+% l1 at 1.5x; l1_con at 1, 0.7, 1.5, 46 kg and four random 0-70 kg sequences):
+% runs falling, of nine -- 5 uncapped, 3 at 1.5, 2 at 1, 1 at 0.5 -- while at
+% 0.5 l1_con's error at 1.5x rises from 2.0-4.5 to 6.0-7.4 per 10-step block
+% and the random-load runs that survive pass through excursions to
+% max||eta|| 18-48. CH4_UNCERTAINTY.md §5a has the rest.
+p.l1.alpha_regressor_rate = 0;
+
+% NORMALIZED ADAPTATION, the other limit on the estimator loop's speed [rad per
+% control sample]; 0 or [] for none, the law as written. Both adaptation laws
+% are divided by m^2 = max(1, (Gamma + Gamma_alpha ||eta||^2) / (rate/dt)^2),
+% so the loop never runs faster than the rate while theta_hat keeps
+% alpha_hat*||eta|| in full. At or below sqrt(Gamma)*dt (0.32 here) it is the
+% textbook form m^2 = 1 + (Gamma_alpha/Gamma) ||eta||^2. See ch4_l1_deriv.
+%
+% 0.75, THE BEST 1 kHz REMEDY MEASURED, over the cap's nine long runs plus six
+% more random 0-70 kg sequences (seeds 4-9): runs falling, of 15 -- 9 as
+% written, 4 with the cap at 0.5, 1 at 0.75, 2 at 1. It is a window: at 0.5,
+% 1.5 and 2 two of the first nine fall again, and the textbook form loses
+% seven of them. At 0.75 'l1_con' at 1.5x keeps its typical step (median
+% per-step max||eta|| 2.15, against 1.85 as written and 4.44 capped), but
+% random-load runs can pass through excursions to max||eta|| ~50. A 0.5 ms
+% control period without it fell in 1 of 12 and tracked flatter.
+% CH4_UNCERTAINTY.md §5a has the tables.
+p.l1.normalized_rate = 0.75;
+
+% WHAT 'l1_con' CONSTRAINS.  false: Section 4.2.3 as written -- the torque box
+% on mu1 alone, no contact rows, so mu2 is applied outside every constraint.
+% true: mu2 enters the QP as a known offset, and the box and the friction and
+% normal-force rows (as p.limits.enable has them) bound the TOTAL torque the
+% robot receives. See ch4_ctrl_l1.
+p.l1.constrain_applied = true;
 
 % ADAPTATION GAIN Gamma in (4.26).  The bound (4.34)-(4.35) on the estimation
 % error shrinks like 1/||Gamma||, so "sufficiently large" is the whole design
@@ -172,7 +288,15 @@ p.l1 = struct();
 % Decoupling estimation speed from control smoothness is exactly what the
 % low-pass filter below is for, so this can be large without putting
 % high-frequency content into the torque.
-p.l1.Gamma = 1e4;
+%
+% 1e5, not the 1e4 the thesis form ran at. Under the plant predictor the beta
+% channel's bandwidth is sqrt(Gamma): 100 rad/s at 1e4, below the 150 rad/s
+% filter it feeds, 316 rad/s at 1e5. Measured over 25 steps at eps 0.20, with
+% the box scaled to the robot and the predictor critically damped, 'l1_con'
+% at scales 0.7 / 1.5 went from max||eta|| 6.2 / 35.5 at 1e4 (the 1.5x
+% estimate running away) to 5.1 / 7.6 at 1e5, true normal force positive
+% throughout. Set it back to 1e4 to reproduce the thesis form.
+p.l1.Gamma = 1e5;
 
 % LOW-PASS FILTER C(s) in (4.23), first order with unit DC gain:
 %   mu2 = -C(s) theta_hat,   C(s) = omega_c / (s + omega_c).
@@ -198,7 +322,8 @@ p.l1.proj_eps  = 0.1;            % smoothing band of the projection, in (0,1]
 % Note the scope, stated in Section 4.2.3: the saturation is imposed on the
 % CLF-QP component mu1 only, NOT on the adaptive component mu2. The realized
 % torque can therefore leave the box by whatever mu2 contributes; ch4_forces
-% reports that overshoot rather than hiding it.
+% reports that overshoot rather than hiding it. That is the thesis form, with
+% p.l1.constrain_applied = false; the default bounds the applied torque.
 %
 % 65 Nm is below the peak torque of every gait in Results/ (195-465 Nm), so
 % ch4_load_gait raises it to 1.25x the gait's own peak (243.8 Nm on

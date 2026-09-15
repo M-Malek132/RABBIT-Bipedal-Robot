@@ -10,9 +10,11 @@ function out = ch4_main(varargin)
 %
 %   (0) load the nominal gait               ch4_load_gait
 %   (1) MEASURE the uncertainty             ch4_delta_bounds        (4.4), (4.10)
-%   (2) robust CLF-QP sweep                 ch4_compare_controllers Section 4.1.4
+%   (2) robust CLF-QP, Cases I-III          ch4_compare_controllers Section 4.1.4
+%  (2b) robust CLF-QP, Case IV (scale 3)    ch4_compare_controllers Section 4.1.4
 %   (3) L1 adaptive sweep                   ch4_compare_controllers Section 4.2.4
-%   (4) figures                             ch4_plot_uncertainty
+%  (3b) L1 under an unknown torso load      ch4_load_study          Fig. 4.11
+%   (4) figures                             ch4_plot_uncertainty, ch4_plot_load
 %   (5) animation                           ch4_animate
 %
 % STEP 0 REFUSES A GAIT THAT IS NOT AN ORBIT OF THE CURRENT DYNAMICS. Every
@@ -29,34 +31,51 @@ function out = ch4_main(varargin)
 % not a robust controller, it is an aggressive one. So the bounds are measured
 % against the gait before anything is run with them, and -- unless the caller
 % set rclf.delta1_max / rclf.delta2_max explicitly -- the measured bounds over
-% the sweep's Cases I-III ARE the bounds used. Fixed defaults are fitted to
+% the sweep's Cases I-III ARE the bounds used, and Case IV runs on its own,
+% measured the same way at scale 3. Fixed defaults are fitted to
 % one particular gait and need not cover another; a sweep that only printed
 % "covers: NO" and ran anyway would certify nothing.
 %
+% THE SWEEPS RUN 25 STEPS, NOT THE THREE THE CHAPTER'S FIGURES SHOW. Three
+% steps is long enough to separate a controller that falls at once from one
+% that does not, and too short to separate one that converges from one that
+% drifts. At the old eps = 0.35 the robust law's three-step rows looked
+% converged in every case, while over 25 steps it fell in step 21 of Case I --
+% with a perfect model. 25 is also the horizon of the chapter's own Fig. 4.6.
+% Pass 'n_steps', 3 for the thesis-style three-step figures.
+%
 % Options (name/value)
 %   'gait'      path to a Chapter-3 result .mat (default ch4_load_gait's)
-%   'presets'   cell of {'robust','l1'} (default both)
-%   'n_steps'   steps per run (default 3, matching the chapter's figures)
+%   'presets'   cell of {'robust','case4','l1','load'} (default all four; the
+%               load study's loads are ch4_load_study's defaults)
+%   'n_steps'   steps per run (default 25; see above)
 %   'plot'      draw and save figures (default true)
 %   'save'      write a .mat of everything (default true)
 %   'animate'   write comparison GIFs (default true)
 %   'anim_scales'      mass scales to animate (default [1.5 0.7])
 %   'anim_controllers' who to race (default clfqp / rclfqp_con / l1)
+%   'anim_steps'       steps per GIF (default 4). Separate from n_steps
+%                      because the GIF is a fixed 150 frames: 26 steps in
+%                      it would be six frames a step.
 %   any ch4_params field, including dotted nested names, e.g.
 %   ch4_main('l1.omega_c', 100, 'rclf.delta2_model', 'matrix')
 %
 % Output
-%   out : struct .p .x0 .alpha .meta .bounds .robust .l1 .figs .gifs .file
+%   out : struct .p .x0 .alpha .meta .bounds .robust .case4 .p_case4 .l1
+%                .load .figs .gifs .file
+%                (p_case4: the parameters Case IV ran with; load: the
+%                ch4_load_study rows)
 %
 % See also CH4_PARAMS, CH4_LOAD_GAIT, CH4_COMPARE_CONTROLLERS, CH4_REPORT.
 
 %% --- split our own options from ch4_params overrides --------------------
 own = {'gait','presets','n_steps','plot','save','animate', ...
-       'anim_scales','anim_controllers'};
-o   = struct('gait', '', 'presets', {{'robust','l1'}}, 'n_steps', 3, ...
+       'anim_scales','anim_controllers','anim_steps'};
+o   = struct('gait', '', 'presets', {{'robust','case4','l1','load'}}, 'n_steps', 25, ...
              'plot', true, 'save', true, 'animate', true, ...
              'anim_scales', [1.5 0.7], ...
-             'anim_controllers', {{'clfqp','rclfqp_con','l1'}});
+             'anim_controllers', {{'clfqp','rclfqp_con','l1'}}, ...
+             'anim_steps', 4);
 
 pv = {};
 for k = 1:2:numel(varargin)
@@ -110,10 +129,10 @@ SAFETY = 1.2;
 B = ch4_delta_bounds(sim_b.x(:, 1:4:end), alpha, p, [1 0.7 1.5 3], ...
                      struct('n_jitter', 0, 'safety', SAFETY));
 
-% Adopt what was measured over the cases the sweeps actually run. Case IV
-% (scale 3) is measured for the record only: folding it in would size the
-% bounds -- and so the aggressiveness of the robust law -- for a perturbation
-% Cases I-III never face. A bound the caller set explicitly is kept as given.
+% Adopt what was measured over Cases I-III for their sweep. Case IV (scale 3)
+% is not folded in: that would size the bounds -- and so the aggressiveness of
+% the robust law -- for a perturbation Cases I-III never face. It gets its own
+% bounds below instead. A bound the caller set explicitly is kept as given.
 in_sweep = ismember([B.per_scale.mass_scale], [1 0.7 1.5]);
 need_1   = max([B.per_scale(in_sweep).n1]);
 need_2   = max([B.per_scale(in_sweep).n2]);
@@ -145,17 +164,51 @@ if p.rclf.delta2_max >= 1
              ' feasible and will report every sample infeasible.\n']);
 end
 
-out = struct('p', p, 'x0', x0, 'alpha', alpha, 'meta', meta, 'bounds', B, ...
-             'robust', [], 'l1', [], 'figs', [], 'gifs', {{}}, 'file', '');
+% Case IV's own bounds: the same rule, at scale 3 alone. A pure mass scale fixes
+% ||Delta2|| = |1/s - 1| exactly -- 2/3 at s = 3, against 3/7 at worst in Cases
+% I-III -- so the Cases I-III bounds would run Case IV outside the robust law's
+% own hypothesis, and 2/3 x SAFETY = 0.8 is still below the feasibility limit
+% of 1.
+p_case4 = p;
+if any(strcmpi('case4', o.presets))
+    k4 = find([B.per_scale.mass_scale] == 3, 1);
+    if ~any(ismember(set_by_caller, {'rclf', 'rclf.delta1_max'}))
+        p_case4.rclf.delta1_max = SAFETY * B.per_scale(k4).n1;
+    end
+    if ~any(ismember(set_by_caller, {'rclf', 'rclf.delta2_max'}))
+        p_case4.rclf.delta2_max = SAFETY * B.per_scale(k4).n2;
+    end
+    fprintf(' Case IV bounds: delta1_max %.1f, delta2_max %.3f (covers scale 3: Delta1 %s, Delta2 %s)\n', ...
+            p_case4.rclf.delta1_max, p_case4.rclf.delta2_max, ...
+            yn(p_case4.rclf.delta1_max >= B.per_scale(k4).n1), ...
+            yn(p_case4.rclf.delta2_max >= B.per_scale(k4).n2));
+end
 
-%% --- (2)(3) the sweeps ---------------------------------------------------
+out = struct('p', p, 'x0', x0, 'alpha', alpha, 'meta', meta, 'bounds', B, ...
+             'robust', [], 'case4', [], 'p_case4', [], 'l1', [], 'load', [], ...
+             'figs', [], 'gifs', {{}}, 'file', '');
+
+%% --- (2)(2b)(3)(3b) the sweeps -------------------------------------------
 copts = struct('n_steps', o.n_steps, 'store_traj', true, 'verbose', true);
 
 if any(strcmpi('robust', o.presets))
     out.robust = ch4_compare_controllers(x0, alpha, p, 'robust', copts);
 end
+if any(strcmpi('case4', o.presets))
+    out.case4   = ch4_compare_controllers(x0, alpha, p_case4, 'case4', copts);
+    out.p_case4 = p_case4;
+end
 if any(strcmpi('l1', o.presets))
     out.l1 = ch4_compare_controllers(x0, alpha, p, 'l1', copts);
+end
+
+% The unknown-load study sizes 'l1_con's box along the nominal orbit; stage 1's
+% rollout already is one, so it is handed over rather than simulated again.
+X_orbit = sim_b.x(:, 1:2:end);
+if any(strcmpi('load', o.presets))
+    lopts = copts;
+    lopts.X_orbit = X_orbit;
+    out.load = ch4_load_study(x0, alpha, p, lopts);
 end
 
 %% --- (4) figures ---------------------------------------------------------
@@ -165,9 +218,17 @@ if o.plot
         d = fullfile(results_dir, sprintf('ch4_robust_%s', stamp));
         figs = [figs, ch4_plot_uncertainty(out.robust, p, d)];
     end
+    if ~isempty(out.case4)
+        d = fullfile(results_dir, sprintf('ch4_case4_%s', stamp));
+        figs = [figs, ch4_plot_uncertainty(out.case4, out.p_case4, d, {'IV'})];
+    end
     if ~isempty(out.l1)
         d = fullfile(results_dir, sprintf('ch4_l1_%s', stamp));
         figs = [figs, ch4_plot_uncertainty(out.l1, p, d)];
+    end
+    if ~isempty(out.load)
+        d = fullfile(results_dir, sprintf('ch4_load_%s', stamp));
+        figs = [figs, ch4_plot_load(out.load, p, d, struct('X_orbit', X_orbit))];
     end
     out.figs = figs;
 end
@@ -216,7 +277,7 @@ if o.animate
         gif = fullfile(results_dir, ...
                        sprintf('ch4_walk_%s_scale%03.0f.gif', stamp, s*100));
         try
-            ch4_animate(x0, alpha, pa, o.anim_controllers, o.n_steps + 1, gif);
+            ch4_animate(x0, alpha, pa, o.anim_controllers, o.anim_steps, gif);
             out.gifs{end+1} = gif;
         catch err
             fprintf(' ch4_animate skipped for scale %.2f: %s\n', s, err.message);

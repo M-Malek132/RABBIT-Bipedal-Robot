@@ -43,6 +43,8 @@ function ch4_test_model()
 %   5. eq (4.3): ydd = mu + Delta1 + Delta2 mu on the TRUE plant
 %   6. impact: dq+ scale invariant, impulse linear in s
 %   7. torso load: the gravity sign against G(q), and that it DOES move dq+
+%   8. a load redrawn every step: the analysed contact force uses the load
+%      that step carried, not one load for the whole run
 
 fprintf('\n=== ch4_test_model ===\n');
 pass = true;
@@ -182,7 +184,43 @@ fprintf('  [%s] %-30s ||dq+ change|| = %.3e (must be > 0)\n', tf(ok), ...
         'load changes the impact map', d_load);
 pass = pass && ok;
 
+%% 8. a load redrawn every step: forces under the load each step carried
+% ch4_run_entry analyses a randomized run step by step, so that each step's
+% contact force is the one for the mass it carried. Check that against the true
+% model directly: at a sample well inside step 2, the reported force must equal
+% the KKT force of the robot carrying loads(2) under the torque at that sample,
+% and must differ from the force with step 1's load -- which is what one model
+% for the whole run would have reported.
+pr = p;
+pr.controller        = 'clfqp';
+pr.uncertainty       = struct('mass_scale', 1, 'load_mass', 0);
+pr.load_random_range = [0 70];
+e = ch4_run_entry(x0, alpha, pr, struct('n_steps', 2, 'store_traj', true));
+ok = e.steps_completed == 2;
+if ok
+    i2 = find(e.traj.t > e.step_T(1) + 0.25 * e.step_T(2), 1);
+    xk = e.traj.x(:, i2);
+    uk = e.traj.u(:, i2);
+    err_own   = norm(e.traj.lambda(:, i2) - lam_with_load(xk, uk, pr, e.loads(2)), inf);
+    gap_other = norm(lam_with_load(xk, uk, pr, e.loads(1)) - ...
+                     lam_with_load(xk, uk, pr, e.loads(2)), inf);
+    ok = err_own <= 1e-6 && gap_other > 1;
+    fprintf(['  [%s] %-30s own load err %.1e; step 1''s load (%.1f vs %.1f kg) ' ...
+             'would be off by %.0f N\n'], tf(ok), 'random load: per-step forces', ...
+            err_own, e.loads(1), e.loads(2), gap_other);
+else
+    fprintf('  [FAIL] random-load rollout did not complete 2 steps (%s)\n', e.reason);
+end
+pass = pass && ok;
+
 fprintf('--- ch4_test_model: %s ---\n\n', tf(pass));
+end
+
+% ---------------------------------------------------------------------------
+function lam = lam_with_load(x, u, p, mL)
+%LAM_WITH_LOAD  True stance force of the robot carrying mL, under torque u.
+[~, ~, aux] = ch4_control_affine(x, p, struct('mass_scale', 1, 'load_mass', mL));
+lam = aux.lam_drift + aux.lam_in * u;
 end
 
 % ---------------------------------------------------------------------------

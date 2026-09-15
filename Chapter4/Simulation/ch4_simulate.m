@@ -62,7 +62,11 @@ reason = 'completed';
 
 randomize = ~isempty(p.load_random_range);
 if randomize
-    rng(11);                              % reproducible load sequence
+    % Reproducible load sequence. p.load_seed picks which one; a parameter
+    % struct saved before that field existed ran seed 11.
+    seed = 11;
+    if isfield(p, 'load_seed') && ~isempty(p.load_seed), seed = p.load_seed; end
+    rng(seed);
 end
 
 for k = 1:n_steps

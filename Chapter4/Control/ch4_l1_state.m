@@ -15,9 +15,10 @@ function out = ch4_l1_state(action, p, varargin)
 %
 % THE STATE, in order (5*ny = 20 entries for RABBIT):
 %
-%   eta_hat    2ny   state predictor (4.19). Its job is to reproduce the real
-%                    transverse dynamics; the gap eta_tilde = eta_hat - eta is
-%                    the ONLY signal the adaptation gets to see.
+%   eta_hat    2ny   state predictor -- (4.19), or its plant-input form, per
+%                    p.l1.predictor (ch4_l1_deriv). Its job is to reproduce the
+%                    real transverse dynamics; the gap eta_tilde = eta_hat - eta
+%                    is the ONLY signal the adaptation gets to see.
 %   alpha_hat   ny   estimate of the state-proportional part of theta (4.17)
 %   beta_hat    ny   estimate of the constant part of theta (4.17)
 %   mu2         ny   output of the low-pass filter C(s), i.e. the adaptive

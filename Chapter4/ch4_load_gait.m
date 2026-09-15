@@ -121,7 +121,8 @@ end
 % clfqp_con/rclfqp_con just tracks badly and stays bounded. L1 does not: the
 % adaptation is driven by -G'Peps eta_tilde ||eta|| at Gamma = 1e4, so once
 % the robot leaves the orbit the estimator chases the TRACKING FAILURE
-% instead of the model error, and theta_hat runs away. Measured here at
+% instead of the model error, and theta_hat runs away. Measured here (at the
+% then-default eps = 0.35, as is every number in this note) at
 % mass_scale 1 with no real uncertainty to find: against the 195 Nm posture
 % gait a 65 Nm box gives theta_hat 2.6e5 and commanded torque 1.6e5 Nm; at
 % 195 Nm the same run holds theta_hat at 5.2 and commands 198.8 Nm -- the

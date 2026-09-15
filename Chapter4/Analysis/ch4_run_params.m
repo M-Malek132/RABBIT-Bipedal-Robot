@@ -20,17 +20,21 @@ function pc = ch4_run_params(p, controller, mass_scale, u_box)
 % torque box, friction cone and normal-force floor, the last two written on the
 % NOMINAL model (Remark 4.4). Cutting it down to the torque box alone reads like
 % the cleaner version of "robust CLF-QP with torque saturation", and it is not
-% physical. Once eta ~= 0 the robust law carries a term of fixed magnitude
-% D1/(1-D2) -- about 574 rad/s^2 on posture_195 -- along -LgV', whose
-% direction flips whenever LgV = 2 eta' Peps G passes through zero however
-% small eta is, so sampled at 1 kHz it chatters. With the
-% floor removed that chatter pulled the TRUE stance foot into the ground for
-% 17 / 38 / 42% of the samples in Cases I-III (min Fz -1621 / -3220 / -3543 N),
-% which the bilateral stance model integrates without complaint. With the rows
-% on, true Fz stayed >= 23 N in every case and the robust law still walked
-% all three steps where the baselines fell. 'l1_con' drops the rows itself
-% (ch4_ctrl_l1): mu2 is applied outside its QP, so they could not bound the
-% realized torque anyway.
+% physical. It was first measured on the EXACT law (p.rclf.boundary_layer = 0),
+% which once eta ~= 0 carries a term of fixed magnitude D1/(1-D2) -- about
+% 574 rad/s^2 on posture_195 -- along -LgV', whose direction flips whenever
+% LgV = 2 eta' Peps G passes through zero however small eta is, so sampled at
+% 1 kHz it chatters. With the floor removed that chatter pulled the TRUE
+% stance foot into the ground for 17 / 38 / 42% of the samples in Cases I-III
+% (min Fz -1621 / -3220 / -3543 N), which the bilateral stance model integrates
+% without complaint. With the rows on, true Fz stayed >= 23 N in every case.
+% The boundary layer removes the chatter but not the need: at the default
+% layer and eps = 0.20, 25 steps at mass scale 0.7 with the rows off still put
+% 1.8% of the samples below zero (min Fz -481 N), against >= 23 N with them
+% on. 'l1_con' reads the same rows, and where they bind is set by
+% p.l1.constrain_applied (ch4_ctrl_l1): on the total torque by default, or
+% dropped entirely in the thesis form, where mu2 is applied outside the QP and
+% they could not bound the realized torque anyway.
 %
 % Inputs
 %   p          : parameter struct

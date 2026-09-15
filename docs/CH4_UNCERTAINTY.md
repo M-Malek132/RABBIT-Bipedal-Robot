@@ -141,6 +141,75 @@ region". [`ch4_delta_bounds`](../Chapter4/Control/ch4_delta_bounds.m) reports it
 `ch4_ctrl_rclf_qp` returns `qp.feasible = false` rather than dividing by a
 non-positive number.
 
+### The exact law is sliding-mode control, so it chatters: the boundary layer
+
+Near the orbit ψ is O(‖η‖²) while D₁‖L_gV‖ is O(‖η‖), so the closed form tends to
+
+```
+μ*  →  − M · L_gVᵀ / ‖L_gV‖,        M = D₁ / (1 − D₂)  ≈ 574 rad/s²
+```
+
+That is a correction of fixed magnitude along a unit vector that flips whenever
+the state crosses L_gV = 0, however small η is: unit-vector sliding-mode
+control. Held for T = 1 ms it cannot slide. One sample moves L_gV by
+φ_T = ‖2P₂₂‖·M·T = 0.029, where P₂₂ is the ẏẏ block of P_ε, and whatever was left
+of L_gV is overshot. Over the first three steps of `rclfqp_con` (measured at the
+then-default ε = 0.35; nothing in this subsection's algebra depends on ε), the torque
+actually held changed by a median of **253 / 573 / 481 Nm per sample** in
+Cases I–III.
+
+`p.rclf.boundary_layer` (κ, default 1) replaces the unit vector by a saturation:
+
+```
+D₁‖L_gV‖  →  D₁‖L_gV‖ · min(1, ‖L_gV‖/φ),        φ = κ (1 + D₂) φ_T
+```
+
+Inside the layer the robust part of μ* is the linear feedback −(M/φ)L_gVᵀ.
+One held sample of it multiplies L_gV by 1 − (1 + d₂)φ_T/φ, which is at worst
+1 − 1/κ over the Δ₂ bound. That fixes the units of κ:
+
+| κ | sampled loop along L_gV, for every d₂ in the bound |
+|---|---|
+| 0 | the exact law of (4.12)/(4.13), chatter included |
+| > ½ | converges |
+| ≥ 1 | converges without overshoot, i.e. without chatter |
+
+The same sweep, measured at the control samples, over the first three steps.
+Baseline A reads max‖η‖ 0.39 in Case I and falls in the other two.
+
+| κ | median held-torque change [Nm/sample], I / II / III | max‖η‖, I / II / III |
+|---|---|---|
+| 0 | 253 / 573 / 481 | 0.81 / 1.16 / 2.54 |
+| 0.33 | 1 / 2 / **514** | 0.11 / 0.24 / 3.02 |
+| 0.66 | 1 / 2 / 1 | 0.09 / 0.25 / 0.38 |
+| 0.99 | 1 / 2 / 1 | 0.11 / 0.42 / 0.48 |
+| 1.32 | 1 / 2 / 1 | 0.12 / 0.61 / 0.61 |
+| 3.30 | 1 / 2 / 1 | 0.15 / 1.61 / 1.28 |
+
+At κ = 0.33 the multiplier predicts −1.0 / −0.33 / −1.86 for the three true
+input gains (1, 1/1.5, 1/0.7), and only the last case, the one below −1,
+chattered. A thicker layer trades tracking for margin; κ = 1 is the thinnest
+layer that cannot overshoot anywhere in the bound.
+
+Two consequences:
+
+- **Inside the layer the robust correction does not depend on D₁.** It is
+  −L_gVᵀ/(κ(1 + D₂)‖2P₂₂‖T). A larger Δ₁ bound only moves the layer's edge out, so
+  near the orbit the "more robustness costs more μ" price of §4.1.4 is capped by
+  the sample period.
+- **The guarantee becomes ultimate boundedness.** (4.11) still holds exactly
+  wherever ‖L_gV‖ ≥ φ. Inside the layer the worst case may exceed it by at most
+  D₁‖L_gV‖(1 − ‖L_gV‖/φ) ≤ D₁φ/4, reported as `qp.bl_gap`, so
+  V̇ ≤ −(c₃/ε)V + D₁φ/4. The thesis's "tracking errors converging to zero" needs
+  continuous control. Any implementation that holds its control for a sample
+  gets a bounded error instead.
+
+`ch4_test_rclf` checks 9–12 assert each of these: the relaxed guarantee over the
+sampled ball; the vanishing correction at the orbit, where the exact law keeps
+M; no chatter in a sampled loop that makes the exact law chatter; and the
+D₁-independence. `control_dt = 0` also gives φ = 0, since continuous control has
+no sample to overshoot.
+
 ### Constrained form (4.13) and Remark 4.4
 
 Same structure as Chapter 3 stage 8 — decision vector `[u; δ]`, penalized slack,
@@ -158,16 +227,16 @@ nominal model**, so:
 
 **Advisory is not the same as optional.** It is tempting to strip (4.13) down
 to the torque box, which reads like the cleaner version of "robust CLF-QP with
-torque saturation". Measured on `posture_195`, that is not physical. Once η ≠ 0
-the robust μ\* carries a term of fixed magnitude D₁/(1 − D₂) ≈ 574 rad/s² along
-−L_gVᵀ, whose direction flips whenever L_gV passes through zero however small η
-is, so a 1 kHz loop chatters. Without the normal-force floor, that chatter
+torque saturation". Measured on `posture_195`, that is not physical. With the
+exact law (κ = 0) the chatter described above, without the normal-force floor,
 pulled the **true** stance foot into the ground for **17 / 38 / 42%** of the
 samples in Cases I–III (min Fz −1621 / −3220 / −3543 N). The stance contact is
 integrated as a pin, so the simulation walked on regardless. With the rows on
-(nominal Fz ≥ 50 N, |Fx| ≤ 0.4 Fz), the true Fz stayed ≥ 23 N in every case
-and the robust law still walked all three steps. So the rows stay on, as
-`ch3_params` sets them, and the sweep tables print the true `min Fz` next to
+(nominal Fz ≥ 50 N, |Fx| ≤ 0.4 Fz), the true Fz stayed ≥ 23 N in every case.
+The boundary layer removes the chatter but not the need for the rows: at the
+default layer and ε = 0.20, 25 steps at ×0.7 with the rows off still put 1.8% of
+the samples below zero (min Fz −481 N), against ≥ 23 N with them on. So the rows stay on,
+as `ch3_params` sets them, and the sweep tables print the true `min Fz` next to
 the tracking numbers.
 
 ---
@@ -192,30 +261,114 @@ entries once:
 
 | block | size | role |
 |---|---|---|
-| `eta_hat` | 2n_y | state predictor (4.19) |
+| `eta_hat` | 2n_y | state predictor — (4.19), or its plant-input form (below) |
 | `alpha_hat` | n_y | estimate of the ‖η‖-proportional part of θ |
 | `beta_hat` | n_y | estimate of the constant part of θ |
 | `mu2` | n_y | filter output — the adaptive control applied |
 
-**Two QP solves per call, and they are not interchangeable.** `μ₁` uses the real
-η; `μ̂₁` uses the predictor state (eq 4.21/4.37). Substituting one for the other
-would fold the reference model's own tracking behavior into the prediction error
-and the adaptation would chase it.
+### Four fixes to §4.2's formulation
+
+Run as written, §4.2's controller does not reproduce its own claim here. Over 25
+steps at ε = 0.20 it tracks no better than its reference model under either
+perturbation, and at ×1.5 it falls where the reference model does not. It also
+needs the ground to pull the foot down on 11–14% of the samples. Three changes
+make it hold over 25 steps, and a fourth over long runs. Each is an option in
+`p.l1`, and the thesis form stays one setting away:
+[`ch4_l1_opts`](../Chapter4/Control/ch4_l1_opts.m) resolves the options, and a
+parameter struct saved before they existed resolves to the thesis form.
+
+**1. The predictor is driven by what the plant received** (`p.l1.predictor`).
+The thesis predictor (4.19) runs its own copy of the reference model:
+`η̂̇ = Fη̂ + Gμ̂₁ + G(μ₂ + θ̂)`, with μ̂₁ a second CLF-QP solved on η̂.
+Subtracting the plant gives (4.24), which still contains μ̂₁(η̂) − μ₁(η).
+
+The step to (4.28) needs that difference to decrease P_ε along η̃. The two QPs
+only guarantee a decrease along η and along η̂ separately, and the min-norm law
+is nonlinear. So the mismatch forces η̃ exactly as a model error would, and the
+adaptation absorbs it: θ̂ overshot θ 3–5× at ε = 0.35.
+
+The `'plant'` predictor is the standard L₁ state predictor, with μ = μ₁ + μ₂ as
+applied:
+
+```
+η̂̇ = Fη + G(μ + θ̂) − a(η̂ − η)
+```
+
+Its error obeys `η̃̇ = −aη̃ + Gθ̃` identically, with no reference model in it.
+Three things follow:
+
+- **Adaptation signal:** the P in the adaptation law becomes I, so the law
+  adapts on the velocity prediction error.
+- **Tuning:** the β channel is the loop s² + as + Γ, so a = 2√Γ gives critical
+  damping.
+- **Cost:** the second QP per call goes away.
+
+**2. The sampled advance sees the plant's inputs** (same option). The thesis
+advance froze η across each 1 ms period while letting μ₂ move with the filter.
+The plant saw the opposite: η moving, μ₂ held.
+
+Under `'plant'` the advance holds the applied μ and reads η at both ends of the
+period. It stays causal, because η is sampled at t_{k+1} before the next control
+is computed. Freezing η would inject a·ÿ·τ into the velocity channel.
+`ch4_test_l1` check 9 runs a tracking double integrator: reading both ends
+estimates θ to 1e-15 relative error, and freezing η leaves 2.5%.
+
+After each period the estimates are also returned to their projection balls.
+Projection bounds them only in continuous time; with a stiff loop an RK4 step
+can leave the ball, and θ̂ once reached 1e7 before this was added.
+
+**3. The constrained law bounds the torque it applies**
+(`p.l1.constrain_applied`). §4.2.3 boxes μ₁ alone and adds no contact rows, so
+μ₂ reaches the joints outside every constraint.
+
+With the option on, μ₂ enters the QP as a known offset: the QP's feedforward
+becomes `ũ_ff + (L_g̃L_f̃y)⁻¹μ₂`. The cost and the CLF row still act on μ₁,
+while the box and the friction and normal-force rows bound the total torque.
+The rows are written on the nominal model (Remark 4.4), but they are no longer
+bypassed.
+
+Because the box now bounds the total torque, the L₁ preset scales it with the
+robot, `u_max · max(1, s)`. A 1.5× robot needs 1.5× the torque for the same
+motion, and a 244 Nm box is below the 293 Nm its feedforward alone needs.
+
+**4. The adaptation is normalized for the sampled loop**
+(`p.l1.normalized_rate` = ρ, 0.75 rad per sample). The loop from prediction error
+to estimates runs at about √(Γ + Γ_α‖η‖²) rad/s, so it speeds up as tracking
+degrades. After a bad footstrike, at ‖η‖ = 13, it reaches 4.1 rad per 1 ms
+sample, faster than a 1 kHz controller can realize. Each of the long-run falls
+re-simulated sample by sample began that way.
+
+Both adaptation laws are divided by m² = max(1, (Γ + Γ_α‖η‖²)/(ρ/Δt)²). That
+holds the loop at ρ rad per sample and leaves the law untouched while the loop
+is slower. θ̂ = α̂‖η‖ + β̂ is not changed. It is a sampled-data fix, off for
+continuous control (`p.control_dt = 0`).
+
+The Lyapunov argument survives, in weakened form. With the prediction error
+weighted by 1/m² the cross terms still cancel. The prediction-error bound
+loosens by the factor m, and holds only while m² decays slower than e^(−2at),
+which a footstrike can break. ρ sits inside a window, 0.75–1, that §5a
+measures. Over the thesis's 25 steps it changes the mass-scale sweep little,
+but it costs the random-load run a larger excursion. What it buys is survival
+on the long runs.
+
+§5a has the measured effect of all four.
 
 ### Why the pieces are what they are
 
 - **Predictor** exists because `η̃ = η̂ − η` is *measurable* while `α̃, β̃` are not.
-  Subtracting predictor from plant gives eq (4.24) exactly.
+  Subtracting predictor from plant gives eq (4.24) for the thesis form and
+  `η̃̇ = −aη̃ + Gθ̃` for the plant form, both exactly.
 - **Adaptation laws (4.30)** are not free choices — they are precisely the `y`
-  that cancels the cross term in the composite Lyapunov function (4.27).
+  that cancels the cross term in the composite Lyapunov function (4.27), with
+  the P that certifies the predictor's error. For the thesis form that is P_ε:
   `Gᵀ P_ε η̃` is recovered as `L_gV(η̃)ᵀ/2` from `ch3_clf_eval`, so there is one
-  definition of `P_ε` in the repo, not two.
+  definition of `P_ε` in the repo, not two. For the plant form it is I.
 - **Projection operator** ([`ch4_proj`](../Chapter4/Control/ch4_proj.m)) confines
   the estimates to a ball while preserving inequality (4.29), which is what makes
   the error bound (4.35) finite. Without it the estimate can drift and the result
   is void, not just untidy.
 - **Low-pass filter** is what separates *how fast we estimate* from *how fast we
-  act*. Γ = 1e4 makes θ̂ fast and ragged; feeding that to the joints would put
+  act*. Γ = 1e5 makes θ̂ fast and ragged; feeding that to the joints would put
   high-frequency content into the ground reaction force and lift the foot.
 
 ### At footstrike
@@ -233,19 +386,21 @@ moves off its initial condition and `μ₂ ≡ 0`. `ch4_test_l1` asserts this to
 machine precision. This is the sharpest statement of L₁'s advantage over the
 robust controller, which pays regardless.
 
-### Torque saturation (§4.2.3) binds on μ₁ only
+### Torque saturation (§4.2.3), and what the box binds
 
-The thesis says so explicitly, and it has a visible consequence: the realized
-torque is `ũ_ff + (L_g̃L_f̃y)⁻¹(μ₁ + μ₂)` and only the μ₁ part was inside the box.
+In the thesis form (`p.l1.constrain_applied = false`) it binds on μ₁ only. The
+thesis says so explicitly, and it has a visible consequence: the realized torque
+is `ũ_ff + (L_g̃L_f̃y)⁻¹(μ₁ + μ₂)` and only the μ₁ part was inside the box.
 `l1.u_box_excess` reports how far past, per call, rather than leaving it to be
-discovered from a plot.
+discovered from a plot. With the default the box binds on the total torque (fix
+3 above), and the excess is zero by construction.
 
 **The box is sized to the gait, with headroom.** The thesis's 65 Nm is below the
 feedforward of every gait in `Results/`, and a μ₁ box that cannot deliver the
 feedforward starves the inner QP; the adaptation then chases the tracking
 failure instead of the model error and runs away. So `ch4_load_gait` raises
 `p.l1.u_max` to **1.25×** the gait's own peak torque (244 Nm on `posture_195`).
-The 25% is measured: at mass scale 1.5 a box exactly at the 195 Nm peak ran
+The 25% is measured (at ε = 0.35, three steps): at mass scale 1.5 a box exactly at the 195 Nm peak ran
 away to 7193 Nm and lost the robot in step 3, while 1.25× walked all three
 steps at Vend/Vmx 0.065 (1.5× and 2× changed nothing material).
 
@@ -263,9 +418,11 @@ Pipeline:
 |---|---|---|
 | 0 | `ch4_load_gait` — **refuses a gait that is not an orbit of today's dynamics** | — |
 | 1 | `ch4_delta_bounds` — **measure, then adopt** | (4.4), (4.10) |
-| 2 | `ch4_compare_controllers(..., 'robust')` | §4.1.4 |
+| 2 | `ch4_compare_controllers(..., 'robust')` | §4.1.4, Cases I–III |
+| 2b | `ch4_compare_controllers(..., 'case4')`, with its own bounds | §4.1.4, Case IV (Fig 4.5) |
 | 3 | `ch4_compare_controllers(..., 'l1')` | §4.2.4 |
-| 4 | `ch4_plot_uncertainty` | Figs 4.2–4.10 |
+| 3b | `ch4_load_study` — an unknown torso load, random and fixed | §4.2.4 (Fig 4.11) |
+| 4 | `ch4_plot_uncertainty`, `ch4_plot_load` | Figs 4.2–4.11 |
 | 5 | `ch4_animate` | — |
 
 Stage 0 stops the run if the gait's own collocation residuals, re-evaluated on
@@ -276,12 +433,30 @@ Stage 1 is not optional and comes first: a robust controller run outside its own
 bound is not a robust controller, it is an aggressive one. Its result is also
 what runs. Unless you pass `rclf.delta1_max` / `rclf.delta2_max`, `ch4_main` sets
 the bounds to 1.2× the Cases I–III maxima measured along a nominal rollout of
-the loaded gait. Case IV (scale 3) is measured and printed but not folded in,
-since it would size the robust law for a perturbation the sweeps never apply.
+the loaded gait. Case IV (scale 3) is not folded in, since it would size the
+robust law for a perturbation Cases I–III never apply. It runs as its own sweep
+(stage 2b) with bounds measured the same way at scale 3: Δ₁max = 434.2 and
+Δ₂max = 0.800. For a uniform scale ‖Δ₂‖ = |1/s − 1| exactly, so at s = 3 it is
+2/3, and the Cases I–III bound of 0.514 would run Case IV outside the law's own
+hypothesis. `ch4_compare_controllers` prints a note whenever a robust law is
+about to do that.
+
+**The sweeps run 25 steps.** Three steps — the horizon of the thesis's
+Figs 4.2–4.4 — separate a controller that falls at once from one that does not,
+but not one that converges from one that drifts. At the old ε = 0.35 every
+three-step row of the robust law looked converged, and over 25 steps it fell in
+step 21 of Case I with a perfect model. 25 is also Fig. 4.6's horizon. The full
+study takes about ten minutes at 1 kHz, plus about two for Case IV and four
+for the load study, and `n_steps` = 3 gives the thesis-style figures. The GIFs keep their own
+`anim_steps` (default 4), because a GIF is a fixed 150 frames.
 
 ```matlab
+ch4_main('n_steps', 3)                      % thesis-style three-step figures
+ch4_main('presets', {'case4'}, 'animate', false)   % Case IV alone
+ch4_main('presets', {'load'}, 'animate', false)    % the unknown-load study alone
 ch4_main('presets', {'l1'}, 'n_steps', 5)
 ch4_main('rclf.delta2_model', 'matrix')     % nested fields take dotted names
+ch4_main('rclf.boundary_layer', 0)          % the exact robust law, chatter included
 ch4_main('l1.omega_c', 100, 'l1.Gamma', 1e5)
 ch4_main('animate', false)                  % skip the GIFs
 ```
@@ -316,11 +491,15 @@ ch4_animate(x0, alpha, p, {'clfqp','rclfqp_con','l1'}, 4, 'Results/ch4_walk.gif'
 
 ### Reading the comparison table
 
-The claim is **not** "the robust/adaptive controller is better on average" — on
-Case I it need not be, and Remark 4.7 says as much. The claim is that its
-convergence behavior is **unchanged across perturbations** while the baseline's
-degrades. So read **down** each controller across scales, not across controllers
-within a scale. `Vend/Vmx` makes that explicit.
+The headline claim (Remark 4.6) is not "the robust/adaptive controller is
+better on average". It is that the controller's convergence behavior is
+**unchanged across perturbations** while the baseline's degrades. So read
+**down** each controller across scales, not across controllers within a scale.
+`Vend/Vmx` makes that explicit. Remark 4.7 adds a within-scale claim for Case I,
+where there is no model error at all. There the robust law should track
+*better* than both baselines, because it is defending a worst case that is not
+happening. B should do slightly worse than A, because its box sits just below
+A's peak.
 
 **The robust boxes are measured, not copied.** §4.1.4 sets each case's box
 "slightly below the maximum torque that controller A uses" — 60/80/150 Nm on the
@@ -335,19 +514,22 @@ box = max( 0.8 × peak|u| of A ,  scale × p.gait_u_peak )
 
 The floor is the true robot's own feedforward peak (s times the mass needs s
 times the torque for the same motion). It binds only in Case I, where A with a
-perfect model draws barely more than the feedforward itself (196.4 vs 195.0 Nm):
-at 0.8× (157 Nm) `clfqp_con` fell in step 3 and `rclfqp_con` in step 1, while at
-the 195 Nm floor both walk all three. Pass `opts.u_box` to fix the boxes by hand.
+perfect model draws barely more than the feedforward itself (196.4 vs 195.0 Nm
+at ε = 0.35, where this was measured over three steps): at 0.8× (157 Nm)
+`clfqp_con` fell in step 3 and `rclfqp_con` in step 1, while at the 195 Nm floor
+both walk all three. Pass `opts.u_box` to fix the boxes by hand.
 
 **`min Fz` is the column that says whether any of it is walking.** It is the
 *true* model's normal force. The stance contact is integrated as a pin, so a
 controller can demand that the ground pull the foot down and still complete
 steps in simulation; a negative entry means those steps are not realizable.
 
-**Read `Vend/Vmx` loosely for `rclfqp_con`.** Its worst-case term chatters at the
-sample rate, so V at the final sample lands anywhere in an order-of-magnitude
-band. The same Case I run gave 0.021 at a 195.0 Nm box and 0.19 at 195 Nm plus a
-floating-point hair. Steps, max‖η‖ and min Fz survive that.
+**With κ = 0, read `Vend/Vmx` loosely for `rclfqp_con`.** The exact law's
+worst-case term chatters at the sample rate, so V at the final sample lands
+anywhere in an order-of-magnitude band. The same Case I run gave 0.021 at a
+195.0 Nm box and 0.19 at 195 Nm plus a floating-point hair. Steps, max‖η‖ and
+min Fz survive that. The default boundary layer removes the chatter, and with it
+this caveat.
 
 **`steps` counts steps, not guard crossings.** A falling robot reaches the
 ground too, and before this was checked a run with max‖η‖ = 290 was tabulated as
@@ -363,93 +545,479 @@ step was shorter than `p.step_len_min`. The `reason` field names which.
 Reference gait: `ch3_gait_posture_195.mat`, the forward-lean 195 Nm gait solved
 on the current 74 kg model. T = 0.2733 s, L = 0.427 m, v = 1.56 m/s, and its own
 collocation residuals re-evaluated on today's dynamics are 7.6e-7 (defect),
-7.6e-9 (periodicity) and 1.2e-6 (‖η⁺‖). Three steps per run, ε = 0.35, control at
-1 kHz, `Δ₁max = 279.1` and `Δ₂max = 0.514` (measured along a nominal rollout,
-×1.2). Result set `Results/ch4_{robust,l1}_2026-09-12_23-46-32/`, 69 s end to end.
+7.6e-9 (periodicity) and 1.2e-6 (‖η⁺‖). **25 steps per run**, ε = 0.20, control
+at 1 kHz, `Δ₁max = 279.1` and `Δ₂max = 0.514` (measured along a nominal rollout,
+×1.2), robust boundary layer κ = 1. L₁ with the four fixes of §4: plant-input
+predictor at a = 800, Γ = 1e5, both estimates, rows on the applied torque, and
+adaptation normalized above ρ = 0.75 rad per sample. Result sets:
 
-Each cell reads **steps · max‖η‖ · min Fz**. A fall is named by the step
-`ch4_simulate` rejected.
+- robust: `Results/ch4_robust_2026-09-13_20-45-50/`;
+- Case IV, with its own bounds: `Results/ch4_case4_2026-09-14_13-50-53/`;
+- L₁: `Results/ch4_l1_2026-09-14_22-33-20/`;
+- the load study: `Results/ch4_load_2026-09-14_22-37-57/`.
 
-### §4.1.4 — the robust CLF-QP reproduces Remark 4.6
+The L₁ and load sets were rerun when normalization became the default; the
+sets they replace, without it, are `ch4_l1_2026-09-13_20-45-50` and
+`ch4_load_2026-09-14_14-40-48`. Tables that ran without normalization say so.
 
-| controller | Case I, ×1 (box 195 Nm) | Case II, ×1.5 (box 623 Nm) | Case III, ×0.7 (box 405 Nm) |
+Each cell reads **steps · max‖η‖ · min Fz** over the whole run. A fall is named
+by the step `ch4_simulate` rejected.
+
+### §4.1.4 — the robust CLF-QP holds the orbit where the baselines lose it
+
+| controller | Case I, ×1 (box 195 Nm) | Case II, ×1.5 (box 1098 Nm) | Case III, ×0.7 (box 419 Nm) |
 |---|---|---|---|
-| A `clfqp` (min-norm) | 3 · 0.39 · 39 N | **falls in step 3** · 15.1 · 74 N | **falls in step 3** · 26.7 · −1810 N |
-| B `clfqp_con` (box) | 3 · 0.43 · 50 N | **falls in step 3** · 15.1 · 78 N | **falls in step 2** · 3.1 · 12 N |
-| **C `rclfqp_con`** | 3 · 1.59 · 50 N | 3 · **0.49** · 63 N | 3 · **2.62** · 23 N |
+| A `clfqp` (min-norm) | 25 · 0.25 · 32 N | 25 · 16.6 · **−134 N** | 25 · 14.5 · **−1734 N** |
+| B `clfqp_con` (box) | 25 · 0.29 · 50 N | 25 · 16.4 · 73 N | 25 · 15.1 · 1 N |
+| **C `rclfqp_con`** | 25 · 1.13 · 50 N | 25 · **4.11** · 90 N | 25 · **4.38** · 23 N |
 
-Both baselines fall under either perturbation. A falls in step 3 when its swing
-foot fails to clear at ×1.5, and loses the robot 13 ms into step 3 at ×0.7.
-B falls in step 2 at ×0.7 with the hip at 0.17 m. The robust controller walks
-every case: step times **0.273, 0.273, 0.273** s (Case I), **0.273, 0.273,
-0.274** (II) and **0.274, 0.279, 0.273** (III), against a nominal 0.2733. It
-keeps the true normal force positive throughout (≥ 23 N) and max‖η‖ at or below
-2.62. Its
-convergence behavior is flat across the perturbations while the baselines lose
-the robot — that is Remark 4.6.
+Nothing falls within 25 steps at ε = 0.20, the baselines included. What changed
+is how the baselines fail, not whether they do:
 
-It is *not* the tightest tracker in Case I (max‖η‖ 1.59 against A's 0.39),
-which is Remark 4.7 and the price §4.1.4 closes on. `more robustness costs more
-mu` in `ch4_test_rclf` puts a number on it: ‖μ‖ = 0.31, 87.6, 233, 524 as the
-bounds are scaled up from zero at one state, paid even at zero model error. On a
-1 kHz loop that price shows up as chatter, which is the rapid oscillation in the
-yellow V curve of Figure 1 (see §3 for what the contact rows prevent it from
-doing).
+- **Tracking:** under either perturbation A and B reach max‖η‖ 14–17.
+- **Timing:** their step times wander — 0.184–0.269 s at ×1.5 and 0.277–0.346 s
+  at ×0.7, against a nominal 0.2733.
+- **Contact:** A needs the ground to pull its foot down on 12.5% / 3.7% of the
+  samples.
 
-### §4.2.4 — L₁ keeps the robot stepping, but not on physical contact forces
+The robust law holds max‖η‖ at 4.1 / 4.4 and its step times within
+0.264–0.284 s. It keeps the true normal force positive throughout (≥ 90 N and
+≥ 23 N), and at ×1.5 it uses at most 511 Nm of a 1098 Nm box. Its per-step CLF
+peak starts about two orders of magnitude below both baselines' and is still
+4–14× below by step 25 (Figure 1). That is Remark 4.6's contrast. The ×1.5 box is large because the
+rule reads A's peak over the run, 1372 Nm over 25 steps.
 
-| controller | ×1 (box 244 Nm) | ×0.7 | ×1.5 |
+**Its convergence is not unchanged, though, and Remark 4.7 holds only early.**
+The robust law's per-step V peak grows across the sweep's 25 steps:
+
+| case | V peak, step 1 → step 25 |
+|---|---|
+| ×1.5 | 0.0073 → 0.54 |
+| ×0.7 | 0.0031 → 0.44 |
+| ×1 (perfect model) | 5e-5 → 0.024 |
+
+In Case I it starts as the tightest tracker. Over steps 1–3 its max‖η‖ is 0.09
+against A's 0.25, and its V peaks stay below A's through step 5. By step 10
+they are above A's, and the run ends at max‖η‖ 1.13. At the old ε = 0.35 the
+same growth dropped the robot in step 21 of Case I. Measured there, the growth
+survives the boundary layer, the contact rows, the box and D₂ = 0, and it
+vanishes with D₁ = 0, so it comes from the robust term itself. The gait is not the cause:
+`posture_195`'s hybrid zero dynamics are stable, δ²_zero = 0.746. At ε = 0.20
+the growth is slower, not gone.
+
+**The growth levels off.** Run past the sweep's horizon, with each case's own
+bounds and box, the robust law settles within 30–50 steps onto a bounded
+plateau. It keeps walking at nominal speed, and no case falls:
+
+| case | steps run | plateau: mean per-step V peak · max‖η‖ | settled by | speed, last 10 steps |
+|---|---|---|---|---|
+| ×1 (perfect model) | 60 | 0.065 · 1.7 | step ~45 | 1.548 m/s |
+| ×0.7 | 60 | 0.63–0.74 · 5.5 | step ~30 | 1.552 m/s |
+| ×1.5 | 60 | 0.86 · 5.6 | step ~35 | 1.575 m/s |
+| ×3 (Case IV) | 120 | 2.9–3.0 · 10.9 | step ~50 | 1.563 m/s |
+
+So the drift is a transient toward ultimate boundedness, not a divergence. The
+25-step maxima of 4.1 and 4.4 above are on their way to 5.6 and 5.5. Two things
+follow:
+
+- **Remark 4.6 does not hold in the long run.** The steady error grows with the
+  perturbation (1.7 / 5.5 / 5.6 / 10.9), though gracefully. Even the 60-step
+  maxima under perturbation stay below what the baselines reach within 25 steps
+  (14.5–16.6).
+- **The price of robustness is a steady error with a perfect model.** In Case I
+  the robust law settles at max‖η‖ 1.7, against A's 0.25 over 25 steps.
+  Remark 4.7's advantage is lost by step 10 and does not return within 60
+  steps.
+
+**The robust law's three cases walk one orbit.** Figure 4 is the analogue of
+Fig. 4.6: 25 steps of each controller in each case. The thesis describes three
+different orbits there. Here the robust law's three cases lie on top of each
+other, and they have to. A uniform mass scale leaves the hybrid zero dynamics
+exactly invariant: `ch4_test_model` asserts both halves, that q̈_drift and the
+post-impact velocity are independent of s. So a controller that enforces the
+virtual constraints walks the nominal orbit whatever s is.
+
+The baselines' orbits do move, by up to about 6° of torso pitch at ×1.5. That
+displacement is their tracking error, not a new orbit of the robot. Only the
+torso-load study, which changes M non-uniformly, can move the orbit itself.
+
+### §4.1.4, Case IV — the robust law survives ×3 where both baselines fall, and does not stop
+
+Case IV runs as its own sweep with bounds measured at scale 3, ×1.2:
+`Δ₁max = 434.2` and `Δ₂max = 0.800`, against an exact ‖Δ₂‖ of 2/3. The box
+follows the same rule: 0.8 × A's 2243 Nm peak = 1794 Nm. The thesis used 300 Nm
+on its 32 kg robot. Figures 2 and 3 of the result set are Fig. 4.5.
+
+| controller | Case IV, ×3 (box 1794 Nm) |
+|---|---|
+| A `clfqp` | **falls in step 4** · 19.6 · 5 N |
+| B `clfqp_con` | **falls in step 4** · 20.2 · 142 N |
+| **C `rclfqp_con`** | 25 · **1.86** · 96 N |
+
+**A and B fail as the thesis says.** Both take three steps whose durations
+collapse (0.26 s, then 0.14 and 0.12–0.13 s) while V climbs to 28–30. Their
+fourth step is shorter than the 0.15 m floor.
+
+**C regulates the outputs with a slight degradation, as the thesis says — over
+the sweep's 25 steps.**
+
+- **Tracking:** max‖η‖ 1.86, against 1.13 in Case I.
+- **Contact and torque:** the true normal force stays ≥ 96 N, the torque peaks
+  at 1243 Nm so the box never binds, and no QP fails.
+- **Residual error:** output y₂ holds a steady offset of 1.5–2°, and the torso
+  cycle settles about 1° lower in pitch than the nominal one (Figure 4, and
+  0.46–3.59° over the last five steps against 1.69–4.55°). That is tracking
+  error, since a uniform scale cannot move the orbit.
+
+**It does not slow to a stop.** The thesis reports walking that "slows down after
+several steps to a complete stop", which it attributes to an unstable orbit. C
+averages 1.576 m/s over the first three steps and 1.541 m/s over the last five,
+against a nominal 1.563, and a 120-step run is still at 1.563 m/s. The orbit
+explanation cannot apply to this model. A uniform mass scale leaves the hybrid
+zero dynamics exactly invariant, and `posture_195`'s are stable.
+
+**Past step 25 the degradation stops being slight.** Between steps 25 and 50,
+C's max‖η‖ grows to about 10.9, and it holds there to step 120 (the plateau
+table above). So at ×3 the robust law walks indefinitely, with a steady error
+about twice the ×0.7 and ×1.5 plateaus.
+
+### §4.2.4 — with the four fixes, L₁ holds its convergence where the baseline does not
+
+| controller | ×1 (box 244 Nm) | ×0.7 (box 244 Nm) | ×1.5 (box 366 Nm) |
 |---|---|---|---|
-| A `clfqp` | 3 · 0.39 · 39 N | **falls in step 3** · 26.7 · −1810 N | **falls in step 3** · 15.1 · 74 N |
-| B `l1` | 3 · 0.39 · 49 N | 3 · 21.1 · **−2688 N** | 3 · 10.6 · **−410 N** |
-| C `l1_con` | 3 · 0.40 · 50 N | 3 · 21.4 · **−2881 N** | 3 · 9.1 · **−484 N** |
+| A `clfqp` | 25 · 0.25 · 32 N | 25 · 14.5 · **−1734 N** | 25 · 16.6 · **−134 N** |
+| B `l1` | 25 · **0.14** · 50 N | 25 · **3.74** · **−288 N** | 25 · **2.35** · **−210 N** |
+| C `l1_con` | 25 · **0.15** · 50 N | 25 · **4.57** · 23 N | 25 · **4.77** · 90 N |
+| *C, thesis form* | *25 · 0.38 · 49 N* | *25 · 14.5 · −1403 N* | ***falls in step 14*** · *18.7 · −978 N* |
 
-With a perfect model L₁ is the CLF-QP, as §4 says: the same max‖η‖. Its
-estimate is nonzero only through the 1 kHz sample-and-hold error, and the lower
-Vend/Vmx (0.066 against 0.36) suggests it partly cancels that error. Under either
-perturbation it completes three steps at near-nominal timing where its own
-reference model falls: 0.271, 0.276, 0.278 s at ×0.7 and 0.278, 0.290, 0.245 s
-at ×1.5 for `l1`.
+The last row is §4.2 as written: `predictor = 'thesis'`, Γ = 1e4, the box on μ₁
+alone. It comes from `Results/ch4_l1_2026-09-13_18-26-49/`.
 
-**Those steps are not realizable.** The true normal force is negative for **26% /
-15%** of the samples under `l1` (×0.7 / ×1.5) and **25% / 12%** under `l1_con`. μ₂
-acts outside any QP, so nothing bounds the contact force it implies, and the
-pinned stance model absorbs the pull. Until that is addressed, the §4.2.4 result
-here is a tracking result, not a walking one.
+Normalization moves this table only slightly. With the first three fixes alone,
+B read 4.81 · −362 N at ×0.7 and 2.17 at ×1.5, and C read 4.58 and 4.51; every
+other cell was the same. At ×1 it never engages.
 
-Tracking at ×0.7 is also poor (max‖η‖ 21, final ‖η‖ 12–13), and it is not the
-box: every box from 1.0× to 2.0× the gait's peak gives max‖η‖ 21–24. It *is*
-sensitive to the filter. At ω_c = 50 / 100 / **150** / 300 rad/s, max‖η‖ reads
-11.3 / 11.6 / **21.1** / 27.3 at ×0.7 and 7.1 / 10.3 / **10.6** / 9.4 at ×1.5.
-150 rad/s is kept because it is the thesis's value and three steps per setting
-is thin evidence, but it is the first knob to revisit, and whether a lower ω_c
-also removes the negative Fz is not yet measured. The estimator itself follows
-the uncertainty's magnitude rather than tracking it pointwise, as §4 expects:
-sampled at ×1.5, ‖θ̂‖ against ‖θ_true‖ reads 87/38, 61/71, 58/33, 226/234, 94/70.
+**With a perfect model L₁ is at least the CLF-QP.** Its max‖η‖ is 0.14 against
+0.25, and its CLF between impacts is about four times lower. The estimate is not
+quite zero (‖θ̂‖ ≤ 9), because the 1 kHz hold makes the output acceleration
+drift within each period. L₁ cancels part of that intersample error.
 
-L₁'s reference model *is* the Chapter-3 min-norm CLF-QP, and on this gait that
-controller falls under both perturbations. Strengthening the reference model
-(lower ε, or the constrained CLF-QP as μ₁) remains the structural lever, beyond
-tuning the filter.
+**Under either perturbation it holds:**
+
+- **Steps:** both laws walk all 25 steps.
+- **Tracking:** max‖η‖ 2.3–4.8, against the baseline's 14.5–16.6.
+- **Timing:** step times stay within 0.257–0.292 s (the baseline wanders over
+  0.184–0.340 s).
+- **Convergence:** the per-step CLF peak does not grow. For `l1_con` at ×1.5 it
+  moves 0.078 → 0.18 over the run, where the robust law's grows 0.0073 → 0.54
+  (§4.1.4).
+
+In Figure 1 both L₁ curves sit one to two orders of magnitude below the baseline
+in both perturbed cases, stationary from the first steps. That is §4.2.4's
+claim: convergence unaffected by the perturbation, and much better than the
+standard CLF-QP.
+
+**The estimate now measures the uncertainty.** The median ‖θ̂‖/‖θ‖ is 0.95–0.99
+in both perturbed cases. In the thesis form θ̂ overshot 3–5×.
+
+**`l1_con` is realizable; `l1` is not quite.** With the rows on the applied
+torque, `l1_con` keeps the true normal force at ≥ 23 N (×0.7) and ≥ 90 N
+(×1.5). `l1` has no rows, and still asks the ground to pull on 2.2% / 1.0% of
+the samples, against 11–14% in the thesis form.
+
+**×1.5 sits near an edge, so the sweep behind the default is reported, not just
+its winner.** Cells read steps · max‖η‖ over 25 steps, at ×1.5, with the box
+scaled and default projection balls:
+
+| predictor rate a | 500 | 632 (critical) | 700 | **800** | 900 |
+|---|---|---|---|---|---|
+| `l1` | 25 · 6.18 | 25 · 7.05 | 25 · 2.24 | **25 · 2.35** | 25 · 2.29 |
+| `l1_con` | 25 · 6.70 | 25 · 6.43 | 25 · 8.03 | **25 · 4.77** | 25 · 2.89 |
+| *`l1`, without normalization* | *falls in step 16* | *falls in step 16* | *25 · 2.2* | *25 · 2.2* | *25 · 2.3* |
+| *`l1_con`, without normalization* | *25 · 6.3* | *25 · 12.6* | *falls in step 12* | *25 · 4.3* | *25 · 2.8* |
+
+- **With normalization nothing falls at any rate**, for either law. Without it,
+  `l1` fell below a = 700 and `l1_con` fell at 700.
+- **The rate still sets the tracking.** `l1` holds max‖η‖ 2.2–2.4 at a ≥ 700 and
+  6.2–7.1 below. `l1_con` spans 2.9–8.0 without a monotone trend, so its ×1.5 tracking
+  belongs to this tuning rather than to a margin.
+- **Grids differ.** The normalized rows are measured on the table's own grid;
+  a = 800 is the table's cell. The rows without normalization were measured on
+  every tenth solver point, hence 4.3 against their table's 4.51. Without
+  normalization, doubling the projection balls also changed which runs fell.
+
+**Without normalization, past 25 steps `l1_con` holds on a mass scale and plain
+`l1` does not.** These are the same runs with the same parameters and boxes,
+extended to 60 steps (120 for `l1` at ×1.5), measured before normalization
+existed. Ranges are over 10-step blocks:
+
+| case | controller | steps | max‖η‖ per block | mean per-step V peak | true contact |
+|---|---|---|---|---|---|
+| ×1 | `l1` / `l1_con` | 60 / 60 | 0.09–0.14 / 0.09–0.15 | ≈ 3e-4, falling slightly | Fz ≥ 50 N |
+| ×0.7 | `l1` | 60 | 3.8–5.5 | 0.15–0.35 | **Fz < 0 on 1.3–2.7% in every block** |
+| ×0.7 | `l1_con` | 60 | 4.2–5.4 | 0.25–0.51 | Fz ≥ 23 N |
+| ×1.5 | `l1` | **falls in step 76** | 2.0–2.2 to step 40, then 3.3, 4.2, 6.5, 9.4 | 0.15 → 2.2 | Fz < 0 on 0–1.4% |
+| ×1.5 | `l1_con` | 60 | 4.5 in steps 1–10, 2.0–2.3 from step 21 | 0.44 → 0.16 | Fz ≥ 90 N |
+
+- **`l1_con` holds its convergence.** It is flat with a perfect model, bounded
+  without a trend at ×0.7, and at ×1.5 its 25-step max of 4.5 turns out to be
+  the early transient: it settles at max‖η‖ ≈ 2.1 from step 21. The true normal
+  force stays positive in every block.
+- **Plain `l1` at ×1.5 fails slowly.** It runs as well as `l1_con` for 40
+  steps. Then its α̂ reaches the projection bound (206 of 210), and the error
+  grows block by block until it falls in step 76. At ×0.7 its demand for a
+  negative normal force is persistent, not a transient.
+- **Even with a perfect model α̂ creeps**, from about 1.6 to 5–6 over 60 steps,
+  absorbing the sample-and-hold error. That is far from its bound, but it does
+  not settle.
+
+**With normalization, plain `l1` at ×1.5 holds too.** The normalization screen
+below measured the same runs with it on, on every third solver point, without
+contact:
+
+- **`l1` at ×1.5** walks all 120 steps, at max‖η‖ 2.0–2.9 per block.
+- **`l1_con` at ×1 and ×0.7** reads 0.1–0.2 and 4.0–5.5.
+- **`l1_con` at ×1.5 does not settle the way it did without normalization:**
+  4.8 in steps 1–10 and 2.2–2.4 through step 40, then 3.5 and 5.5.
+
+The screen did not run plain `l1` at ×1 or ×0.7.
+
+### §4.2.4, Fig 4.11 — L₁ carries 94% of body weight where a box-matched CLF-QP cannot: for 25 steps in every case, for 60 in nine random sequences of ten
+
+The robot carries a mass at the hip that no controller is told about. It is
+redrawn every step from 0–70 kg (Fig 4.11a), or fixed at 23 / 35 / 46 kg
+(Fig 4.11b). Those are the thesis's 0–30 kg and 10 / 15 / 20 kg scaled by this
+robot's mass (×74/32), so each load is the same share of body weight. The load
+is a point mass at the torso base, with no rotational inertia of its own.
+
+Two design choices, both measured:
+
+- **A second baseline.** Besides §4.2.4's three controllers, the study runs
+  `clfqp_con` with the same box and contact rows as `l1_con`. Under load the
+  unconstrained CLF-QP's peak torque is 2–3.5 times `l1_con`'s, so a
+  comparison against it alone cannot say whether the adaptation or the torque
+  is doing the work.
+- **The box.** It is 1.25 × the loaded robot's own feedforward peak along the
+  orbit. For a uniform scale this rule is exactly the L₁ preset's. Sized by
+  mass ratio instead, `l1_con` fell within three steps at 46 and 70 kg.
+
+**A load is not a small mass scale.** Along the orbit:
+
+| load | 23 kg | 35 kg | 46 kg | 0–70 kg (at 70) |
+|---|---|---|---|---|
+| ‖Δ₂‖ · its isotropic part | 1.99 · 0.19 | 2.30 · 0.23 | 2.47 · 0.26 | 2.72 · 0.30 |
+| min eig(I + Δ₂) | 0.49 | 0.41 | 0.37 | 0.30 |
+| loaded feedforward peak → box | 288 → 360 Nm | 330 → 412 Nm | 366 → 458 Nm | 445 → 556 Nm |
+
+A mass scale has Δ₂ = (1/s − 1)I, isotropic and below 1. A hip load distorts
+the input gain far more in some output directions than in others. Its
+eigenvalues stay real and positive, so no direction reverses, but ‖Δ₂‖ > 1 at
+every load, which is outside anything the robust CLF-QP's bound can cover. The
+study therefore leaves the robust law out, as the thesis does.
+
+Each cell reads steps · max‖η‖ · min Fz over 25 steps, with the true normal
+force computed under the load each step carried:
+
+| controller | 0–70 kg random (box 556 Nm) | 23 kg (box 360 Nm) | 35 kg (box 412 Nm) | 46 kg (box 458 Nm) |
+|---|---|---|---|---|
+| A `clfqp` (no box) | 25 · 8.95 · 38 N | 25 · 5.79 · 39 N | 25 · 5.61 · 18 N | 25 · 5.33 · **−29 N** |
+| A′ `clfqp_con` (box, rows) | **falls in step 10** · 8.45 · 30 N | **falls in step 7** · 20.3 · **−13 N** | **falls in step 3** · 6.92 · 48 N | **falls in step 4** · 23.9 · **−131 N** |
+| B `l1` | **falls in step 15** · 12.5 · **−1047 N** | 25 · 2.63 · 75 N | 25 · 6.98 · **−339 N** | 25 · 10.4 · **−120 N** |
+| **C `l1_con`** | 25 · 13.8 · **−58 N** | 25 · **2.41** · 115 N | 25 · 5.31 · **−30 N** | 25 · 5.03 · **−35 N** |
+
+**Over 25 steps, at the same torque budget, the adaptation is what walks.**
+`l1_con` completes all 25 steps of every case, the random 0–70 kg draw
+included, which is the thesis's claim. `clfqp_con`, with the same box and rows,
+falls in every case within 3–10 steps. The unconstrained `clfqp` also walks
+everything, by drawing 2–3.5× the peak torque.
+
+**Normalization costs the random run within those 25 steps.** Without it:
+
+| without normalization | 0–70 kg random | 23 kg | 35 kg | 46 kg |
+|---|---|---|---|---|
+| B `l1` | falls in step 15 · 8.98 · −306 N | 25 · 2.63 · 75 N | 25 · 5.06 · −164 N | 25 · 9.23 · −274 N |
+| C `l1_con` | 25 · 9.06 · 6 N | 25 · 2.41 · 102 N | 25 · 4.86 · −23 N | 25 · 5.22 · −51 N |
+
+`l1_con`'s worst step under the random load grows from 9.06 to 13.8, and one
+sample of 15 067 asks the ground to pull the foot down, by 58 N. At the fixed
+loads its worst step moves by less than 10% either way. Plain `l1` gets worse at
+35 kg, and in its worst step at 46 kg.
+
+**Over 60 steps, normalization is what keeps `l1_con` walking.**
+
+| random 0–70 kg, 60 steps | seed 11 (the draws above) | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|---|
+| `l1_con` (box 556 Nm) | 60 | 60 | 60 | 60 |
+| `l1_con`, without normalization | **falls in step 43** | **falls in step 33** | **falls in step 55** | **falls in step 57** |
+| `clfqp` (no box) | 60 | 60 | 60 | 60 |
+
+- **With normalization `l1_con` walks all four sequences,** and five of six
+  further ones (seeds 4–9, next section). Its α̂ still reaches the projection
+  bound (209.8 of 210) in every random run.
+- **Without it `l1_con` falls under every sequence,** with α̂ at the bound
+  (≥ 207 of 210) in nearly every 10-step block. The falls follow no single
+  pattern in the load: the steps before them include both drops and rises.
+- **The unconstrained CLF-QP walks all 60 steps of all four sequences,** at
+  max‖η‖ 3.7–12.2 per block. Over the first 25 steps it drew 2–3 times
+  `l1_con`'s torque.
+- **Under the fixed 46 kg load `l1_con` holds for 60 steps either way**, with α̂
+  at its bound. Per block, max‖η‖ is 4.7–5.3 with normalization and 4.2–5.2
+  without. Contact was recorded only without it: true Fz was negative on 0.07%
+  of two blocks' samples.
+
+So without normalization the thesis's load claim survives its own horizon here
+and not a longer one. With it, the claim reaches 60 steps in nine random
+sequences of ten, paid for by the excursion above. Without normalization,
+larger projection balls were not the fix: at ten times the size, the random
+case fell by step 17. The other sequences are `p.load_seed` 1–9; the default,
+11, is the sequence the load study draws. The 60-step rows are the screens of
+the next section, which measure max‖η‖ on every third solver point.
+
+**Beyond the lightest load, L₁ does not track better than the unconstrained
+baseline:**
+
+| `clfqp` / `l1_con` | 0–70 kg | 23 kg | 35 kg | 46 kg |
+|---|---|---|---|---|
+| typical step: median per-step max‖η‖ | 3.10 / 3.32 | 2.38 / 1.97 | 2.29 / 4.27 | 2.47 / 4.17 |
+| peak torque [Nm] | 1797 / 556 | 729 / 360 | 1146 / 412 | 1598 / 458 |
+| per-step peak ‖u‖, mean [Nm] (Fig 4.11b) | 914 / 485 | 643 / 378 | 1031 / 476 | 1451 / 525 |
+
+- **23 kg:** `l1_con` more than halves the worst error and tracks the typical
+  step better, on about half the torque.
+- **35 and 46 kg:** its worst step matches the baseline's, but its typical step
+  is worse.
+- **Random load:** the typical step is level (3.32 against 3.10), but
+  `l1_con`'s worst step is larger (13.8 against 8.95).
+
+As in the thesis's Fig 4.11b, L₁'s torque grows with the load (378 → 476 →
+525 Nm per-step peak).
+
+**Contact.** `l1_con` keeps the true normal force positive except on 1, 3 and 2
+samples of about 15 000: under the random load, at 35 kg and at 46 kg (minimum
+−58, −30 and −35 N; without normalization 0, 3 and 7 samples). The
+unconstrained `l1` asks the ground to pull on 4.7% of samples at 35 kg and 10.5%
+at 46 kg (0.2% and 11.2% without). Under the random load it falls in step 15,
+the first step after the load drops from 60 kg to 12 kg. The estimates do follow
+the uncertainty: median ‖θ̂‖/‖θ‖ is 0.99–1.05 for `l1_con`.
+
+**The thesis form is worse again.** Measured separately at the same boxes, §4.2's
+formulation (thesis predictor, Γ = 1e4, box on μ₁ only) reached max‖η‖ of about
+27 at 46 kg and about 103 at 70 kg, with θ̂ overshooting θ 2–4×. Its
+constrained law fell in step 3 at 70 kg.
+
+**Loads reshape the gait, but these runs cannot say by how much** (Figure 3).
+Under the same load the two walking controllers settle on very different torso
+cycles:
+
+- the unconstrained baseline's is 2–3° lower in pitch than nominal: −1.2…2.1°
+  over the last five steps, against 1.72…4.55°;
+- `l1_con`'s grows to 0.6…6.0°, with pitch rates reaching +68°/s against the
+  nominal +25.
+
+A load changes M non-uniformly, so unlike a mass scale it can move the orbit
+itself. But the gap between two controllers under the same load is tracking
+error, and separating it from the load's own effect would take a controller
+that is told the true load.
+
+### Why L₁ fell in the long runs, and what was tried
+
+**The drift is real but it is a symptom.** θ̂ = α̂‖η‖ + β̂ is redundant: while
+‖η‖ stays near a value, every split of θ between α̂ and β̂ predicts equally well,
+so nothing holds the split. Over long runs the two estimates drift into
+near-opposite directions (median cosine −0.91 at ×0.7 and −0.95 at ×1.5), and
+α̂ presses its projection bound.
+
+**The falls are the estimator loop outrunning the sample rate.** Three of the
+five long-run L₁ falls were re-simulated sample by sample (plain `l1` at ×1.5 in
+step 76, `l1_con` under two random load sequences). Each starts within a few
+milliseconds of a footstrike that leaves ‖η‖ at 12–14. The prediction-error loop
+runs at about √(Γ + Γ_α‖η‖²) rad/s, which at ‖η‖ = 13 is about 4100 rad/s:
+4.1 rad per 1 ms sample, past the RK4 advance's stability limit of about 2.8.
+Within 1–3 samples θ̂ reaches about 2700–2900 against a true θ of 30–300, the
+adaptive torque swamps the QP, and the step collapses. `ch4_test_l1` check 10
+isolates the loop at ‖η‖ = 13.
+
+What was tried, over the nine long runs above: 60 steps of `l1_con` at ×1, ×0.7,
+×1.5 and 46 kg, 120 steps of `l1` at ×1.5, and the four random load sequences.
+
+| change | runs that fall, of 9 | what it costs |
+|---|---|---|
+| none | 5 | — |
+| leakage pulling α̂ to zero, 2 / 10 / 50 /s | 6 / 3 / 3 | `l1_con` at ×1.5 falls in steps 14–19 at every rate: at ×1.5 α̂ does real work within a step |
+| θ̂ kept continuous across footstrikes / θ̂ folded into β̂ there | 6 / 4 | continuity drops ×0.7 in step 6 |
+| cap on α's regressor, 1.5 / 1 / 0.5 rad per sample | 3 / 2 / 1 | at 0.5, `l1_con` at ×1.5 tracks at max‖η‖ 6.0–7.4 per block instead of 2.0–4.5, and the random-load runs that survive pass through excursions to 18–48 |
+| 0.5 ms control period, no cap (6 of the 9 runs) | 1 of 6 | plain `l1` at ×1.5 walks 120 flat steps; `l1_con` at ×1.5 takes a transient to 19; twice the runtime |
+| normalized adaptation, textbook form (loop held at √Γ, 0.32 rad per sample) | 7 | falls where the law as written walks: ×1.5 in step 37, 46 kg in step 4 |
+| normalized adaptation, ceiling 0.5 / 0.75 / 1 / 1.5 / 2 rad per sample | 2 / 0 / 0 / 2 / 2 | at 0.75 and 1, `l1_con` at ×1.5 has a typical step (median per-step max‖η‖) of 2.15 / 2.39 against 1.85 as written (4.44 with the cap at 0.5); at 1 it takes a transient to 16.5 |
+
+**Normalized adaptation** (`p.l1.normalized_rate`, `ch4_l1_deriv`) divides both
+adaptation laws by m² = max(1, (Γ + Γ_α‖η‖²)/(ρ/Δt)²). That holds the
+estimator loop at no more than ρ rad per sample, while θ̂ keeps α̂‖η‖ in full
+and the law is unchanged wherever the loop was already slower. `ch4_test_l1`
+check 11 holds check 10's error and shows it settling at ρ = 1 and in the
+textbook form. On the robot it works as a window. The textbook form, which holds the loop at √Γ at every error, makes
+the loop overdamped under the predictor rate a = 800 and slows the estimate
+in ordinary walking: in the runs with uncertainty the median per-step peak of
+m² runs 8–53. At 1.5 and 2
+normalization rarely engages, and the falls return in runs that fell as
+written. The limit that matters in closed loop, about 1 rad per sample, is
+well under the RK4 advance's own 2.8; this analysis does not derive it.
+
+**Out of sample.** ρ was picked on the nine runs above, so the candidates were
+rerun on six further 0–70 kg sequences (`p.load_seed` 4–9, `l1_con`, 60 steps):
+
+| six new random-load sequences | falls | typical step, median per-step max‖η‖ | largest max‖η‖, runs that walk |
+|---|---|---|---|
+| law as written | 4 (steps 21, 32, 47, 49) | 2.92–3.76 | 7.5–7.8 |
+| cap on α's regressor, 0.5 | 3 (steps 24, 30, 44) | 3.35–7.96 | 12.8–39.9 |
+| normalized, 0.75 | 1 (step 52) | 3.34–5.53 | 7.9–49.8 |
+| normalized, 1 | 2 (steps 11, 44) | 3.28–3.92 | 7.7–26.7 |
+| 0.5 ms control period, neither | 0 | 3.11–3.37 | 7.1–16.0 |
+
+- **Across all fifteen long runs, normalization at 0.75 falls once**, against 9
+  as written and 4 with the cap. The one fall is seed 6, which the law as
+  written walks, and which brings down all three 1 kHz limits tried on it.
+  Both kinds of limit slow the estimator most when the error is largest,
+  which is also when a changed load has to be learned. That is the likely
+  reason; it has not been checked sample by sample.
+- **What survives is not always clean.** Two of the new sequences pass
+  through excursions to max‖η‖ 20–50 at 0.75 and still walk.
+- **Only the faster loop is both safe and flat.** At 0.5 ms the law as written
+  fell once in twelve runs and never left max‖η‖ 16 on the new sequences.
+
+**Normalization was adopted after these runs**, at ρ = 0.75
+(`p.l1.normalized_rate`), and the §4.2.4 and Fig 4.11 tables above were rerun
+with it. The regressor cap stays in the code as `p.l1.alpha_regressor_rate`,
+off by default. The leakage and footstrike variants were removed.
 
 ### Known rough edges
 
 - **Remark 4.4, measured.** The robust law's friction rows hold the *nominal*
-  prediction at μ ≤ 0.4, and in Cases I–II the true demand matches (p95 0.40).
-  At ×0.7 the lighter true robot needs **p95 1.24, peak 1.40** — the foot would
-  slip on a μ = 0.4 floor while the controller believes it will not. That is the
-  gap Chapter 8 exists to close.
-- `QPfail` counts are small — `rclfqp_con` 2 / 2 / 0 and `l1` 15 / 8 / 7 samples
-  of ~2000. The slack keeps the QP feasible in principle, so these are
+  prediction at μ ≤ 0.4. Over 25 steps the true demand is p95 **0.22 / 0.12 /
+  0.26** in Cases I–III, with peaks of 0.25 and 0.39 in Cases I–II. At ×0.7 it
+  briefly reaches 1.49: a momentary slip the controller cannot see, which is the
+  gap Remark 4.4 warns about. With the exact law the ×0.7 case needed p95 1.24
+  over just three steps. That was the chatter, not the lighter robot: a uniformly
+  scaled robot following the same motion needs the same force *ratio*.
+- `QPfail` counts are small — `rclfqp_con` 0 / 0 / 17, `l1` 2 / 1 / 1 and
+  `l1_con` 0 / 0 / 0 samples of ~16 700. The slack keeps the QP feasible in principle, so these are
   `quadprog` exit-flag failures, and the fallback saturates the feedforward.
+- Numbers quoted elsewhere in this document and in code comments as design
+  justifications — the κ sweep, the robust box rule, the L₁ box headroom — were
+  measured at ε = 0.35, mostly over three steps, and say so where they appear.
 - `ch4_forces` re-solves each controller at every ODE output point, while the
-  simulation holds each torque for 1 ms. For the chattering robust law those
+  simulation holds each torque for 1 ms. For a chattering law (κ = 0) those
   torques differ pointwise, but not in what the contact columns say: on the
   torque-only runs of §3, recomputing min Fz under the torques actually held
   matched `ch4_forces` to within 53 N on every run.
 - Results in `Results/` stamped between 2026-09-02 and 2026-09-12 23:37 predate
   one or more of this section's fixes — a stale gait, copied boxes, falls
-  counted as steps, contact rows stripped — and should not be cited.
+  counted as steps, contact rows stripped — and should not be cited. Robust
+  results stamped before 2026-09-13 14:48 ran the exact law and chatter,
+  everything stamped before 18:26 that day ran ε = 0.35 over three steps, and L₁
+  results stamped before 20:45 ran the thesis-form L₁. The 20-27-10 set is the
+  fixed L₁ at a = 632, superseded by the sweep above. L₁ and load results
+  stamped before 2026-09-14 22:33 ran without normalized adaptation.
 
 ---
 
@@ -528,7 +1096,8 @@ Chapter4/
     ch4_ctrl_l1.m           §4.2, the control law
     ch4_l1_state.m          the 20-entry controller state, defined once
     ch4_l1_deriv.m          its derivative — the four coupled pieces
-    ch4_l1_advance.m        RK4 over one control period
+    ch4_l1_advance.m        RK4 over one control period, fed what the plant got
+    ch4_l1_opts.m           the L1 design options, resolved once (old p -> thesis)
     ch4_proj.m              projection operator of (4.26)
     ch4_control.m           single dispatch point, nominal model always
   Simulation/
@@ -540,11 +1109,15 @@ Chapter4/
     ch4_forces.m            torques, TRUE forces, estimator signals
     ch4_report.m            one controller vs one perturbed model
     ch4_run_params.m        one comparison run's params: law, perturbation, box, rows
-    ch4_compare_controllers.m   the §4.1.4 / §4.2.4 sweeps; measures the robust boxes
-    ch4_plot_uncertainty.m  Figs 4.2, 4.3, 4.4, 4.6, 4.8, 4.9, 4.10
+    ch4_run_entry.m         one run -> one table row; per-step forces under a changing load
+    ch4_compare_controllers.m   the §4.1.4 (Cases I-III, Case IV) / §4.2.4 sweeps; measures the robust boxes
+    ch4_load_study.m        Fig 4.11: random and fixed unknown torso loads, loaded-feedforward boxes
+    ch4_plot_uncertainty.m  Figs 4.2, 4.3, 4.4, 4.5, 4.6, 4.8, 4.9, 4.10
+    ch4_plot_load.m         Figs 4.11a/b and the torso phase portrait under load
     ch4_animate.m           controllers racing on one perturbed robot
+    ch4_draw_robot.m        the stick figure, shared by ch4_animate and ch4_plot_load
   Test/
-    ch4_test_model.m        true-vs-nominal split and the Δ terms
+    ch4_test_model.m        true-vs-nominal split, the Δ terms, forces under a per-step load
     ch4_test_rclf.m         the robust guarantee, sampled over the ball
     ch4_test_l1.m           projection, error dynamics, filter, behavior
     ch4_test_all.m

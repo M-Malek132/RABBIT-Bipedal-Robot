@@ -1,8 +1,9 @@
-function figs = ch4_plot_uncertainty(C, p, savedir)
+function figs = ch4_plot_uncertainty(C, p, savedir, case_names)
 %CH4_PLOT_UNCERTAINTY  The Chapter-4 figures, from a comparison sweep.
 %
 %   figs = ch4_plot_uncertainty(C, p)
 %   figs = ch4_plot_uncertainty(C, p, savedir)
+%   figs = ch4_plot_uncertainty(C, p, savedir, case_names)
 %
 % Takes the struct array from ch4_compare_controllers and draws the figures the
 % chapter uses to make its case:
@@ -13,6 +14,8 @@ function figs = ch4_plot_uncertainty(C, p, savedir)
 %   fig 4  torso phase portrait across cases                  (Figs 4.6, 4.10)
 %   fig 5  the L1 estimator: theta_hat against the true theta (only when the
 %          sweep contains an adaptive controller)
+%
+% On a Case IV sweep (preset 'case4'), figs 2 and 3 are Fig 4.5.
 %
 % HOW TO READ FIGURE 1, since it is the one the chapter leans on. The claim is
 % NOT that the robust/adaptive curve is lowest -- on Case I it need not be, and
@@ -25,8 +28,12 @@ function figs = ch4_plot_uncertainty(C, p, savedir)
 % Inputs
 %   C       : struct array from ch4_compare_controllers (needs .traj, i.e.
 %             opts.store_traj left on)
-%   p       : parameter struct, for labels
-%   savedir : optional directory; figures are written as ch4_fig*.png
+%   p          : parameter struct, for labels
+%   savedir    : optional directory; figures are written as ch4_fig*.png
+%   case_names : optional cell of the chapter's case numerals, one per scale in
+%                sweep order. The default numbers the scales I, II, III by
+%                position, which matches both default presets; a Case IV sweep
+%                passes {'IV'}.
 %
 % Output
 %   figs : vector of figure handles
@@ -44,6 +51,14 @@ end
 names  = unique({C.name},  'stable');
 scales = unique([C.mass_scale], 'stable');
 nC = numel(names); nS = numel(scales);
+
+if nargin < 4 || isempty(case_names)
+    case_names = arrayfun(@roman, 1:nS, 'UniformOutput', false);
+elseif numel(case_names) ~= nS
+    error('ch4_plot_uncertainty:caseNames', ...
+          'case_names has %d entries for a sweep over %d scales.', ...
+          numel(case_names), nS);
+end
 
 cols = lines(max(nC,3));
 figs = gobjects(0);
@@ -89,7 +104,7 @@ for is = 1:nS
     set(gca, 'YScale', 'log');
     ylim([Vfloor, Vmax*2]);
     ylabel('V_\epsilon');
-    title(sprintf('Case %s: model scale = %.2g', roman(is), scales(is)));
+    title(sprintf('Case %s: model scale = %.2g', case_names{is}, scales(is)));
     if is == 1, legend('Location','southeast','Interpreter','none'); end
     if is == nS, xlabel('Time (s)'); end
 end
@@ -119,7 +134,13 @@ for ic = 1:nC
     end
 end
 xlabel('q_{torso} (deg)'); ylabel('dq_{torso} (deg/s)');
-title('Torso phase portrait: uncertainty moves the periodic orbit');
+% NOT "uncertainty moves the periodic orbit", which is how Fig. 4.6 reads. A
+% uniform mass scale leaves the hybrid zero dynamics exactly invariant (both
+% halves are asserted in ch4_test_model), so a controller that tracks walks
+% the same orbit in every case, and whatever separates the cases here is
+% tracking error. Only a non-uniform change such as load_mass moves the orbit.
+title('Torso phase portrait');
+subtitle('a uniform mass scale leaves the zero-dynamics orbit unchanged: spread between cases is tracking error');
 legend('Location','best','Interpreter','none');
 figs(end+1) = f4;
 

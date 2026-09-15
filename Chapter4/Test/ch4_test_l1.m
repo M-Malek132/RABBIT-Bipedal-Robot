@@ -14,15 +14,28 @@ function ch4_test_l1()
 % with a perfect model the predictor error stays at zero, so the adaptation
 % never moves off its initial condition and mu2 stays identically zero.
 %
+% TWO PREDICTORS (p.l1.predictor). Checks that state a property of the Section
+% 4.2 formulation pin 'thesis' and its options; the rest run the default.
+%
 % Checks:
 %   1. projection: inequality (4.29) and invariance of the ball
-%   2. error dynamics (4.24) reproduced by ch4_l1_deriv
+%   2. error dynamics (4.24) reproduced by the thesis predictor
+%  2b. the plant predictor's error is eta_tilde_dot = -a eta_tilde + G theta_tilde
 %   3. the filter is C(s) = wc/(s+wc): unit DC gain, right time constant
 %   4. zero uncertainty => zero prediction error, forever
 %   5. adaptation drives theta_hat toward a constant uncertainty
 %   6. zero uncertainty => L1 IS the CLF-QP, exactly
-%   7. torque saturation binds on mu1; the mu2 excess is reported not hidden
+%   7. thesis form: the box binds on mu1 and the mu2 excess is reported;
+%  7b. constrain_applied: the APPLIED torque, mu2 included, respects the box
+%      and the nominal contact rows
 %   8. the L1 state survives the impact the way ch4_l1_state documents
+%   9. sampled advance: reading eta at both ends of the period removes the
+%      bias that freezing it puts on theta_hat
+%  10. at a post-impact tracking error the estimator loop as written (no cap,
+%      no normalization) outruns the 1 kHz advance and never settles; capping
+%      alpha's regressor settles it
+%  11. normalized adaptation divides the adaptation laws by m^2 and touches
+%      nothing else, and it settles the loop of check 10 without the cap
 
 fprintf('\n=== ch4_test_l1 ===\n');
 pass = true;
@@ -74,10 +87,18 @@ pass = report('proj: ball is invariant', max(norm(th) - lim, 0), 1e-3, pass);
 fprintf('        ||theta|| = %.4f, limit = %.4f (Gamma*dt = %.0e)\n', ...
         norm(th), lim, gam*dt);
 
-%% 2. error dynamics (4.24)
+%% 2. error dynamics (4.24), and 2b. the plant predictor's
 % Build a state with a KNOWN true (alpha, beta), form theta = alpha||eta||+beta,
-% and check eta_tilde_dot = F eta_tilde + G mu1_tilde + G(alpha_tilde||eta||+beta_tilde).
-e_24 = 0;
+% and subtract the true system (4.16), eta_dot = F eta + G(mu1 + mu2 + theta),
+% from each predictor. The thesis predictor must leave (4.24),
+%   eta_tilde_dot = F eta_tilde + G mu1_tilde + G(alpha_tilde||eta|| + beta_tilde),
+% and the plant predictor must leave a predictor error that does not depend on
+% the reference model at all,
+%   eta_tilde_dot = -a eta_tilde + G(alpha_tilde||eta|| + beta_tilde).
+pt = p; pt.l1.predictor = 'thesis';
+pp = p; pp.l1.predictor = 'plant';
+a_rate = pp.l1.predictor_rate;
+e_24 = 0; e_pl = 0;
 for k = 1:20
     eta      = randn(2*ny,1);
     a_true   = randn(ny,1);   b_true = randn(ny,1);
@@ -88,21 +109,22 @@ for k = 1:20
 
     xi = ch4_l1_state('pack', p, struct('eta_hat', eta_hat, ...
               'alpha_hat', a_hat, 'beta_hat', b_hat, 'mu2', mu2));
+    sig = struct('eta', eta, 'mu', mu1 + mu2, 'mu1_hat', mu1_hat);
 
-    xidot = ch4_l1_deriv(xi, eta, mu1, mu1_hat, clf, p);
-    s_hat = ch4_l1_state('unpack', p, xidot);
-    eta_hat_dot = s_hat.eta_hat;
-
-    % the true system (4.16) with mu = mu1 + mu2 and theta from a_true,b_true
     theta   = a_true*norm(eta) + b_true;
     eta_dot = clf.F*eta + clf.G*(mu1 + mu2 + theta);
+    th_tilde = (a_hat - a_true)*norm(eta) + (b_hat - b_true);
 
-    lhs = eta_hat_dot - eta_dot;
-    rhs = clf.F*(eta_hat - eta) + clf.G*(mu1_hat - mu1) ...
-          + clf.G*((a_hat - a_true)*norm(eta) + (b_hat - b_true));
-    e_24 = max(e_24, norm(lhs - rhs, inf));
+    s_t = ch4_l1_state('unpack', pt, ch4_l1_deriv(xi, sig, clf, pt));
+    rhs = clf.F*(eta_hat - eta) + clf.G*(mu1_hat - mu1) + clf.G*th_tilde;
+    e_24 = max(e_24, norm((s_t.eta_hat - eta_dot) - rhs, inf));
+
+    s_p = ch4_l1_state('unpack', pp, ch4_l1_deriv(xi, sig, clf, pp));
+    rhs = -a_rate*(eta_hat - eta) + clf.G*th_tilde;
+    e_pl = max(e_pl, norm((s_p.eta_hat - eta_dot) - rhs, inf));
 end
 pass = report('error dynamics (4.24)', e_24, 1e-10, pass);
+pass = report('plant predictor error dyn.', e_pl, 1e-10, pass);
 
 %% 3. the low-pass filter
 % Freeze theta_hat by zeroing the adaptation, drive the filter, and check both
@@ -118,8 +140,10 @@ eta = zeros(2*ny,1);                 % so theta_hat = beta_hat exactly
 % asserting, so a correct filter would fail on settling time alone.
 dt  = 1e-4; T = 12/pf.l1.omega_c; nT = round(T/dt);
 tau_hit = NaN;
+smp = struct('eta', eta, 'eta_next', eta, 'mu', zeros(ny,1), ...
+             'mu1_hat', zeros(ny,1));
 for k = 1:nT
-    xi = ch4_l1_advance(xi, eta, zeros(ny,1), zeros(ny,1), clf, pf, dt);
+    xi = ch4_l1_advance(xi, smp, clf, pf, dt);
     s  = ch4_l1_state('unpack', pf, xi);
     if isnan(tau_hit) && norm(s.mu2) >= (1 - exp(-1))*norm(th_const)
         tau_hit = k*dt;
@@ -235,8 +259,9 @@ else
     pass = false;
 end
 
-%% 7. torque saturation binds on mu1, and the mu2 excess is reported
+%% 7. thesis form: torque saturation binds on mu1, and the mu2 excess is reported
 ps = pu; ps.controller = 'l1_con'; ps.l1.u_max = 45;
+ps.l1.constrain_applied = false;
 [Lf2y, LgLfy, u_ff, info] = ch4_io_lin(x0 + [zeros(7,1); 0.2*ones(7,1)], ...
                                        alpha, ps, []);
 xi0 = ch4_l1_state('init', ps, info.eta);
@@ -257,6 +282,32 @@ ok_rep = abs(l1s.u_box_excess - max(max(abs(u_s)) - ps.l1.u_max, 0)) < 1e-9;
 fprintf('  [%s] %-30s\n', tf(ok_rep), 'excess reported honestly');
 pass = pass && ok_rep;
 
+%% 7b. constrain_applied: the rows bound the torque the robot actually receives
+% Same state, a larger seeded mu2. The thesis form must leave the box -- that is
+% what gives this check teeth -- while with the rows on the total torque the
+% realized torque stays inside it and the nominal normal-force floor and
+% friction cone hold at that torque.
+st.mu2 = [60; -60; 60; -60];
+xi_a = ch4_l1_state('pack', ps, st);
+[~, u_t] = ch4_ctrl_l1(Lf2y, LgLfy, u_ff, info, xi_a, ps, true);
+pa = ps; pa.l1.constrain_applied = true;
+[~, u_a, ~, l1a] = ch4_ctrl_l1(Lf2y, LgLfy, u_ff, info, xi_a, pa, true);
+lam = info.aux.lam_drift + info.aux.lam_in * u_a;
+% The solution sits ON the box and the friction cone here, so the residuals
+% are solver round-off around zero: tolerances are physical (a micro-Nm, a
+% milli-N), not exact equalities.
+res_box  = max(abs(u_a)) - pa.l1.u_max;
+res_grf  = pa.limits.Fz_min - lam(2);
+res_fric = abs(lam(1)) - pa.limits.mu_s * lam(2);
+ok_a = max(abs(u_t)) > ps.l1.u_max + 1 && l1a.qp_feasible ...
+       && res_box <= 1e-6 && l1a.u_box_excess <= 1e-6 ...
+       && res_grf <= 1e-3 && res_fric <= 1e-3;
+fprintf(['  [%s] %-30s thesis peak |u| %.1f -> %.1f (box %.0f); ' ...
+         'residuals box %.1e, Fz %.1e, friction %.1e\n'], tf(ok_a), ...
+        'applied torque in the rows', max(abs(u_t)), max(abs(u_a)), ...
+        pa.l1.u_max, res_box, res_grf, res_fric);
+pass = pass && ok_a;
+
 %% 8. the impact carries estimates, optionally resets the predictor
 pr_on  = p; pr_on.l1.reset_predictor  = true;
 pr_off = p; pr_off.l1.reset_predictor = false;
@@ -275,6 +326,153 @@ ok = isequal(s_on.eta_hat, eta_plus) && isequal(s_off.eta_hat, ones(2*ny,1)) ...
 fprintf('  [%s] %-30s predictor reset gated, estimates carried\n', tf(ok), ...
         'impact handling');
 pass = pass && ok;
+
+%% 9. the sampled advance must read eta at both ends of the period
+% A pure transverse double integrator, discretized exactly under the held input,
+% tracks y_d = 0.3 sin(2 pi 3 t) against a constant theta, so the outputs keep
+% accelerating. The plant-input predictor fed eta at both ends of each period
+% must estimate theta to within 1% (beta only, which represents a constant
+% theta exactly). The same predictor with eta frozen at the start of the period
+% -- what the thesis advance does -- injects a*ydd*tau into the velocity error
+% it adapts on, and must do visibly worse.
+p9 = p; p9.l1.predictor = 'plant'; p9.l1.Gamma_alpha = 0;
+T  = p9.control_dt;
+Ad = [eye(ny), T*eye(ny); zeros(ny), eye(ny)];
+Bd = [T^2/2*eye(ny); T*eye(ny)];
+theta9 = [30; -60; 45; -15];
+w9 = 2*pi*3;
+K9 = 2000;
+err9 = zeros(1, 2);
+for mode = 1:2
+    eta = zeros(2*ny, 1);
+    xi  = ch4_l1_state('init', p9, eta);
+    e_hist = zeros(1, K9);
+    for k = 1:K9
+        t9  = (k-1)*T;
+        y_d = 0.3*sin(w9*t9)        * ones(ny,1);
+        v_d = 0.3*w9*cos(w9*t9)     * ones(ny,1);
+        a_d = -0.3*w9^2*sin(w9*t9)  * ones(ny,1);
+        s9  = ch4_l1_state('unpack', p9, xi);
+        mu  = a_d - 100*(eta(1:ny) - y_d) - 20*(eta(ny+1:end) - v_d) + s9.mu2;
+        eta_next = Ad*eta + Bd*(mu + theta9);
+        smp = struct('eta', eta, 'eta_next', eta_next, 'mu', mu, 'mu1_hat', []);
+        if mode == 2, smp.eta_next = eta; end
+        xi  = ch4_l1_advance(xi, smp, clf, p9, T);
+        eta = eta_next;
+        s9  = ch4_l1_state('unpack', p9, xi);
+        e_hist(k) = norm(s9.beta_hat - theta9);
+    end
+    err9(mode) = sqrt(mean(e_hist(K9/2+1:end).^2)) / norm(theta9);
+end
+ok9 = err9(1) < 0.01 && err9(2) > 5*err9(1);
+fprintf(['  [%s] %-30s RMS |theta_hat - theta|/|theta| %.1e both ends, ' ...
+         '%.1e frozen\n'], tf(ok9), 'sampled advance reads both ends', ...
+        err9(1), err9(2));
+pass = pass && ok9;
+
+%% 10. the estimator loop at a large tracking error, with and without the cap
+% After a bad footstrike ||eta|| reaches 12-14, and the loop from prediction
+% error to estimates runs at about sqrt(Gamma + Gamma_alpha ||eta||^2) rad/s:
+% about 4 rad per 1 ms sample at the defaults, past the RK4 advance's
+% stability limit (see ch4_l1_deriv). Hold eta at ||eta|| = 13 with zero
+% velocity (so F eta = 0), let the plant's input cancel a constant theta, start
+% the estimates at zero, and advance half a second. Uncapped, theta_hat must
+% never settle; with p.l1.alpha_regressor_rate = 1 it must settle on theta.
+% Normalization, on by default, is turned off: this is the law as written.
+p10 = p; p10.l1.predictor = 'plant'; p10.l1.normalized_rate = 0;
+theta10 = [40; -25; 10; 30];
+eta10   = [13/2 * ones(ny,1); zeros(ny,1)];       % ||eta|| = 13, ydot = 0
+T10 = p10.control_dt; K10 = round(0.5 / T10);
+th_peak = zeros(1, 2); th_rms = zeros(1, 2); phi10 = zeros(1, 2);
+for mode = 1:2
+    pm = p10; pm.l1.alpha_regressor_rate = (mode == 2) * 1;
+    om = ch4_l1_opts(pm);
+    phi10(mode) = min(norm(eta10), om.phi_max);
+    xi  = ch4_l1_state('init', pm, eta10);
+    smp = struct('eta', eta10, 'eta_next', eta10, 'mu', -theta10, 'mu1_hat', []);
+    err = nan(1, K10);
+    for k = 1:K10
+        xi  = ch4_l1_advance(xi, smp, clf, pm, T10);
+        s10 = ch4_l1_state('unpack', pm, xi);
+        th  = s10.alpha_hat * phi10(mode) + s10.beta_hat;
+        th_peak(mode) = max(th_peak(mode), norm(th));
+        err(k) = norm(th - theta10) / norm(theta10);
+    end
+    th_rms(mode) = sqrt(mean(err(end-99:end).^2));
+end
+% The uncapped loop may go all the way to non-finite (the predictor and filter
+% states are not clamped, only the estimates), which counts as not settling.
+settled = isfinite(th_rms) & th_rms < 1e-3;
+ok10 = th_peak(1) > 20 * norm(theta10) && ~settled(1) && settled(2);
+fprintf(['  [%s] %-30s ||eta|| = 13: uncapped peak ||theta_hat|| %.0f, ' ...
+         'late error %.1f (NaN = diverged); capped (phi %.2f) late error %.1e\n'], ...
+        tf(ok10), 'estimator loop at large eta', th_peak(1), th_rms(1), ...
+        phi10(2), th_rms(2));
+pass = pass && ok10;
+
+%% 11. normalized adaptation
+% p.l1.normalized_rate = kappa must scale the two adaptation laws by 1/m^2 and
+% leave the predictor and the filter rows exactly as they were. Three cases
+% at the defaults: kappa = 1 rad/sample with the loop under its ceiling
+% (m^2 = 1, the plain law), kappa = 1 above it (m^2 = loop gain/(kappa/dt)^2),
+% and a kappa under sqrt(Gamma)*dt, which must give the textbook form
+% m^2 = 1 + (Gamma_alpha/Gamma)||eta||^2. Then the held error of check 10,
+% which diverges uncapped, must settle at both kappas with alpha_hat*||eta||
+% kept in full.
+p11 = p; p11.l1.predictor = 'plant'; p11.l1.normalized_rate = 0;   % the plain law
+o11 = ch4_l1_opts(p11);
+[G11, Ga11, T11] = deal(o11.Gamma, o11.Gamma_alpha, p11.control_dt);
+assert(G11*T11^2 > 0.01 && G11*T11^2 < 1 && Ga11 > 0 && ...
+       (G11 + Ga11*13^2)*T11^2 > 1, ...
+       'check 11 assumes Gamma*dt^2 in (0.01, 1) and Gamma_alpha > 0');
+eta_under = 0.5 * sqrt(((1/T11)^2 - G11) / Ga11);    % loop gain under (1/dt)^2
+cases11 = {1,   eta_under, 1
+           1,   13,        (G11 + Ga11*13^2) * T11^2
+           0.1, 13,        1 + (Ga11/G11) * 13^2};
+e11 = 0;
+for c = 1:size(cases11, 1)
+    [kap, ne, m2_expect] = cases11{c, :};
+    pn = p11; pn.l1.normalized_rate = kap;
+    for k = 1:5
+        eta = randn(2*ny,1); eta = ne * eta / norm(eta);
+        xi  = ch4_l1_state('pack', p11, struct('eta_hat', eta + 0.1*randn(2*ny,1), ...
+                  'alpha_hat', randn(ny,1), 'beta_hat', randn(ny,1), ...
+                  'mu2', randn(ny,1)));
+        sig = struct('eta', eta, 'mu', randn(ny,1), 'mu1_hat', []);
+        s0 = ch4_l1_state('unpack', p11, ch4_l1_deriv(xi, sig, clf, p11));
+        [xd, d1] = ch4_l1_deriv(xi, sig, clf, pn);
+        s1 = ch4_l1_state('unpack', pn, xd);
+        e11 = max([e11, norm(s1.eta_hat - s0.eta_hat, inf), ...
+                   norm(s1.mu2 - s0.mu2, inf), ...
+                   abs(d1.m2 - m2_expect) / m2_expect, ...
+                   norm(s1.alpha_hat - s0.alpha_hat / m2_expect) / norm(s0.alpha_hat), ...
+                   norm(s1.beta_hat  - s0.beta_hat  / m2_expect) / norm(s0.beta_hat)]);
+    end
+end
+pass = report('normalization scales laws only', e11, 1e-12, pass);
+
+kap11 = [1, 0.1];
+th_peak11 = zeros(1, 2); th_rms11 = zeros(1, 2);
+for mode = 1:2
+    pn = p10; pn.l1.normalized_rate = kap11(mode);
+    xi  = ch4_l1_state('init', pn, eta10);
+    smp = struct('eta', eta10, 'eta_next', eta10, 'mu', -theta10, 'mu1_hat', []);
+    err = nan(1, K10);
+    for k = 1:K10
+        xi  = ch4_l1_advance(xi, smp, clf, pn, T10);
+        s11 = ch4_l1_state('unpack', pn, xi);
+        th  = s11.alpha_hat * norm(eta10) + s11.beta_hat;
+        th_peak11(mode) = max(th_peak11(mode), norm(th));
+        err(k) = norm(th - theta10) / norm(theta10);
+    end
+    th_rms11(mode) = sqrt(mean(err(end-99:end).^2));
+end
+ok11 = all(isfinite(th_rms11) & th_rms11 < 1e-3) && all(th_peak11 < 2 * norm(theta10));
+fprintf(['  [%s] %-30s ||eta|| = 13: peak ||theta_hat||/||theta|| %.2f / %.2f, ' ...
+         'late error %.1e / %.1e (kappa 1 / textbook)\n'], ...
+        tf(ok11), 'normalized loop at large eta', th_peak11 / norm(theta10), ...
+        th_rms11(1), th_rms11(2));
+pass = pass && ok11;
 
 fprintf('--- ch4_test_l1: %s ---\n\n', tf(pass));
 end

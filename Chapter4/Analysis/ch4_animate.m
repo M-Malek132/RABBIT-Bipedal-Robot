@@ -151,7 +151,7 @@ for f = 1:nframe
         q    = sample_at(r.t_u, r.sim.x(1:p.nq, r.i_u), tq);
         e    = sample_at(r.t_u, r.eta(r.i_u),           tq);
 
-        draw_robot(ax(ic), q, done);
+        ch4_draw_robot(ax(ic), q, done);
 
         if done && r.fell
             lbl = sprintf('%s  --  STOPPED at %.2f s', r.name, r.T);
@@ -191,34 +191,6 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function draw_robot(ax, q, dimmed)
-%DRAW_ROBOT  The stick figure, in ch3_animate's colours.
-%
-% A finished run is drawn washed out rather than removed: the pose still carries
-% information (where it ended up, and in what attitude), but it must not read as
-% a robot that is still walking.
-b = ch3_body_points(q);
-
-if dimmed
-    c_st = [0.85 0.6 0.6]; c_sw = [0.6 0.68 0.85]; c_k = [0.55 0.55 0.55];
-    lw = 1.5;
-else
-    c_st = [0.85 0.2 0.2]; c_sw = [0.2 0.4 0.85]; c_k = [0 0 0];
-    lw = 2.5;
-end
-
-plot(ax, [b.hip(1) b.torso_top(1)], [b.hip(2) b.torso_top(2)], '-', ...
-     'Color', c_k, 'LineWidth', lw+0.5);
-plot(ax, [b.hip(1) b.stance_knee(1) b.stance_foot(1)], ...
-         [b.hip(2) b.stance_knee(2) b.stance_foot(2)], '-o', ...
-     'Color', c_st, 'LineWidth', lw, 'MarkerSize', 5);
-plot(ax, [b.hip(1) b.swing_knee(1) b.swing_foot(1)], ...
-         [b.hip(2) b.swing_knee(2) b.swing_foot(2)], '--s', ...
-     'Color', c_sw, 'LineWidth', lw-0.5, 'MarkerSize', 5);
-plot(ax, b.hip(1), b.hip(2), 'o', 'Color', c_k, ...
-     'MarkerFaceColor', c_k, 'MarkerSize', 6);
-end
-
 function v = sample_at(t_u, Y, tq)
 %SAMPLE_AT  Rows of Y at time tq, on an already sorted-unique time base.
 %
