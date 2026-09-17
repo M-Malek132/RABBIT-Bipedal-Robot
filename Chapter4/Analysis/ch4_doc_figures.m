@@ -12,12 +12,12 @@ function ch4_doc_figures()
 %   !cd docs && latexmk -xelatex ch4_report_fa.tex
 %
 %   docs/figures/          result set (Results/)               drawn by, fig
-%   ch4_robust_clf.png     ch4_result_2026-09-13_20-45-50      ch4_plot_uncertainty 1
+%   ch4_robust_clf.png     ch4_result_2026-09-17_17-27-44      ch4_plot_uncertainty 1
 %   ch4_robust_torso.png     "                                  ch4_plot_uncertainty 4
-%   ch4_case4_clf.png      ch4_result_2026-09-14_13-50-53      ch4_plot_uncertainty 1
-%   ch4_l1_clf.png         ch4_result_2026-09-14_22-33-20      ch4_plot_uncertainty 1
+%   ch4_case4_clf.png      ch4_result_2026-09-17_17-47-55      ch4_plot_uncertainty 1
+%   ch4_l1_clf.png         ch4_result_2026-09-17_20-33-53      ch4_plot_uncertainty 1
 %   ch4_l1_theta.png         "                                  ch4_plot_uncertainty 5
-%   ch4_load_random.png    ch4_result_2026-09-14_22-37-57      ch4_plot_load 1
+%   ch4_load_random.png    ch4_result_2026-09-17_20-36-27      ch4_plot_load 1
 %   ch4_load_torque.png      "                                  ch4_plot_load 2
 %   ch4_load_torso.png       "                                  ch4_plot_load 3
 %
@@ -35,18 +35,18 @@ root   = fileparts(fileparts(fileparts(mfilename('fullpath'))));
 res    = @(stamp) fullfile(root, 'Results', sprintf('ch4_result_%s.mat', stamp));
 figdir = fullfile(root, 'docs', 'figures');
 
-R = load(res('2026-09-13_20-45-50'), 'robust', 'p');
+R = load(res('2026-09-17_17-27-44'), 'robust', 'p');
 figs = ch4_plot_uncertainty(R.robust, R.p);
 save_as(figs(1), 'ch4_robust_clf.png');
 save_as(figs(4), 'ch4_robust_torso.png');
 close(figs);
 
-R = load(res('2026-09-14_13-50-53'), 'case4', 'p_case4');
+R = load(res('2026-09-17_17-47-55'), 'case4', 'p_case4');
 figs = ch4_plot_uncertainty(R.case4, R.p_case4, '', {'IV'});
 save_as(figs(1), 'ch4_case4_clf.png');
 close(figs);
 
-R = load(res('2026-09-14_22-33-20'), 'l1', 'p');
+R = load(res('2026-09-17_20-33-53'), 'l1', 'p');
 figs = ch4_plot_uncertainty(R.l1, R.p);
 save_as(figs(1), 'ch4_l1_clf.png');
 save_as(figs(5), 'ch4_l1_theta.png');
@@ -54,7 +54,7 @@ close(figs);
 
 % The nominal orbit under the load portraits is not saved with the study.
 % ch4_main takes it from a two-step nominal rollout of the baseline; redo that.
-R  = load(res('2026-09-14_22-37-57'), 'load', 'p', 'x0', 'alpha');
+R  = load(res('2026-09-17_20-36-27'), 'load', 'p', 'x0', 'alpha');
 pb = R.p;
 pb.controller        = 'clfqp';
 pb.uncertainty       = struct('mass_scale', 1, 'load_mass', 0);
