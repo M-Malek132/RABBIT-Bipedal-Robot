@@ -45,6 +45,8 @@ function ch4_test_model()
 %   7. torso load: the gravity sign against G(q), and that it DOES move dq+
 %   8. a load redrawn every step: the analysed contact force uses the load
 %      that step carried, not one load for the whole run
+%   9. physical validity: the contact force ch4_step records is the true KKT
+%      force under the held torque, and ch4_validity scores lift-off and slip
 
 fprintf('\n=== ch4_test_model ===\n');
 pass = true;
@@ -210,6 +212,42 @@ if ok
             err_own, e.loads(1), e.loads(2), gap_other);
 else
     fprintf('  [FAIL] random-load rollout did not complete 2 steps (%s)\n', e.reason);
+end
+pass = pass && ok;
+
+%% 9. physical validity: the contact force the simulator records, and its score
+% ch4_step records the TRUE contact force at every solver point under the torque
+% held over that period. At a point inside step 2 of a 1.5x run it must equal
+% the KKT force of the TRUE model there under the held torque. Scoring: the run's
+% own score must be bounded by the steps it completed, and the same run with the
+% first sample of step 1 forced to lift off, or to slip, must score zero valid
+% steps and name the violation.
+pv = p;
+pv.controller  = 'clfqp';
+pv.uncertainty = struct('mass_scale', 1.5, 'load_mass', 0);
+sim = ch4_simulate(x0, alpha, pv, 2);
+ok = sim.n_ok == 2;
+if ok
+    st = sim.steps(2);
+    j  = find(st.t > 0.4 * st.T, 1);
+    ku = find(st.t_u < st.t(j), 1, 'last');
+    [~, ~, aux] = ch4_control_affine(st.x(:, j), pv);
+    err_lam = norm(st.lambda(:, j) - (aux.lam_drift + aux.lam_in * st.u(:, ku)), inf);
+    Vv = ch4_validity(sim, pv);
+    lift = sim; lift.steps(1).lambda(:, 1) = [0; -1];
+    slip = sim; slip.steps(1).lambda(:, 1) = [0.5; 1];
+    Vl = ch4_validity(lift, pv);
+    Vs = ch4_validity(slip, pv);
+    ok = err_lam <= 1e-8 && numel(st.lambda(1, :)) == numel(st.t) ...
+         && Vv.available && Vv.valid_steps >= 0 && Vv.valid_steps <= 2 ...
+         && Vl.valid_steps == 0 && strcmp(Vl.first_kind, 'lift-off') ...
+         && Vs.valid_steps == 0 && strcmp(Vs.first_kind, 'slip');
+    fprintf(['  [%s] %-30s recorded force err %.1e; 1.5x run valid %d/2 ' ...
+             '(min Fz %.0f N, max mu %.2f); forced lift-off / slip valid %d / %d\n'], ...
+            tf(ok), 'validity: recorded contact', err_lam, Vv.valid_steps, ...
+            Vv.Fz_min, Vv.mu_max, Vl.valid_steps, Vs.valid_steps);
+else
+    fprintf('  [FAIL] validity rollout did not complete 2 steps (%s)\n', sim.reason);
 end
 pass = pass && ok;
 

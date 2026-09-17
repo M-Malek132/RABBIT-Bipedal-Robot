@@ -46,6 +46,16 @@ function out = ch4_step(x0, xi0, alpha, p)
 %           .t_xi     the sample times those correspond to
 %           .xi_end   controller state at the end of the step (pre-reset)
 %           .xi_next  controller state to start the next step (post-reset)
+%           .u        nu x m torque held over each control period (sampled
+%                     control only; empty for continuous control)
+%           .t_u      1 x m start time of each period
+%           .lambda   2 x nt TRUE contact force [Fx; Fz] at every point of .t,
+%                     from the true model under the torque held there. The
+%                     simulation pins the stance foot, so nothing here stops
+%                     Fz < 0 or |Fx| > mu Fz; this is what lets a run be checked
+%                     for physical validity afterwards (ch4_validity) at the
+%                     full solver resolution, for the price of one contact
+%                     solve per point.
 %
 % See also CH3_STEP, CH4_ODE_RHS, CH4_IMPACT, CH4_L1_ADVANCE, CH4_L1_STATE.
 
@@ -66,9 +76,10 @@ opts = odeset('RelTol',  p.ode_reltol, ...
 T_cap = p.T_max * 2;
 
 if p.control_dt > 0
-    [t, X, XI, t_xi, fired] = integrate_zoh(x0, xi0, alpha, p, T_cap, opts);
+    [t, X, XI, t_xi, fired, U, t_u, LAM] = integrate_zoh(x0, xi0, alpha, p, T_cap, opts);
     sol = [];
 else
+    U = zeros(p.nu, 0); t_u = zeros(1, 0); LAM = zeros(2, 0);
     z0  = [x0(:); xi0(:)];
     sol = ode45(@(t,z) ch4_ode_rhs(t, z, alpha, p), [0 T_cap], z0, opts);
     t   = sol.x;
@@ -88,6 +99,9 @@ out.sol    = sol;
 out.xi     = XI;
 out.t_xi   = t_xi;
 out.xi_end = XI(:, end);
+out.u      = U;
+out.t_u    = t_u;
+out.lambda = LAM;
 
 foot_st_0   = P_st(x0(1:p.nq));
 foot_sw_end = P_sw(out.x_end(1:p.nq));
@@ -110,8 +124,10 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function [t_all, X_all, XI_all, t_xi, fired] = integrate_zoh(x0, xi0, alpha, p, T_cap, opts)
+function [t_all, X_all, XI_all, t_xi, fired, U_all, t_u, LAM_all] = integrate_zoh(x0, xi0, alpha, p, T_cap, opts)
 %INTEGRATE_ZOH  One control decision per period; plant and controller advance.
+% Also records the held torque of each period and the TRUE contact force at
+% every solver point under it (see .lambda in the header).
 
 dt = p.control_dt;
 
@@ -128,6 +144,9 @@ t_all  = 0;
 X_all  = x0(:);
 XI_all = xi0(:);
 t_xi   = 0;
+U_all   = zeros(p.nu, 0);
+t_u     = zeros(1, 0);
+LAM_all = nan(2, 1);                    % t = 0 is filled by the first period
 
 tk    = 0;
 xk    = x0(:);
@@ -171,6 +190,17 @@ while tk < T_cap - eps(T_cap)
     t_all = [t_all, s.x(2:end)];        %#ok<AGROW>
     X_all = [X_all, s.y(:, 2:end)];     %#ok<AGROW>
 
+    U_all = [U_all, u(:)];              %#ok<AGROW>
+    t_u   = [t_u, tk];                  %#ok<AGROW>
+    if tk == 0
+        LAM_all(:, 1) = true_lambda(xk, u, p);
+    end
+    lam_s = zeros(2, numel(s.x) - 1);
+    for j = 2:numel(s.x)
+        lam_s(:, j-1) = true_lambda(s.y(:, j), u, p);
+    end
+    LAM_all = [LAM_all, lam_s];         %#ok<AGROW>
+
     dt_actual = s.x(end) - tk;          % shorter than dt if the guard fired
     if dt_actual <= 0
         break;                          % solver could not advance: give up
@@ -204,6 +234,13 @@ if ~stateful
     XI_all = zeros(0, 1);
     t_xi   = 0;
 end
+end
+
+% ---------------------------------------------------------------------------
+function lam = true_lambda(x, u, p)
+%TRUE_LAMBDA  Stance contact force of the TRUE model at x under held torque u.
+[~, ~, aux] = ch4_control_affine(x, p);
+lam = aux.lam_drift + aux.lam_in * u;
 end
 
 % ---------------------------------------------------------------------------

@@ -27,6 +27,11 @@ function entry = ch4_run_entry(x0, alpha, pc, opts)
 %           .box_violation .max_eta .final_eta .V0 .Vend .V_ratio .delta_max
 %           .qp_infeasible .int_u2 .Fz_min .grf_pred_error .reason
 %           .step_T .step_L .load_mass .loads .traj
+%           .valid_steps .invalid_step .invalid_kind .frac_invalid .mu_max
+%           the physical-validity score (ch4_validity): steps completed
+%           before the first sample at which the true contact force lifts
+%           off or exceeds the friction coefficient, where that sample is,
+%           and how much of the run violated the contact at all.
 %           u_box and box_violation stay NaN for the caller, which knows the
 %           box. load_mass is NaN when the load was redrawn every step, and
 %           loads lists the carried mass on every attempted step.
@@ -52,7 +57,18 @@ entry = struct('name', pc.controller, 'mass_scale', pc.uncertainty.mass_scale, .
                'reason', sim.reason, ...
                'step_T', [sim.steps.T], 'step_L', [sim.steps.L_step], ...
                'load_mass', load_mass, 'loads', sim.loads, ...
-               'traj', []);
+               'traj', [], ...
+               'valid_steps', NaN, 'invalid_step', NaN, 'invalid_kind', '', ...
+               'frac_invalid', NaN, 'mu_max', NaN);
+
+% At full solver resolution and under each step's own load: ch4_step records
+% the true contact force as it integrates, so this needs no re-analysis.
+Vd = ch4_validity(sim, pc);
+entry.valid_steps  = Vd.valid_steps;
+entry.invalid_step = Vd.first_step;
+entry.invalid_kind = Vd.first_kind;
+entry.frac_invalid = Vd.frac_invalid;
+entry.mu_max       = Vd.mu_max;
 
 if sim.n_ok == 0, return; end
 
