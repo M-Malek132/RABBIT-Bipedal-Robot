@@ -13,12 +13,24 @@ A supervisor-style review of the Chapter 3, 4 and 5 reports (the Persian
 |---|---|---|
 | — | Formula derivations as a Persian appendix (پ) in all three reports | **Done**, pushed |
 | — | Text-only fixes (wrong numbers, disclosures, wording) in all reports | **Done**, pushed (`373b9e1`) |
-| 3 | Torque boxes sized from the perturbation they face (oracle knowledge) | **Code done** (`ec104e7`); reruns in progress; reports **not yet updated** |
-| 2 | Runs counted as walking although the foot lifts off / slips | **Code done** (Ch4 `265ccef`, Ch3 `cca8dd4`, untested); reruns in progress; reports **not yet updated** |
-| 1 | The model is 74 kg; published RABBIT is ~32 kg | **Decided**: keep 74 kg, disclose in every report (no reruns) |
-| 4 | Three ε values (Ch3 draws conclusions at 0.5; some Ch4 diagnostics at 0.35) | **Decided**: rerun both the Ch3 conclusions and the Ch4 diagnostics at ε = 0.20, after the rating/validity reruns |
-| 5 | Chapter 4 L1 figure panels labelled "Case II/III" in the reverse of the robust table's numbering | Open — relabel and redraw |
-| 5 | Chapter 5 x0 pole-admissibility margins not reported | Open — compute and add |
+| 3 | Torque boxes sized from the perturbation they face (oracle knowledge) | **Done** — one 556/731 N·m rating; rerun and written up (`a910b7c`) |
+| 2 | Runs counted as walking although the foot lifts off / slips | **Done** — validity scored, tests pass, reports rewritten (`a910b7c`) |
+| 1 | The model is 74 kg; published RABBIT is ~32 kg | **Done** — kept at 74 kg, disclosed in Ch3 and Ch4 (Ch5 has no robot) |
+| 4 | Three ε values (Ch3 draws conclusions at 0.5; some Ch4 diagnostics at 0.35) | **Done** — Ch3 table and all three Ch4 diagnostics rerun at ε = 0.20 |
+| 5 | Chapter 4 L1 figure panels labelled "Case II/III" in the reverse of the robust table's numbering | **Done** — `ch4_plot_uncertainty` numbers panels by mass scale; figures redrawn |
+| 5 | Chapter 5 x0 pole-admissibility margins not reported | **Done** — margins added to `ch5_report_fa.tex` and `ch5_report.html` |
+
+All seven review items are closed. What is left is ordinary follow-up, not
+review debt:
+
+- The Chapter 5 runs start at rest, so the pole-admissibility condition is
+  satisfied with full margin and **the limitation is never exercised**. A run
+  from a moving `x0` would test it; none exists.
+- The `l1` thesis-form row of `tab:l1` still comes from the old box rule
+  (`Results/ch4_l1_2026-09-13_18-26-49/`); it is labelled as such.
+- `docs/ch4_report.html` figures are re-embedded base64 copies of
+  `docs/figures/*.png`; there is no script for this, so they must be
+  re-embedded by hand when the figures change.
 
 ## Decisions already made (do not re-ask)
 

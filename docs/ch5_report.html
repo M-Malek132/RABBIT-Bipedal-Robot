@@ -737,6 +737,30 @@ footer{
         every instant and still lets <code>h</code> go negative, which looks exactly like a bug
         in the barrier and is not one.
       </p>
+      <div class="plate">
+        <div class="plate-head"><span>The margin at each run's own x&#8320;</span><span class="tag">ch5_ecbf_admissible</span></div>
+        <div class="tscroll">
+          <table>
+            <thead><tr><th>Run</th><th class="num">r_b</th><th class="num">h(x&#8320;)</th><th class="num">p&#8321;</th><th class="num">required</th><th class="num">margin</th><th class="num">tolerable −ḣ(0)</th></tr></thead>
+            <tbody>
+              <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.15</td><td class="num">6</td><td class="num">3.15</td><td class="num">1.20</td><td class="num">0</td><td class="num">1.20</td><td class="num">3.78 m/s</td></tr>
+              <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.00</td><td class="num">6</td><td class="num">3.00</td><td class="num">1.20</td><td class="num">0</td><td class="num">1.20</td><td class="num">3.60 m/s</td></tr>
+              <tr><td class="name">pendulum, p₂ᵐⁱⁿ = −1.0</td><td class="num">4</td><td class="num">3.00</td><td class="num">5.00</td><td class="num">0</td><td class="num">5.00</td><td class="num">15.0</td></tr>
+              <tr><td class="name">pendulum, p₂ᵐⁱⁿ = −0.5</td><td class="num">4</td><td class="num">2.50</td><td class="num">5.00</td><td class="num">0</td><td class="num">5.00</td><td class="num">12.5</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="plate-note">
+          All four starts are at rest, so <code>ḣ(0) = 0</code>, every lower bound is zero and each
+          pole's margin is the pole itself. Every <code>y_i(x&#8320;)</code> is non-negative
+          (3.15&#8230;33.9 for the spring-mass, 3&#8230;4950 for the pendulum), so <code>x&#8320;</code>
+          lies in every set of the chain and Theorem 5.1 applies without qualification. The honest
+          reading: <strong>these runs do not exercise the limitation.</strong> With the same poles the
+          condition tolerates a barrier already closing at up to <code>p&#8321;·h(0)</code> &#8212;
+          3.78 and 3.60 m/s here, 15.0 and 12.5 for the pendulum &#8212; and beyond that the same poles
+          become inadmissible.
+        </div>
+      </div>
 
       <h3>The quadratic program</h3>
       <div class="eqn">min_{&#956;,&#948;}  &#956;&#7488;&#956; + p &#948;&#178;                                       <span class="cmt">(5.31)</span>
