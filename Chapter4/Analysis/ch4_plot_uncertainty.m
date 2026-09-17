@@ -63,9 +63,14 @@ end
 cols = lines(max(nC,3));
 figs = gobjects(0);
 
+% the time panels share one axis, out to the longest run, so a run that
+% ends early shows as one
+ran  = C(~cellfun(@isempty, {C.traj}));
+tmax = max(arrayfun(@(e) e.traj.t(end), ran));
+
 % ---------------------------------------------------------------- fig 1: CLF
-f1 = figure('Name','ch4: CLF under model perturbation', ...
-            'Position',[80 80 620 240*nS]);
+f1 = ch4_figure('ch4: CLF under model perturbation', 'column', 1.9 + 2.75*nS);
+t1 = tiledlayout(f1, nS, 1, 'TileSpacing', 'tight', 'Padding', 'compact');
 ax = gobjects(1,nS);
 % LOG AXIS, deliberately. A failing controller reaches V ~ 2e5 while a working
 % one sits near 1, so on a shared linear axis -- and the axis MUST be shared, or
@@ -92,22 +97,29 @@ if ~isfinite(Vmax) || Vmax <= 0, Vmax = 1; end
 Vfloor = Vmax * 1e-5;
 
 for is = 1:nS
-    ax(is) = subplot(nS,1,is); hold on; grid on;
+    ax(is) = nexttile(t1); hold on; grid on;
     for ic = 1:nC
         e = pick(C, names{ic}, scales(is));
         if isempty(e) || isempty(e.traj), continue; end
         Vv = e.traj.V;
         if all(isnan(Vv)), Vv = e.traj.eta_n.^2; end
         plot(e.traj.t, max(Vv, Vfloor), 'Color', cols(ic,:), ...
-             'LineWidth', 1.3, 'DisplayName', names{ic});
+             'DisplayName', names{ic});
     end
-    set(gca, 'YScale', 'log');
+    % no minor grid: at print size nine lines a decade bury the curves
+    set(gca, 'YScale', 'log', 'YMinorGrid', 'off', 'YMinorTick', 'off');
     ylim([Vfloor, Vmax*2]);
-    ylabel('V_\epsilon');
+    decade_ticks(gca);
     title(sprintf('Case %s: model scale = %.2g', case_names{is}, scales(is)));
-    if is == 1, legend('Location','southeast','Interpreter','none'); end
-    if is == nS, xlabel('Time (s)'); end
 end
+ylabel(t1, '$V_\varepsilon$', 'Interpreter', 'latex');
+xlabel(t1, 'Time (s)');
+% Two short rows at the top of the first panel, which the sweeps leave empty:
+% in a layout tile of its own a legend took a centimetre from the panels, one
+% row across the panel covered Case IV's baselines, and one column reached down
+% to Case I's footstrike spikes.
+legend(ax(1), 'Interpreter', 'none', 'NumColumns', 2, 'Location', 'north');
+share_time(ax, [0 tmax]);
 figs(end+1) = f1;
 
 % ------------------------------------------------- fig 2 / 3: outputs, torques
@@ -119,8 +131,9 @@ figs(end+1) = f2;
 figs(end+1) = f3;
 
 % ------------------------------------------------------ fig 4: phase portrait
-f4 = figure('Name','ch4: torso phase portrait','Position',[120 120 640 420]);
-hold on; grid on;
+f4 = ch4_figure('ch4: torso phase portrait', 'column', 8.8);
+t4 = tiledlayout(f4, 1, 1, 'TileSpacing', 'tight', 'Padding', 'compact');
+ax4 = nexttile(t4); hold on; grid on;
 mk = {'-','--',':','-.'};
 for ic = 1:nC
     for is = 1:nS
@@ -129,8 +142,19 @@ for ic = 1:nC
         qt  = e.traj.x(3,  :) * 180/pi;
         dqt = e.traj.x(3+p.nq, :) * 180/pi;
         plot(qt, dqt, mk{min(is,numel(mk))}, 'Color', cols(ic,:), ...
-             'LineWidth', 1.1, ...
-             'DisplayName', sprintf('%s, scale %.2g', names{ic}, scales(is)));
+             'LineWidth', 0.6, 'HandleVisibility', 'off');
+    end
+end
+% The legend keys colour to controller and line style to case instead of
+% listing every run: nC x nS entries covered half the portrait.
+for ic = 1:nC
+    plot(NaN, NaN, '-', 'Color', cols(ic,:), 'LineWidth', 1.2, ...
+         'DisplayName', names{ic});
+end
+if nS > 1
+    for is = 1:nS
+        plot(NaN, NaN, mk{min(is,numel(mk))}, 'Color', [0.25 0.25 0.25], ...
+             'LineWidth', 1.2, 'DisplayName', sprintf('scale %.2g', scales(is)));
     end
 end
 xlabel('q_{torso} (deg)'); ylabel('dq_{torso} (deg/s)');
@@ -139,34 +163,52 @@ xlabel('q_{torso} (deg)'); ylabel('dq_{torso} (deg/s)');
 % halves are asserted in ch4_test_model), so a controller that tracks walks
 % the same orbit in every case, and whatever separates the cases here is
 % tracking error. Only a non-uniform change such as load_mass moves the orbit.
+% (The report's caption says so; a subtitle saying it does not fit a column.)
 title('Torso phase portrait');
-subtitle('a uniform mass scale leaves the zero-dynamics orbit unchanged: spread between cases is tracking error');
-legend('Location','best','Interpreter','none');
+legend(ax4, 'Interpreter', 'none', 'Orientation', 'horizontal', ...
+       'NumColumns', max(nC, nS), 'Location', 'southoutside');
 figs(end+1) = f4;
 
 % ------------------------------------------------------- fig 5: L1 estimator
 has_l1 = any(cellfun(@(n) any(strcmpi(n,{'l1','l1_con'})), names));
 if has_l1
-    f5 = figure('Name','ch4: L1 estimator','Position',[160 160 620 240*nS]);
+    f5 = ch4_figure('ch4: L1 estimator', 'column', 2.2 + 2.5*nS);
+    t5 = tiledlayout(f5, nS, 1, 'TileSpacing', 'tight', 'Padding', 'compact');
+    ax5 = gobjects(1, nS);
+    est = false(1, nC);                       % controllers that estimate
     for is = 1:nS
-        subplot(nS,1,is); hold on; grid on;
+        ax5(is) = nexttile(t5); hold on; grid on;
         for ic = 1:nC
             e = pick(C, names{ic}, scales(is));
             if isempty(e) || isempty(e.traj) || all(isnan(e.traj.theta_hat(:)))
                 continue;
             end
+            est(ic) = true;
             plot(e.traj.t, vecnorm(e.traj.theta_hat,2,1), '-', ...
-                 'Color', cols(ic,:), 'LineWidth', 1.3, ...
-                 'DisplayName', sprintf('%s: ||\\theta hat||', names{ic}));
+                 'Color', cols(ic,:), 'HandleVisibility', 'off');
             plot(e.traj.t, vecnorm(e.traj.theta_true,2,1), ':', ...
-                 'Color', cols(ic,:), 'LineWidth', 1.1, ...
-                 'DisplayName', sprintf('%s: ||\\theta true||', names{ic}));
+                 'Color', cols(ic,:), 'LineWidth', 1.0, 'HandleVisibility', 'off');
         end
-        ylabel('||\theta||');
         title(sprintf('model scale = %.2g', scales(is)));
-        if is == 1, legend('Location','northeast','Interpreter','tex'); end
-        if is == nS, xlabel('Time (s)'); end
     end
+    % One legend row, colour for the controller and line style for estimate or
+    % truth, as in fig 4: a row per (controller, quantity) pair stood two rows
+    % tall over a column-width figure. LaTeX for the hat, so a controller
+    % name's underscore is escaped (under 'tex' l1_con printed a subscript c).
+    for ic = find(est)
+        plot(ax5(1), NaN, NaN, '-', 'Color', cols(ic,:), 'LineWidth', 1.2, ...
+             'DisplayName', strrep(names{ic}, '_', '\_'));
+    end
+    plot(ax5(1), NaN, NaN, '-', 'Color', [0.25 0.25 0.25], 'LineWidth', 1.2, ...
+         'DisplayName', '$\|\hat{\theta}\|$');
+    plot(ax5(1), NaN, NaN, ':', 'Color', [0.25 0.25 0.25], 'LineWidth', 1.2, ...
+         'DisplayName', 'true $\|\theta\|$');
+    ylabel(t5, '$\|\theta\|$', 'Interpreter', 'latex');
+    xlabel(t5, 'Time (s)');
+    % in a tile of its own: every footstrike's spike reaches the top of a panel
+    lg = legend(ax5(1), 'Interpreter', 'latex', 'Orientation', 'horizontal');
+    lg.Layout.Tile = 'north';
+    share_time(ax5, [0 tmax]);
     figs(end+1) = f5;
 end
 
@@ -174,7 +216,8 @@ end
 if ~isempty(savedir)
     if ~exist(savedir,'dir'), mkdir(savedir); end
     for k = 1:numel(figs)
-        saveas(figs(k), fullfile(savedir, sprintf('ch4_fig%d.png', k)));
+        exportgraphics(figs(k), fullfile(savedir, sprintf('ch4_fig%d.png', k)), ...
+                       'Resolution', 600);
     end
     fprintf(' ch4_plot_uncertainty: %d figures saved to %s\n', ...
             numel(figs), savedir);
@@ -189,28 +232,24 @@ nS = numel(scales);
 e0 = first_traj(C);
 nr = size(e0.traj.(field), 1);
 
-f = figure('Name', ttl, 'Position', [100 100 320*nS 170*nr]);
+f = ch4_figure(ttl, 'page', 1.8 + 2.6*nr);
+t = tiledlayout(f, nr, nS, 'TileSpacing', 'tight', 'Padding', 'compact');
 ax = gobjects(nr, nS);
 for is = 1:nS
     for ir = 1:nr
-        ax(ir,is) = subplot(nr, nS, (ir-1)*nS + is); hold on; grid on;
+        ax(ir,is) = nexttile(t, (ir-1)*nS + is); hold on; grid on;
         for ic = 1:numel(names)
             e = pick(C, names{ic}, scales(is));
             if isempty(e) || isempty(e.traj), continue; end
             plot(e.traj.t, e.traj.(field)(ir,:) * sc, ...
-                 'Color', cols(ic,:), 'LineWidth', 1.1, ...
-                 'DisplayName', names{ic});
+                 'Color', cols(ic,:), 'DisplayName', names{ic});
         end
         if is == 1, ylabel(sprintf(ylab, ir)); end
-        if ir == 1
-            title(sprintf('scale = %.2g', scales(is)));
-            if is == nS
-                legend('Location','best','Interpreter','none','FontSize',7);
-            end
-        end
-        if ir == nr, xlabel('Time (s)'); end
+        if ir == 1, title(sprintf('scale = %.2g', scales(is))); end
     end
 end
+lg = legend(ax(1,1), 'Interpreter', 'none', 'Orientation', 'horizontal');
+lg.Layout.Tile = 'north';
 % Share the y-axis ACROSS cases within each output row, so degradation with
 % perturbation is visible rather than normalized away...
 for ir = 1:nr, link_y(ax(ir,:)); end
@@ -225,6 +264,7 @@ for ir = 1:nr, link_y(ax(ir,:)); end
 % So the limits come from a high percentile of the row rather than its max, and
 % the ylabel says so wherever a curve actually leaves the axes. Silent clipping
 % would be worse than either extreme.
+clipped = false;
 for ir = 1:nr
     vals = [];
     for is = 1:nS
@@ -240,6 +280,7 @@ for ir = 1:nr
     if ~isfinite(lim) || lim <= 0, continue; end
 
     if max(abs(vals)) > lim
+        clipped = true;
         for is = 1:nS
             if isgraphics(ax(ir,is)), ylim(ax(ir,is), [-lim lim]); end
         end
@@ -249,10 +290,17 @@ for ir = 1:nr
     end
 end
 
-% one footnote for the whole figure rather than per panel
-annotation(f, 'textbox', [0.005 0.005 0.5 0.03], 'String', ...
-    '* axis clipped to the 98th percentile; a diverging run leaves the frame', ...
-    'EdgeColor', 'none', 'FontSize', 7, 'Color', [0.35 0.35 0.35]);
+% one footnote for the whole figure rather than per panel, under the shared
+% time label, where no panel's decorations can cover it
+note = {};
+if clipped
+    note = {['\fontsize{8}\color[rgb]{0.35,0.35,0.35}* axis clipped to the ' ...
+             '98th percentile; a diverging run leaves the frame']};
+end
+xlabel(t, [{'Time (s)'}, note]);
+
+% a column is one case, so its rows plot the same runs over the same time
+for is = 1:nS, share_time(ax(:,is)); end
 end
 
 function e = pick(C, name, scale)
@@ -270,6 +318,30 @@ end
 function link_y(ax)
 ax = ax(isgraphics(ax));
 if numel(ax) > 1, linkaxes(ax, 'y'); end
+end
+
+function share_time(ax, xl)
+%SHARE_TIME  Stacked panels on one time axis, labelled on the bottom panel.
+% The ticks are copied from the bottom panel rather than left to each axes: an
+% axes whose tick labels are hidden picks its ticks differently, and its grid
+% lines then disagreed with the panel below. Call it once the figure's labels
+% and legends are in place, since the ticks MATLAB picks depend on the size
+% the layout leaves the panel (read before drawnow, they came out as 0 and 5).
+linkaxes(ax, 'x');
+if nargin > 1, xlim(ax(1), xl); end
+drawnow;
+set(ax, 'XTick', ax(end).XTick);
+set(ax(1:end-1), 'XTickLabel', {});
+end
+
+function decade_ticks(ax)
+%DECADE_TICKS  Grid a log axis at every decade and label every other one.
+% Left to itself, a panel this short keeps a single label, and a log axis with
+% one label cannot be read.
+e   = ceil(log10(ax.YLim(1))):floor(log10(ax.YLim(2)));
+lab = compose('10^{%d}', e);
+lab(mod(e, 2) ~= 0) = {''};
+set(ax, 'YTick', 10.^e, 'YTickLabel', lab);
 end
 
 function s = roman(k)

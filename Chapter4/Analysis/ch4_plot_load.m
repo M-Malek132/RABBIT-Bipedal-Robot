@@ -5,11 +5,11 @@ function figs = ch4_plot_load(S, p, savedir, opts)
 %   figs = ch4_plot_load(S, p, savedir)
 %   figs = ch4_plot_load(S, p, savedir, opts)
 %
-%   fig 1  Fig. 4.11a, the random load. Top: one controller mid-step on each of
-%          the first steps, with the mass it carries on that step drawn at the
-%          hip. Middle: the load drawn for every step. Bottom: each controller's
-%          largest tracking error in every step -- a line that ends early is a
-%          controller that fell.
+%   fig 1  Fig. 4.11a, the random load. Left: one controller mid-step on each
+%          of the first steps, with the mass it carries on that step drawn at
+%          the hip. Top right: the load drawn for every step. Bottom right:
+%          each controller's largest tracking error in every step -- a line
+%          that ends early is a controller that fell.
 %   fig 2  Fig. 4.11b, the norm of the joint torques under each fixed load, one
 %          panel per controller, over the first steps.
 %   fig 3  torso phase portrait of one controller under each fixed load, over
@@ -54,9 +54,13 @@ load_cols = [0.30 0.60 0.90; 0.95 0.60 0.10; 0.75 0.15 0.15; 0.40 0.40 0.40];
 %% --------------------------------------------------- fig 1: the random load
 R = S(is_rand);
 if ~isempty(R)
-    f1 = figure('Name', 'ch4: random unknown load', 'Position', [60 60 1000 860]);
+    % Snapshots beside the per-step panels, not above them: the robot is
+    % taller than its stride, so a strip across the page drew five small
+    % robots in a band of white.
+    f1 = ch4_figure('ch4: random unknown load', 'page', 8.6);
+    t1 = tiledlayout(f1, 2, 5, 'TileSpacing', 'tight', 'Padding', 'compact');
 
-    ax1 = subplot(3, 1, 1); hold(ax1, 'on'); axis(ax1, 'equal');
+    ax1 = nexttile(t1, 1, [2 2]); hold(ax1, 'on'); axis(ax1, 'equal');
     e = pick(R, opts.controller);
     if ~isempty(e) && ~isempty(e.traj)
         tb = [0, cumsum(e.step_T)];
@@ -72,17 +76,18 @@ if ~isempty(R)
                  'MarkerFaceColor', [0.95 0.7 0.2], 'MarkerEdgeColor', [0.5 0.35 0]);
             text(ax1, b.torso_top(1), b.torso_top(2) + 0.12, ...
                  sprintf('%.0f kg', e.loads(k)), ...
-                 'HorizontalAlignment', 'center', 'FontSize', 9);
+                 'HorizontalAlignment', 'center', 'FontSize', 8);
             xs = [xs, b.stance_foot(1), b.swing_foot(1), b.hip(1)]; %#ok<AGROW>
         end
         xl = [min(xs) - 0.3, max(xs) + 0.3];
         plot(ax1, xl, [0 0], 'k-', 'LineWidth', 1.5);
         xlim(ax1, xl); ylim(ax1, [-0.05, 1.95]);
     end
-    title(ax1, sprintf(['%s carrying a mass it is never told about, redrawn ' ...
-                        'every step: steps 1-%d, mid-step'], ...
+    % the caption says what the mass is (never told to the controller, redrawn
+    % every step); a title saying it was wider than the panel
+    title(ax1, sprintf('%s at mid-step, steps 1-%d', ...
                        opts.controller, opts.snap_steps), 'Interpreter', 'none');
-    xlabel(ax1, 'x [m]'); ylabel(ax1, 'z [m]');
+    xlabel(ax1, 'x (m)'); ylabel(ax1, 'z (m)');
 
     % the draws: identical for every controller (ch4_simulate seeds them), but
     % a run that fell stops drawing, so take the longest sequence
@@ -90,24 +95,27 @@ if ~isempty(R)
     loads = R(il).loads;
     ns    = numel(loads);
 
-    ax2 = subplot(3, 1, 2); hold(ax2, 'on'); grid(ax2, 'on');
+    ax2 = nexttile(t1, 3, [1 3]); hold(ax2, 'on'); grid(ax2, 'on');
     bar(ax2, 1:ns, loads, 0.6, 'FaceColor', [0.95 0.7 0.2], 'EdgeColor', 'none');
     xlim(ax2, [0.5, ns + 0.5]);
-    ylabel(ax2, 'load [kg]');
+    % left alone, the axis kept two labels (0 and 50), too few to read a load by
+    ytop = 10 * ceil(max(loads) / 10);
+    ylim(ax2, [0, ytop]); yticks(ax2, 0:20:ytop);
+    ylabel(ax2, 'load (kg)');
     title(ax2, 'mass carried on each step');
 
-    ax3 = subplot(3, 1, 3); hold(ax3, 'on'); grid(ax3, 'on');
+    ax3 = nexttile(t1, 8, [1 3]); hold(ax3, 'on'); grid(ax3, 'on');
     for ic = 1:nC
         e = pick(R, names{ic});
         if isempty(e) || isempty(e.traj), continue; end
         pk = per_step_max(e.traj.x, e.traj.eta_n, e.steps_completed);
-        plot(ax3, 1:numel(pk), pk, '-o', 'Color', cols(ic,:), 'LineWidth', 1.3, ...
-             'MarkerSize', 4, 'MarkerFaceColor', cols(ic,:), ...
+        plot(ax3, 1:numel(pk), pk, '-o', 'Color', cols(ic,:), 'LineWidth', 1.1, ...
+             'MarkerSize', 3, 'MarkerFaceColor', cols(ic,:), ...
              'DisplayName', sprintf('%s (%d steps)', names{ic}, e.steps_completed));
     end
     xlim(ax3, [0.5, ns + 0.5]);
     xlabel(ax3, 'step'); ylabel(ax3, 'max ||\eta|| in step');
-    legend(ax3, 'Location', 'northoutside', 'Orientation', 'horizontal', ...
+    legend(ax3, 'Location', 'northoutside', 'NumColumns', 2, ...
            'Interpreter', 'none');
     figs(end+1) = f1;
 end
@@ -117,12 +125,14 @@ Fx = S(~is_rand);
 if ~isempty(Fx)
     loads = unique([Fx.load_mass], 'stable');
 
-    f2 = figure('Name', 'ch4: norm of torques under a fixed unknown load', ...
-                'Position', [80 80 400*nC 380]);
+    f2 = ch4_figure('ch4: norm of torques under a fixed unknown load', 'page', 6.2);
+    % 'compact', not 'tight': with the inner scales unlabelled, 'tight' butted
+    % the panels together
+    t2 = tiledlayout(f2, 1, nC, 'TileSpacing', 'compact', 'Padding', 'compact');
     ax = gobjects(1, nC);
     vals = [];
     for ic = 1:nC
-        ax(ic) = subplot(1, nC, ic); hold(ax(ic), 'on'); grid(ax(ic), 'on');
+        ax(ic) = nexttile(t2); hold(ax(ic), 'on'); grid(ax(ic), 'on');
         for il = 1:numel(loads)
             e = pick(Fx, names{ic}, loads(il));
             if isempty(e) || isempty(e.traj), continue; end
@@ -133,28 +143,36 @@ if ~isempty(Fx)
             vals = [vals, un]; %#ok<AGROW>
             plot(ax(ic), e.traj.t(in), un, 'Color', ...
                  load_cols(1 + mod(il - 1, size(load_cols, 1)), :), ...
-                 'LineWidth', 1.2, 'DisplayName', sprintf('%g kg', loads(il)));
+                 'DisplayName', sprintf('%g kg', loads(il)));
         end
         title(ax(ic), names{ic}, 'Interpreter', 'none');
-        xlabel(ax(ic), 'Time (s)');
-        if ic == 1, ylabel(ax(ic), 'norm of torques (Nm)'); end
-        if ic == nC, legend(ax(ic), 'Location', 'best'); end
     end
-    % Shared axis, so the panels compare -- clipped at a high percentile, as in
+    xlabel(t2, 'Time (s)'); ylabel(t2, 'norm of torques (Nm)');
+    % inside the last panel's top right, clear of an adaptive law's torques; in
+    % a tile of its own it took a centimetre from the panels
+    legend(ax(end), 'Location', 'northeast');
+    % Shared axes, so the panels compare -- clipped at a high percentile, as in
     % ch4_plot_uncertainty, so one controller's spike does not flatten the rest.
     ax = ax(isgraphics(ax));
-    if numel(ax) > 1, linkaxes(ax, 'y'); end
+    if numel(ax) > 1, linkaxes(ax, 'xy'); end
     if ~isempty(vals)
         lim = prctile(vals, 99) * 1.2;
         if isfinite(lim) && lim > 0
             ylim(ax(1), [0, lim]);
             if max(vals) > lim
-                annotation(f2, 'textbox', [0.005 0.005 0.6 0.04], 'String', ...
-                    'axis clipped at 1.2 x the 99th percentile; spikes leave the frame', ...
-                    'EdgeColor', 'none', 'FontSize', 7, 'Color', [0.35 0.35 0.35]);
+                xlabel(t2, {'Time (s)', ['\fontsize{8}\color[rgb]{0.35,0.35,0.35}' ...
+                       'axis clipped at 1.2 x the 99th percentile; spikes leave the frame']});
             end
         end
     end
+    % The scale is labelled on the left panel only, and its ticks are copied to
+    % the others: an axes whose tick labels are hidden picks its ticks
+    % differently, and its grid lines then disagreed with the labelled panel.
+    % drawnow first, because the ticks MATLAB picks depend on the panel's final
+    % size in the layout.
+    drawnow;
+    set(ax, 'YTick', ax(1).YTick);
+    set(ax(2:end), 'YTickLabel', {});
     figs(end+1) = f2;
 
     %% ------------------------------------ fig 3: does a load move the orbit?
@@ -165,31 +183,38 @@ if ~isempty(Fx)
     % falls rather than orbits, and its fall would set the axes for both.
     panels = unique({'clfqp', opts.controller}, 'stable');
 
-    f3 = figure('Name', 'ch4: torso phase portrait under a fixed load', ...
-                'Position', [120 120 560*numel(panels) 460]);
+    f3 = ch4_figure('ch4: torso phase portrait under a fixed load', 'page', 8.0);
+    t3 = tiledlayout(f3, 1, numel(panels), 'TileSpacing', 'compact', 'Padding', 'compact');
     ax = gobjects(1, numel(panels));
     for ip = 1:numel(panels)
-        ax(ip) = subplot(1, numel(panels), ip); hold(ax(ip), 'on'); grid(ax(ip), 'on');
+        ax(ip) = nexttile(t3); hold(ax(ip), 'on'); grid(ax(ip), 'on');
         if ~isempty(opts.X_orbit)
             plot(ax(ip), opts.X_orbit(3, :) * 180/pi, opts.X_orbit(3 + p.nq, :) * 180/pi, ...
-                 'k-', 'LineWidth', 2, 'DisplayName', 'nominal orbit, no load');
+                 'k-', 'LineWidth', 1.4, 'DisplayName', 'nominal orbit, no load');
         end
         for il = 1:numel(loads)
             e = pick(Fx, panels{ip}, loads(il));
             if isempty(e) || isempty(e.traj), continue; end
             plot(ax(ip), e.traj.x(3, :) * 180/pi, e.traj.x(3 + p.nq, :) * 180/pi, '-', ...
                  'Color', load_cols(1 + mod(il - 1, size(load_cols, 1)), :), ...
-                 'LineWidth', 1, 'DisplayName', sprintf('%g kg', loads(il)));
+                 'LineWidth', 0.6, 'DisplayName', sprintf('%g kg', loads(il)));
         end
         xlabel(ax(ip), 'q_{torso} (deg)');
         if ip == 1, ylabel(ax(ip), 'dq_{torso} (deg/s)'); end
         title(ax(ip), panels{ip}, 'Interpreter', 'none');
-        legend(ax(ip), 'Location', 'best', 'Interpreter', 'none');
     end
     if numel(ax) > 1, linkaxes(ax, 'xy'); end
-    sgtitle(f3, {'Torso phase portrait under a fixed unknown load', ...
-                 ['a load changes M non-uniformly, so unlike a mass scale it can ' ...
-                  'move the orbit; the two panels differ by tracking error']});
+    % What the comparison means -- a load changes M non-uniformly, so unlike a
+    % mass scale it can move the orbit, and the panels differ by tracking
+    % error -- is the report caption's to say; as a subtitle it was a second
+    % line of small print.
+    title(t3, 'Torso phase portrait under a fixed unknown load', ...
+          'FontSize', 9.9, 'FontWeight', 'bold');
+    % in the baseline panel's empty top, as in fig 2
+    legend(ax(1), 'Interpreter', 'none', 'NumColumns', 2, 'Location', 'north');
+    drawnow;                                  % ticks as in fig 2
+    set(ax, 'YTick', ax(1).YTick);
+    set(ax(2:end), 'YTickLabel', {});
     figs(end+1) = f3;
 end
 
@@ -197,7 +222,8 @@ end
 if ~isempty(savedir)
     if ~exist(savedir, 'dir'), mkdir(savedir); end
     for k = 1:numel(figs)
-        saveas(figs(k), fullfile(savedir, sprintf('ch4_fig%d.png', k)));
+        exportgraphics(figs(k), fullfile(savedir, sprintf('ch4_fig%d.png', k)), ...
+                       'Resolution', 600);
     end
     fprintf(' ch4_plot_load: %d figures saved to %s\n', numel(figs), savedir);
 end
