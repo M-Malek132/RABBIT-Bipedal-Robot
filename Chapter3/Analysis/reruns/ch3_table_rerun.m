@@ -1,4 +1,4 @@
-function ch3_table_rerun()
+function ch3_table_rerun(eps_clf)
 %CH3_TABLE_RERUN  The Chapter-3 report's controller table (tab:ctrl) on posture_195,
 % rerun with physical validity. Same setup as the original run (2026-09-16):
 % 1 kHz ZOH, the gait's own CARE CLF at eps 0.5, only clfqp_con told about the
@@ -8,9 +8,17 @@ function ch3_table_rerun()
 % for all three laws, then 80% and 100% for clfqp_con. One checkpoint per
 % (configuration, step), so a crashed session resumes.
 %
-% Output: Results/reruns/ch3/ (one .mat per step, table.log).
+%
+% ch3_table_rerun(EPS_CLF) reruns it at another CLF rate: 0.20, the value
+% Chapter 4 adopts, so the chapters do not draw conclusions at different eps.
+%
+% Output: Results/reruns/ch3/ (one .mat per step, table.log) at the default
+% eps 0.5, Results/reruns/ch3_eps020/ etc. otherwise.
 ROOT = [fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))) filesep];
-SPD  = [fullfile(ROOT, 'Results', 'reruns', 'ch3') filesep];
+if nargin < 1 || isempty(eps_clf), eps_clf = 0.5; end
+sub = 'ch3';
+if abs(eps_clf - 0.5) > 1e-12, sub = sprintf('ch3_eps%03.0f', 100 * eps_clf); end
+SPD  = [fullfile(ROOT, 'Results', 'reruns', sub) filesep];
 if ~exist(SPD, 'dir'), mkdir(SPD); end
 logf = [SPD 'table.log'];
 
@@ -19,6 +27,7 @@ z = S.z; p = ch3_upgrade_params(S.p);
 E = ch3_col_eval(z, p);
 [X, ~, alpha] = ch3_col_unpack(z, p);
 peak_ff = max([abs(E.u(:)); abs(E.um(:))]);
+p.eps = eps_clf;
 p.control_dt = 1e-3;
 p.T_max = 0.5;
 n_steps = 4;

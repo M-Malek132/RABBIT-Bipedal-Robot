@@ -15,8 +15,8 @@ A supervisor-style review of the Chapter 3, 4 and 5 reports (the Persian
 | — | Text-only fixes (wrong numbers, disclosures, wording) in all reports | **Done**, pushed (`373b9e1`) |
 | 3 | Torque boxes sized from the perturbation they face (oracle knowledge) | **Code done** (`ec104e7`); reruns in progress; reports **not yet updated** |
 | 2 | Runs counted as walking although the foot lifts off / slips | **Code done** (Ch4 `265ccef`, Ch3 `cca8dd4`, untested); reruns in progress; reports **not yet updated** |
-| 1 | The model is 74 kg; published RABBIT is ~32 kg | Open — needs a decision |
-| 4 | Three ε values (Ch3 draws conclusions at 0.5; some Ch4 diagnostics at 0.35) | Open — needs reruns at ε = 0.20 |
+| 1 | The model is 74 kg; published RABBIT is ~32 kg | **Decided**: keep 74 kg, disclose in every report (no reruns) |
+| 4 | Three ε values (Ch3 draws conclusions at 0.5; some Ch4 diagnostics at 0.35) | **Decided**: rerun both the Ch3 conclusions and the Ch4 diagnostics at ε = 0.20, after the rating/validity reruns |
 | 5 | Chapter 4 L1 figure panels labelled "Case II/III" in the reverse of the robust table's numbering | Open — relabel and redraw |
 | 5 | Chapter 5 x0 pole-admissibility margins not reported | Open — compute and add |
 
@@ -36,6 +36,14 @@ A supervisor-style review of the Chapter 3, 4 and 5 reports (the Persian
 - **Leak / footstrike options** restored in Ch4 (`p.l1.alpha_leak`,
   `p.l1.impact_estimate` = carry | continuous | fold), off by default, so the
   mitigation table's rows can be rerun.
+- **L1 box** (2026-09-17): the l1 preset runs at the 556 N·m rating on the
+  TOTAL applied torque (`p.l1.constrain_applied = true`, already the default),
+  not the thesis form's μ1-only box. The report must say the formulation
+  differs from the thesis. The "l1 torque box 65 Nm … raising it to 244 Nm"
+  warning from `ch4_load_gait` is harmless here: that `p.l1.u_max` is unused
+  under the rating.
+- **Workflow**: update the Chapter 3/4 reports and commit only after ALL
+  reruns have finished, in one pass.
 
 ## What to run next
 
@@ -57,6 +65,12 @@ A supervisor-style review of the Chapter 3, 4 and 5 reports (the Persian
 
 Expect roughly 2–3 hours for everything after the presets.
 
+5. **ε = 0.20 reruns** (issue 4), after the above, same one-session rule:
+   `ch3_table_rerun(0.20)` → `Results/reruns/ch3_eps020/table.log`, then
+   `ch4_eps020_diagnostics` (`Chapter4/Analysis/reruns/`) → the κ table,
+   the robust growth ablation and the thesis predictor's θ̂ overshoot, in
+   `Results/reruns/ch4_eps020/summary.log`. Both resume.
+
 ## Results so far (rating rule + validity, 25 steps)
 
 Robust preset (`17-27-44`), "valid" = steps before first lift-off/slip:
@@ -73,6 +87,44 @@ in step 3 (2 valid), rclfqp_con walks 25 steps, all valid, max‖η‖ 1.89.
 Notable: validity changes verdicts (unconstrained clfqp slips beyond 0.4 even
 with a perfect model); the larger box changes the robust law itself at ×1
 (max‖η‖ 1.13 → 2.85, peak torque 195 → 371 N·m).
+
+### Rating reruns finished (2026-09-17 evening)
+
+All stages done, none failed. Full numbers: `Results/reruns/ch4/summary.log`,
+`Results/reruns/ch3/table.log`, `Results/ch4_result_2026-09-17_20-33-53.mat`
+(l1) and the load result after it. What validity changes:
+
+- **l1 preset** (box 556 on total torque): `l1_con` valid 25/25 at ×1 and ×1.5
+  but **0 at ×0.7** (slip, max μ 1.58); unconstrained `l1` valid 0 at ×0.7 and
+  ×1.5 (Fz down to −226 N). clfqp valid 1 at ×1.
+- **Robust plateau** (rclfqp_con, 60 steps): ×1 valid **34**/60 (slip in 35),
+  ×0.7 valid **5**, ×1.5 valid 58, Case IV valid 120/120.
+- **Nine long runs** (default nrm075, l1_con): s100 and s150 valid 60/60;
+  s070 valid 0; every random-load sequence and kg46 lose validity within
+  2–22 steps (slips, Fz to −560 N); s150 with `l1` valid 0. The other variants
+  (leak, cap, fold, continuous, dt 0.5 ms) behave the same; dt 0.5 ms is the
+  best on random loads (rnd2 53, rnd3 56, rnd5 60).
+- **Predictor-rate sweep** (×1.5): `l1_con` valid 25/25 at every rate except
+  a = 800/nrm 0 (falls in 16) and a = 700/nrm 0.75 (falls in 21); `l1` always 0.
+- **Ch3 table** (ε 0.5): PD 4/4 valid; clfqp 1; clfqp_con 0, 0, 1 at 60/80/100%.
+
+### ε = 0.20 reruns finished (2026-09-17, issue 4)
+
+`Results/reruns/ch3_eps020/table.log`, `Results/reruns/ch4_eps020/`:
+
+- **Ch3 table**: falls come one step later than at ε 0.5 (clfqp 3, clfqp_con
+  1/2/4) but the VALID counts are unchanged (4, 1, 0, 0, 1). The Chapter 3
+  conclusion survives at 0.20.
+- **κ table**: chatter picture as at 0.35 (κ 0: 417–558 N·m per sample; κ ≥
+  0.66: 1–2 N·m). Validity sharpens it: κ 0 → 0 valid everywhere, κ 0.33 → 0
+  valid at ×0.7, κ 0.66 → 1 of 3 at ×0.7, κ ≥ 0.99 → 3 of 3 everywhere.
+- **Growth**: peak V still grows ×4700 (4.9e-5 → 0.229) over 25 steps, but at
+  0.20 all 25 steps are VALID — it no longer fells Case I in step 21 as at
+  0.35. Survives norows/nobox/D2=0; vanishes with D1=0 (max‖η‖ 2.85 → 0.26).
+  Vanishes without the layer too, but that run is 0 valid (chatter).
+- **Predictor**: thesis θ̂ overshoots the true θ **7.2×** at ×0.7 and **2.0×**
+  at ×1.5 (3–5× at 0.35); plant predictor 1.29× / 1.01×. Scale 1 ratios are
+  meaningless (true θ ≈ 0) and now report NaN.
 
 ## Report updates to make when the reruns finish
 
