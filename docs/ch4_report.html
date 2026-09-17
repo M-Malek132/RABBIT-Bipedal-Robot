@@ -323,6 +323,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
 .chart .t-tick{fill:var(--ink-2)}
 .chart .t-axis{fill:var(--ink-3)}
 .chart .sep{stroke:var(--rule)}
+.nt{text-transform:none;letter-spacing:0}
 </style>
 
 <header class="masthead">
@@ -488,7 +489,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="tscroll">
         <table>
           <thead>
-            <tr><th>κ</th><th class="num">Δu held, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th class="num">max‖η‖, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th>Behaviour</th></tr>
+            <tr><th><span class="nt">κ</span></th><th class="num"><span class="nt">Δu</span> held, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th class="num"><span class="nt">max‖η‖</span>, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th>Behaviour</th></tr>
           </thead>
           <tbody>
             <tr><td class="name">0 &nbsp;<span class="pill neutral">exact law</span></td><td class="num">253 Nm</td><td class="num">573 Nm</td><td class="num">481 Nm</td><td class="num">0.81</td><td class="num">1.16</td><td class="num">2.54</td><td><span class="pill bad">chatters</span></td></tr>
@@ -600,7 +601,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="tscroll">
         <table>
           <thead>
-            <tr><th>Case</th><th class="num">Steps run</th><th class="num">Plateau: mean per-step V peak</th><th class="num">max‖η‖</th><th class="num">Settled by</th><th class="num">Speed, last 10 steps</th></tr>
+            <tr><th>Case</th><th class="num">Steps run</th><th class="num">Plateau: mean per-step V peak</th><th class="num"><span class="nt">max‖η‖</span></th><th class="num">Settled by</th><th class="num">Speed, last 10 steps</th></tr>
           </thead>
           <tbody>
             <tr><td class="name">×1 &nbsp;(perfect model)</td><td class="num">60</td><td class="num">0.065</td><td class="num">1.7</td><td class="num">step ~45</td><td class="num">1.548 m/s</td></tr>
@@ -986,7 +987,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="tscroll">
         <table class="cells">
           <thead>
-            <tr><th>Controller</th><th>a = 500</th><th>632 (critical)</th><th>700</th><th>800 &nbsp;<span class="pill neutral">default</span></th><th>900</th></tr>
+            <tr><th>Controller</th><th><span class="nt">a = 500</span></th><th>632 (critical)</th><th>700</th><th>800 &nbsp;<span class="pill neutral">default</span></th><th>900</th></tr>
           </thead>
           <tbody>
             <tr><td class="name"><code>l1</code></td><td class="cell">25&nbsp;· 6.18</td><td class="cell">25&nbsp;· 7.05</td><td class="cell">25&nbsp;· 2.24</td><td class="cell ok">25&nbsp;· 2.35</td><td class="cell">25&nbsp;· 2.29</td></tr>
@@ -1033,7 +1034,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="plate-head"><span>What each load does to the input gain</span><span class="tag">measured along the nominal orbit</span></div>
       <div class="tscroll">
         <table>
-          <thead><tr><th>Load</th><th class="num">‖Δ₂‖</th><th class="num">isotropic part</th><th class="num">min eig(I + Δ₂)</th><th class="num">loaded feedforward peak</th><th class="num">box</th></tr></thead>
+          <thead><tr><th>Load</th><th class="num"><span class="nt">‖Δ₂‖</span></th><th class="num">isotropic part</th><th class="num"><span class="nt">min eig(I + Δ₂)</span></th><th class="num">loaded feedforward peak</th><th class="num">box</th></tr></thead>
           <tbody>
             <tr><td class="name">23 kg</td><td class="num">1.99</td><td class="num">0.19</td><td class="num">0.49</td><td class="num">288 Nm</td><td class="num">360 Nm</td></tr>
             <tr><td class="name">35 kg</td><td class="num">2.30</td><td class="num">0.23</td><td class="num">0.41</td><td class="num">330 Nm</td><td class="num">412 Nm</td></tr>
@@ -1308,7 +1309,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="plate-head"><span>Out of sample: six new random-load sequences</span><span class="tag">l1_con · 60 steps · box 556 Nm</span></div>
       <div class="tscroll">
         <table>
-          <thead><tr><th>Variant</th><th class="num">Falls</th><th class="num">Typical step (median per-step max‖η‖)</th><th class="num">Largest max‖η‖, runs that walk</th></tr></thead>
+          <thead><tr><th>Variant</th><th class="num">Falls</th><th class="num">Typical step (median per-step <span class="nt">max‖η‖</span>)</th><th class="num">Largest <span class="nt">max‖η‖</span>, runs that walk</th></tr></thead>
           <tbody>
             <tr><td class="name">first three fixes only</td><td class="num">4 &nbsp;(steps 21, 32, 47, 49)</td><td class="num">2.92&#8211;3.76</td><td class="num">7.5&#8211;7.8</td></tr>
             <tr><td class="name">cap on α's regressor, 0.5</td><td class="num">3 &nbsp;(steps 24, 30, 44)</td><td class="num">3.35&#8211;7.96</td><td class="num">12.8&#8211;39.9</td></tr>
@@ -1373,7 +1374,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="plate-head"><span>Tracking error after the first footstrike, perfect model</span><span class="tag">posture_195 · ‖η⁺‖</span></div>
       <div class="tscroll">
         <table>
-          <thead><tr><th>Control period</th><th class="num">‖η⁺‖ after step 1</th><th>Status</th></tr></thead>
+          <thead><tr><th>Control period</th><th class="num"><span class="nt">‖η⁺‖</span> after step 1</th><th>Status</th></tr></thead>
           <tbody>
             <tr class="hl"><td class="name">1 ms &nbsp;<span class="pill neutral">default</span></td><td class="num">0.242</td><td><span class="pill warn">visible kick</span></td></tr>
             <tr><td class="name">0.5 ms</td><td class="num">0.123</td><td><span class="pill warn">halved</span></td></tr>
