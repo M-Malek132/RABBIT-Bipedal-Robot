@@ -152,7 +152,7 @@ $1$ کیلوهرتز در گام سوم سقوط می‌کند، در حالی �
 می‌زنند و تنها در مرحله اعتبارسنجی به هم می‌رسند. \textbf{تنها $\alpha$ از یک جریان به دیگری
 می‌رود}: چهار خروجی ضرب در شش ضریب بزیه، یعنی $24$ عدد. نه حل‌گر و نه مدت گام $T$؛ کنترل‌کننده
 زاویه پای خودِ ربات را می‌خواند و نه ساعت را، پس یک اغتشاش گام را دوباره نمایه‌گذاری می‌کند
-به‌جای آنکه آن را از همگامی خارج کند.
+به‌جای آنکه آن را از همگامی خارج کند. استخراج گام‌به‌گام روابط در پیوست~«\ref{app:deriv}» آمده است.
 
 \begin{figure*}[t]
     \centering
@@ -236,12 +236,14 @@ $1$ کیلوهرتز در گام سوم سقوط می‌کند، در حالی �
 \begin{bmatrix} \ddot q \\ \lambda \end{bmatrix}
 =
 \begin{bmatrix} Bu - V - G \\ -\dot J_{\mathrm{st}}\dot q \end{bmatrix}
+\label{eq:kkt}
 \end{equation}
 ماتریس سمت چپ شامل $u$ نیست، پس یک تجزیه با پنج سمت راست (یک رانش و چهار جهت ورودی)
 وابستگی اَفین را دقیقاً بازیابی می‌کند:
 \begin{equation}
 \ddot q = \ddot q_{\mathrm{drift}} + \ddot q_{\mathrm{in}}\,u,\qquad
 \lambda = \lambda_{\mathrm{drift}} + \lambda_{\mathrm{in}}\,u
+\label{eq:affinesplit}
 \end{equation}
 این دقت، بنیان بقیه فصل است: مرحله $4$ ماتریس جداسازی دقیق را از $\ddot q_{\mathrm{in}}$
 می‌سازد، و مرحله $8$ می‌تواند مخروط اصطکاک و کف نیروی عمودی را به صورت سطرهای \emph{خطی} در $u$
@@ -284,6 +286,7 @@ $1$ کیلوهرتز در گام سوم سقوط می‌کند، در حالی �
 \begin{equation}
 \theta = q_T + q_1 + \tfrac12 q_2 = c\,q,\qquad
 s = \frac{\theta-\theta^{-}}{\theta^{+}-\theta^{-}}
+\label{eq:phase}
 \end{equation}
 با $\theta^{-}=-0.15$ و $\theta^{+}=0.30$ رادیان، پس $s$ در هر گام از $0$ به $1$ می‌رود و
 پس‌خوراند حاصل مستقل از زمان است. خروجی‌ها $y = Hq - y_d(s(q),\alpha)$ با منحنی بزیه درجه
@@ -300,6 +303,7 @@ $5$ برای چهار مفصل عملگردار تعریف می‌شوند، پ�
 \ddot y &= L_f^2 y + L_gL_f y\,u, \nonumber\\
 u &= u_{\mathrm{ff}} + (L_gL_fy)^{-1}\mu,\quad
 u_{\mathrm{ff}} = -(L_gL_fy)^{-1}L_f^2y
+\label{eq:iolin}
 \end{align}
 که $\ddot y=\mu$ را نتیجه می‌دهد. مجموعه آزمون $\ddot y$ را در برابر مشتق جریان \emph{واقعی}
 ($1.5\times10^{-9}$) و حفظ $\ddot y=0$ توسط $u_{\mathrm{ff}}$ را ($1.1\times10^{-14}$) تصدیق
@@ -316,6 +320,7 @@ u_{\mathrm{ff}} = -(L_gL_fy)^{-1}L_f^2y
 \begin{align}
 x_m &= \tfrac12(x_k + x_{k+1}) + \tfrac{h}{8}(f_k - f_{k+1}), \nonumber\\
 \zeta_k &= x_{k+1} - x_k - \tfrac{h}{6}(f_k + 4f_m + f_{k+1})
+\label{eq:hs}
 \end{align}
 تابع هزینه $J = L_{\mathrm{step}}^{-1}\int_0^T \|u\|^2\,dt$ انرژی بر واحد مسافت است؛ بدون این
 تقسیم، درجا زدن ارزان‌ترین گام می‌شد. بردار تصمیم $z=[X;\,T;\,\alpha]$ دارای $14N+25$ درایه
@@ -690,5 +695,231 @@ $74$ کیلوگرمی گام نمی‌یابد و هیچ گام معتبری ز�
 \begin{LTR}
 \printbibliography[title={مراجع}]
 \end{LTR}
+
+
+% =====================================================================
+% پیوست: استخراج روابط
+% =====================================================================
+\onecolumn
+\setcounter{section}{0}
+\renewcommand{\thesection}{پ}
+\renewcommand{\thesubsection}{پ-\arabic{subsection}}
+\section{استخراج روابط}
+\label{app:deriv}
+این پیوست هر رابطه متن را گام‌به‌گام به دست می‌آورد و ترتیب آن همان ترتیب متن است.
+نمادگذاری: $q\in\mathbb{R}^7$ مختصات تعمیم‌یافته (دو مختصه پایه شناور، زاویه تنه و چهار
+مفصل)، $x=(q,\dot q)$، $M(q)$ ماتریس جرم، $V(q,\dot q)$ جملات کوریولیس و گریز از مرکز،
+$G(q)$ گرانش، و $B=\begin{bmatrix}0_{3\times4}\\ I_4\end{bmatrix}$ ماتریس ورود گشتاورها.
+
+% ---------------------------------------------------------------------
+\subsection{دستگاه \en{KKT} فاز اتکا (رابطه~\eqref{eq:kkt})}
+معادله لاگرانژ با نیروی تماس $\lambda$ که از طریق ژاکوبین پای اتکا وارد می‌شود:
+\begin{equation*}
+    M\ddot q+V+G=Bu+J_{\mathrm{st}}^{\top}\lambda .
+\end{equation*}
+پای اتکا ثابت است: $p_{\mathrm{st}}(q)=\text{ثابت}$. یک بار مشتق
+$J_{\mathrm{st}}\dot q=0$ و بار دوم
+\begin{equation*}
+    J_{\mathrm{st}}\ddot q+\dot J_{\mathrm{st}}\dot q=0 .
+\end{equation*}
+این دو معادله را کنار هم بنویسید و جمله $\lambda$ را به سمت چپ ببرید:
+\begin{equation*}
+    \begin{bmatrix} M & -J_{\mathrm{st}}^{\top} \\ J_{\mathrm{st}} & 0 \end{bmatrix}
+    \begin{bmatrix} \ddot q \\ \lambda \end{bmatrix}
+    =\begin{bmatrix} Bu - V - G \\ -\dot J_{\mathrm{st}}\dot q \end{bmatrix}.
+\end{equation*}
+
+\textbf{تفکیک اَفین (رابطه~\eqref{eq:affinesplit}).} نام ماتریس سمت چپ را $K$ بگذارید؛ $K$ به
+$u$ وابسته نیست و سمت راست نسبت به $u$ خطی است:
+\begin{equation*}
+    \begin{bmatrix} Bu-V-G \\ -\dot J_{\mathrm{st}}\dot q\end{bmatrix}
+    =\underbrace{\begin{bmatrix} -V-G \\ -\dot J_{\mathrm{st}}\dot q\end{bmatrix}}_{r_0}
+    +\sum_{j=1}^{4}\underbrace{\begin{bmatrix} B e_j \\ 0\end{bmatrix}}_{r_j}u_j .
+\end{equation*}
+چون $K^{-1}$ خطی است، $K^{-1}r_0$ رانش و $K^{-1}r_j$ ستون $j$ام ورودی را می‌دهد:
+$\ddot q=\ddot q_{\mathrm{drift}}+\ddot q_{\mathrm{in}}u$ و
+$\lambda=\lambda_{\mathrm{drift}}+\lambda_{\mathrm{in}}u$، بدون هیچ تقریبی. به همین دلیل
+سطرهای اصطکاک $|\lambda_x|\le\mu_s\lambda_z$ و کف نیرو $\lambda_z\ge F_{\min}$ در $u$ خطی‌اند.
+
+% ---------------------------------------------------------------------
+\subsection{نگاشت برخورد}
+برخورد آنی است: $q$ پیوسته می‌ماند و تنها سرعت‌ها می‌پرند. معادله حرکت را روی بازه
+$[t^-,t^+]$ به طول صفر انتگرال بگیرید؛ جملات کران‌دار ($V$، $G$، $Bu$) سهمی ندارند و تنها
+نیروی ضربه‌ای پای فرودآمده می‌ماند، با ضربه $I=\int F\,dt$:
+\begin{equation*}
+    M(\dot q^{+}-\dot q^{-})=J_{\mathrm{sw}}^{\top}I .
+\end{equation*}
+با شرط چسبیدن پا، $J_{\mathrm{sw}}\dot q^{+}=0$، همان ماتریس \en{KKT} با سمت راست دیگری به دست
+می‌آید:
+\begin{equation*}
+    \begin{bmatrix} M & -J_{\mathrm{sw}}^{\top} \\ J_{\mathrm{sw}} & 0 \end{bmatrix}
+    \begin{bmatrix} \dot q^{+} \\ I \end{bmatrix}
+    =\begin{bmatrix} M\dot q^{-} \\ 0 \end{bmatrix}.
+\end{equation*}
+این نگاشت نسبت به $\dot q^{-}$ \emph{خطی} است (در بخش پ-۷ به کار می‌آید). اعداد جدول مدل:
+اتلاف انرژی $1-99.1/142.4=0.304$، اندازه ضربه $\sqrt{5.59^2+13.98^2}=15.06$ و نسبت اصطکاک
+$5.59/13.98=0.40$، یعنی درست روی لبه مخروط.
+
+% ---------------------------------------------------------------------
+\subsection{متغیر فاز و خطی‌سازی ورودی\nd{}خروجی (روابط~\eqref{eq:phase} و \eqref{eq:iolin})}
+با $\Delta\theta=\theta^{+}-\theta^{-}$ و $\theta=c\,q$، مشتق $s$ نسبت به $q$ سطر ثابت
+$c/\Delta\theta$ است. خروجی $y=Hq-y_d(s)$ را مشتق بگیرید:
+\begin{equation*}
+    \dot y=\Big(H-y_d'(s)\,\frac{c}{\Delta\theta}\Big)\dot q=:J_y\,\dot q,
+    \qquad \dot s=\frac{c\,\dot q}{\Delta\theta}.
+\end{equation*}
+در مشتق دوم، چون $c$ ثابت است، تنها $y_d'$ با زمان تغییر می‌کند:
+\begin{equation*}
+    \ddot y=J_y\ddot q-y_d''(s)\,\dot s\,\frac{c\,\dot q}{\Delta\theta}
+    =J_y\ddot q-y_d''(s)\,\dot s^{2}.
+\end{equation*}
+این همان «تنها یک جمله انحنا» است: اگر $\theta$ در $q$ غیرخطی بود، هسیان $\partial^2 s/\partial q^2$
+نیز ظاهر می‌شد. با جای‌گذاری تفکیک اَفین:
+\begin{equation*}
+    \ddot y=\underbrace{J_y\ddot q_{\mathrm{drift}}-y_d''\dot s^{2}}_{L_f^2y}
+    +\underbrace{J_y\ddot q_{\mathrm{in}}}_{L_gL_fy}\,u .
+\end{equation*}
+با $u=-(L_gL_fy)^{-1}L_f^2y+(L_gL_fy)^{-1}\mu$ جمله اول دقیقاً حذف می‌شود و $\ddot y=\mu$.
+
+\textbf{شمارش ابعاد.} حالت $14$ بعد دارد؛ تماس دو مختصه و دو سرعت را قید می‌کند، پس
+$14-4=10$. خروجی چهار مؤلفه دارد و $\eta=(y,\dot y)$ هشت بعد، پس $10-8=2$ بعد برای دینامیک صفر
+$(\theta,\dot\theta)$ می‌ماند.
+
+% ---------------------------------------------------------------------
+\subsection{هم‌محلی هرمیت\nd{}سیمپسون (رابطه~\eqref{eq:hs})}
+\textbf{نقطه میانی.} روی بازه $[t_k,t_k+h]$ چندجمله‌ای درجه سه $p(\tau)$ را طوری بسازید که
+مقدار و شیب دو سر را تطبیق دهد: $p(0)=x_k$، $p'(0)=f_k$، $p(h)=x_{k+1}$، $p'(h)=f_{k+1}$.
+توابع پایه هرمیت در $\tau=h/2$ مقادیر $\tfrac12$، $\tfrac12$، $\tfrac{h}{8}$ و $-\tfrac{h}{8}$ دارند، پس
+\begin{equation*}
+    x_m=p(h/2)=\tfrac12(x_k+x_{k+1})+\tfrac{h}{8}(f_k-f_{k+1}),\qquad f_m=f(x_m,u_m).
+\end{equation*}
+
+\textbf{باقی‌مانده.} دینامیک به صورت انتگرالی
+$x_{k+1}-x_k=\int_{t_k}^{t_k+h}f\,dt$ است. انتگرال را با قاعده سیمپسون روی سه نقطه تقریب بزنید
+و تفاضل را صفر کنید:
+\begin{equation*}
+    \zeta_k=x_{k+1}-x_k-\tfrac{h}{6}(f_k+4f_m+f_{k+1})=0 .
+\end{equation*}
+($\zeta_k$ اینجا باقی‌مانده است و به $\zeta$ دینامیک صفر در بخش پ-۷ ربطی ندارد.)
+
+\textbf{چرا مرتبه پنج.} خطای قاعده سیمپسون $-\tfrac{h^5}{2880}f^{(4)}$ است و خطای درون‌یابی
+هرمیت در $x_m$ از مرتبه $h^4$، که با ضریب $\tfrac{4h}{6}\,\partial f/\partial x$ وارد می‌شود و آن
+هم $O(h^5)$ است. پس باقی‌مانده محلی روی یک مسیر هموار مانند $h^5$ کاهش می‌یابد. این برآورد به
+$f^{(4)}$ کران‌دار نیاز دارد؛ \en{B-spline} درجه سه در گره‌های داخلی تنها $C^2$ است، مشتق‌های
+بالاتر $y_d$ در آنجا می‌پرند، و بیشینه باقی‌مانده دقیقاً در همان فازها متوقف می‌شود.
+
+\textbf{شمارش مجهول‌ها.} هر نقطه $14$ حالت دارد، به‌علاوه مدت گام $T$ و $4\times6=24$ ضریب
+$\alpha$: $14N+1+24=14N+25$، که در $N=61$ برابر $879$ است.
+
+% ---------------------------------------------------------------------
+\subsection{\en{RES-CLF} و ثابت $c_3$}
+بعد از خطی‌سازی، $\dot\eta=F\eta+G\mu$ با
+$F=\begin{bmatrix}0&I\\0&0\end{bmatrix}$ و $G=\begin{bmatrix}0\\I\end{bmatrix}$.
+تغییر مقیاس $\xi=I_\varepsilon\eta=(y/\varepsilon,\ \dot y)$ را تعریف کنید. آنگاه
+\begin{equation*}
+    \dot\xi=\begin{bmatrix}\dot y/\varepsilon\\ \mu\end{bmatrix}
+    =\frac1\varepsilon\big(F\xi+G\,v\big),\qquad v:=\varepsilon\mu ,
+\end{equation*}
+یعنی همان انتگرال‌گیر دوگانه، $1/\varepsilon$ بار تندتر. با $V_\varepsilon=\xi^{\top}P\xi=\eta^{\top}P_\varepsilon\eta$
+و $P_\varepsilon=I_\varepsilon PI_\varepsilon$:
+\begin{equation*}
+    \dot V_\varepsilon=\frac1\varepsilon\Big(\xi^{\top}(F^{\top}P+PF)\xi+2\xi^{\top}PG\,v\Big).
+\end{equation*}
+معادله \en{CARE} می‌گوید $F^{\top}P+PF=PGG^{\top}P-Q$. با انتخاب $v=-G^{\top}P\xi$:
+\begin{equation*}
+    \dot V_\varepsilon=\frac1\varepsilon\Big(-\xi^{\top}Q\xi-\|G^{\top}P\xi\|^2\Big)
+    \le-\frac{\lambda_{\min}(Q)}{\varepsilon}\|\xi\|^2
+    \le-\frac{1}{\varepsilon}\,\underbrace{\frac{\lambda_{\min}(Q)}{\lambda_{\max}(P)}}_{c_3}\,V_\varepsilon ,
+\end{equation*}
+زیرا $V_\varepsilon\le\lambda_{\max}(P)\|\xi\|^2$. پس دست‌کم یک $\mu$ شرط
+$\dot V_\varepsilon\le-(c_3/\varepsilon)V_\varepsilon$ را برقرار می‌کند و مجموعه مجاز هیچ‌گاه خالی نیست.
+به‌ویژه در $L_gV=0$ (یعنی $G^{\top}P\xi=0$) شرط بدون هیچ کنترلی برقرار است.
+
+\textbf{کران نمایی.} از
+$\lambda_{\min}(P)\|\xi\|^2\le V_\varepsilon\le\lambda_{\max}(P)\|\xi\|^2$ و
+$\dot V_\varepsilon\le-(c_3/\varepsilon)V_\varepsilon$ داریم $V_\varepsilon(t)\le e^{-c_3t/\varepsilon}V_\varepsilon(0)$.
+برای $\varepsilon<1$، $\|\eta\|\le\|\xi\|\le\|\eta\|/\varepsilon$، پس
+\begin{equation*}
+    \|\eta(t)\|\le\frac1\varepsilon\sqrt{\frac{\lambda_{\max}(P)}{\lambda_{\min}(P)}}\;e^{-c_3t/(2\varepsilon)}\;\|\eta(0)\| .
+\end{equation*}
+
+\textbf{نسخه لیاپانوف.} با \en{PD}، $\mu=-K_py-K_d\dot y$ و ماتریس حلقه‌بسته
+$A=\begin{bmatrix}0&I\\-K_p&-K_d\end{bmatrix}$. اگر $A^{\top}P+PA=-Q$، همان استدلال بدون جمله
+$\|G^{\top}P\xi\|^2$ تکرار می‌شود. قانون \en{PD} شرط کاهش را برقرار می‌کند، اما هیچ قضیه‌ای
+تضمین نمی‌کند که در $L_gV=0$ نیز برقرار بماند.
+
+% ---------------------------------------------------------------------
+\subsection{\en{CLF-QP} کمینه‌نرم و کاهش $18$ درصدی}
+با $\psi=L_fV+(c_3/\varepsilon)V$، شرط به صورت
+$\psi+L_gV\,\mu\le0$ است. اگر $\psi\le0$، $\mu=0$ کافی است. در غیر این صورت کوچک‌ترین
+$\mu$ تصویر مبدأ روی ابرصفحه $L_gV\,\mu=-\psi$ است:
+\begin{equation*}
+    \mu^*=-\frac{\psi}{\|L_gV\|^2}\,L_gV^{\top},
+\end{equation*}
+(لاگرانژ: $2\mu+\lambda L_gV^{\top}=0$ با قید فعال). روی این جواب
+$\dot V=-(c_3/\varepsilon)V$ دقیقاً برقرار است، که همان نسبت $1.0000$ متن است.
+
+\textbf{کاهش در یک گام.} با برقراری دقیق نرخ،
+$V(T)=e^{-(c_3/\varepsilon)T}V(0)$. در $\varepsilon=0.5$ و $c_3=0.366$:
+$c_3/\varepsilon=0.732$ و $e^{-0.732\times0.273}=e^{-0.200}=0.82$؛ یعنی $V$ در هر گام تنها
+$18$ درصد کم می‌شود، و ثابت زمانی $1/0.732=1.37$ ثانیه است.
+
+\textbf{خطای نگهدارنده.} با نگهداری $u_k$ در $[t_k,t_k+T_s]$،
+$u(t)-u_k=\dot u\,(t-t_k)+O(T_s^2)$، پس انحراف مسیر از حالت پیوسته $O(T_s)$ است. نصف کردن
+$T_s$ خطا را نصف می‌کند: نسبت $2$.
+
+% ---------------------------------------------------------------------
+\subsection{دینامیک صفر، عامل انتگرال‌ساز و نگاشت پوانکاره}
+\textbf{معادله نرده‌ای.} روی $Z$ داریم $y=0$ و $\dot y=0$، پس $q=q_z(\theta)$ و
+$\dot q=v_z(\theta)\dot\theta$، و در نتیجه
+$\ddot q=v_z\ddot\theta+v_z'\dot\theta^2$. معادله حرکت را در سطری $w$ ضرب کنید که
+$wB=0$ و $wJ_{\mathrm{st}}^{\top}=0$؛ گشتاورها و نیروی تماس حذف می‌شوند:
+\begin{equation*}
+    \underbrace{w\,M v_z}_{a(\theta)}\ddot\theta
+    +\underbrace{w\big(M v_z'+V(q_z,v_z)\big)}_{b(\theta)}\dot\theta^2
+    +\underbrace{w\,G(q_z)}_{c(\theta)}=0 ,
+\end{equation*}
+زیرا $V(q,\dot q)$ نسبت به $\dot q$ درجه دو و همگن است:
+$V(q_z,v_z\dot\theta)=\dot\theta^2\,V(q_z,v_z)$. ضرب $w$ در هر تابعی از $\theta$ هر سه ضریب را
+یکسان مقیاس می‌دهد، پس تنها $b/a$ و $c/a$ اهمیت دارند.
+
+\textbf{عامل انتگرال‌ساز.} $\sigma:=m(\theta)\dot\theta$ را طوری بیابید که $\dot\sigma$ تنها به
+$\theta$ وابسته باشد:
+\begin{equation*}
+    \dot\sigma=m'\dot\theta^2+m\ddot\theta
+    =\Big(m'-m\frac{b}{a}\Big)\dot\theta^2-m\frac{c}{a}.
+\end{equation*}
+جمله $\dot\theta^2$ صفر می‌شود اگر $m'=mb/a$، یعنی
+$m(\theta)=\exp\!\big(\int_{\theta_0}^{\theta}b/a\,d\xi\big)$ با $m(\theta_0)=1$. آنگاه
+$\dot\theta=\sigma/m$ و $\dot\sigma=-mc/a$.
+
+\textbf{مختصه انرژی.} با $\zeta=\tfrac12\sigma^2$ و قاعده زنجیره‌ای:
+\begin{equation*}
+    \frac{d\zeta}{d\theta}=\frac{\sigma\dot\sigma}{\dot\theta}=\frac{\sigma(-mc/a)}{\sigma/m}=-\frac{m^2c}{a}
+    \quad\Rightarrow\quad
+    \zeta(\theta)=\zeta^{+}-V_{\mathrm{zero}}(\theta),\qquad
+    V_{\mathrm{zero}}(\theta)=\int_{\theta_0}^{\theta}\frac{m^2c}{a}\,d\xi .
+\end{equation*}
+پس $\tfrac12\sigma^2+V_{\mathrm{zero}}(\theta)$ در طول گام پایسته است؛ همان ناوردایی که آزمون می‌سنجد.
+
+\textbf{برخورد.} نگاشت برخورد در $\dot q$ خطی است (بخش پ-۲) و هر دو سر روی $Z$ قرار دارند، پس
+$\dot\theta^{+}$ مضرب ثابتی از $\dot\theta^{-}$ است و
+$\delta_{\mathrm{zero}}=\sigma^{+}/\sigma^{-}$ به سرعت بستگی ندارد. در نتیجه
+$\zeta^{+}_{k+1}=\delta_{\mathrm{zero}}^2\,\zeta^{-}_k$.
+
+\textbf{نگاشت پوانکاره.} از پایان گام $k$ تا پایان گام $k+1$:
+\begin{equation*}
+    \zeta^{-}_{k+1}=\zeta^{+}_{k+1}-V_{\mathrm{zero}}(\theta_f)=\delta_{\mathrm{zero}}^2\,\zeta^{-}_k-V_{\mathrm{zero}}(\theta_f).
+\end{equation*}
+نگاشتی اَفین و نرده‌ای است؛ شیب آن مقدار ویژه آن است. نقطه ثابت از $\zeta^*=\delta^2\zeta^*-V_{\mathrm{zero}}(\theta_f)$:
+\begin{equation*}
+    \zeta^*_2=\frac{-V_{\mathrm{zero}}(\theta_f)}{1-\delta_{\mathrm{zero}}^2},
+    \qquad \text{پایدار}\iff 0<\delta_{\mathrm{zero}}^2<1 .
+\end{equation*}
+
+\textbf{شرط وجود.} نقطه ثابت باید واقعاً پیموده شود: $\zeta(\theta)=\tfrac12\sigma^2>0$ در سراسر گام. از
+$\zeta(\theta)=\delta^2\zeta^*_2-V_{\mathrm{zero}}(\theta)$ این یعنی
+$\delta^2\zeta^*_2>V_{\mathrm{zero}}(\theta)$ برای هر $\theta$، یعنی
+$\zeta^*_2>V_{\max}/\delta_{\mathrm{zero}}^2$. برای گام مرجع $2.580>0.136$.
 
 \end{document}
