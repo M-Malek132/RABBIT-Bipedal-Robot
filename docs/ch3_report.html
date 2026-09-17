@@ -369,7 +369,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
     <div class="vcard is-good">
       <div class="lbl">Reference gait</div>
       <div class="num">1.563 m/s</div>
-      <div class="sub"><code>posture_195</code> on today's model: periodic to 4.8×10⁻⁹, a real trajectory to 1.6×10⁻⁴. None of the five older gaits re-checked still is.</div>
+      <div class="sub"><code>posture_195</code> on today's model: periodicity residual 4.8×10⁻⁹, a real trajectory to 1.6×10⁻⁴. None of the five older gaits re-checked still is.</div>
     </div>
     <div class="vcard is-good">
       <div class="lbl">Orbital stability</div>
@@ -509,7 +509,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <h4>The robot changed under this chapter</h4>
       <p>
         The 2026-09-02 model regeneration took RABBIT from 30&nbsp;kg to 74&nbsp;kg, non-uniformly:
-        torso 10&nbsp;→&nbsp;47&nbsp;kg, femurs 5&nbsp;→&nbsp;10, tibias 5&nbsp;→&nbsp;3.5. The numbers in
+        torso 10&nbsp;→&nbsp;47&nbsp;kg, femurs 5&nbsp;→&nbsp;10, tibias 5&nbsp;→&nbsp;3.5. The published RABBIT is about 32&nbsp;kg, so today's model is not the
+        published robot, and any comparison with published numbers should be read with that in mind. The numbers in
         <code>Chapter3/README.md</code> and <code>docs/CH3.md</code> were measured before it, on a
         reference gait that is no longer an orbit of the robot; since 2026-09-17 both carry the
         numbers below. This report re-measures everything
@@ -754,7 +755,8 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
         inside an interval, so its order jumps from 0.28 to 5.96. Only the median converges cleanly.
         The default is kept degree-3 as a genuinely different curve from the Bézier &#8212; an
         independent cross-check of the basis-agnostic pipeline &#8212; and the order check is left failing
-        rather than tuned away. The reference gait itself is Bézier.
+        rather than tuned away. The reference gait itself is Bézier. "Fifth order" describes the
+        <em>median</em> defect; the Bézier <em>maximum</em> reaches at most order 4.73 over this refinement.
       </div>
     </div>
 
@@ -797,6 +799,8 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
         invariance (HH4/HH5) gets no row: node&nbsp;1 is pinned to <code>Z</code> and equated to
         <code>Δ(x_N)</code>, so invariance is implied, and it is measured rather than assumed. Two
         limits whose gates were off during this gait's solve are exceeded, by 0.06&nbsp;Ns and 6&nbsp;cm.
+        The gait was also solved inside its own 195&nbsp;Nm box, not Table&nbsp;3.1's 120&nbsp;Nm, and every
+        valid gait on today's model descends from one re-converged seed.
         The gait walks at 1.563&nbsp;m/s with a 2.7&nbsp;cm hip bob and a cost of 16&nbsp;026.
       </div>
     </div>
@@ -1006,7 +1010,8 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
           1.37&nbsp;s against a 0.273&nbsp;s step, so meeting the rate exactly contracts <code>V</code> by
           only 18% per step (<code>e^−0.732·0.273</code>). The impact then kicks η, and nothing in the
           continuous-phase guarantee speaks to Δ. PD is not tied to that rate &#8212; it transiently exceeds the
-          CARE bound but converges further overall &#8212; and settles at max‖η‖&nbsp;0.21 on the same gait. The surplus convergence that minimum-norm
+          CARE bound but converges further overall &#8212; and settles at max‖η‖&nbsp;0.21 on the same gait. That comparison runs four steps, and PD is not held
+          to the torque box. The surplus convergence that minimum-norm
           optimization removes so efficiently is what was paying for stability across the impact.
         </p>
       </div>
@@ -1053,6 +1058,8 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
         </table>
       </div>
       <div class="plate-note">
+        <code>max |ceq|</code> is the largest of all the solve's equality constraints, not the periodicity
+        residual quoted at the top.
         On today's model the old reference gait is not only off its orbit but unstable: the suite's HZD
         check measured δ²<sub>zero</sub> = 0.904 and ρ = 1.180 for it, before the suite was pointed at
         <code>posture_195</code>. <code>ch3_report</code> exposes a
@@ -1111,7 +1118,8 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
         used to load <code>ch3_reference_gait.mat</code>, which is not an orbit of today's model, and failed
         its fixed-point and δ²-against-ρ checks on it. It now takes <code>posture_195</code> and first checks
         that its reference is an orbit of the dynamics on disk (7.6×10⁻⁷); δ²<sub>zero</sub> = 0.74619 then
-        meets ρ = 0.74621.
+        meets ρ = 0.74621. The test integrates over 321 points; the 0.746156 in the stability table
+        comes from the report's 161-point grid.
       </div>
     </div>
   </section>

@@ -373,8 +373,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
     </div>
     <div class="vcard">
       <div class="lbl">Past 25 steps</div>
-      <div class="num">9 → 1</div>
-      <div class="sub">L₁ long runs that fall, of 15, before and after normalizing the adaptation for the 1&nbsp;kHz loop.</div>
+      <div class="num">4 → 1</div>
+      <div class="sub">Fresh L₁ load sequences of 6 that fall, before and after normalizing the adaptation for the 1&nbsp;kHz loop (5 → 0 on the 9 runs used to pick ρ).</div>
     </div>
   </div>
 
@@ -537,7 +537,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <h3>Cases I&#8211;III over 25 steps</h3>
       <p>
         Three controllers, as in §4.1.4: A is Chapter 3's min-norm CLF-QP, B the same with the
-        torque box, and C the robust law with box and contact rows. Every cell reads
+        torque box and contact rows (friction and normal-force floor), and C the robust law with the
+        same box and rows. Every cell reads
         <strong>steps · max‖η‖ · min Fz</strong>, with Fz the true normal force.
       </p>
     </div>
@@ -560,7 +561,12 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         Boxes follow §4.1.4's rule rather than its numbers: <code>max(0.8 × A's peak, s × feedforward peak)</code>.
         The thesis's 60 / 80 / 150 Nm, set for a 32 kg robot, are 12&#8211;41% of what A draws on
         this 74 kg model, and both constrained laws fell in every case with them. A negative
-        min Fz means the ground had to pull the foot down: those steps are not realizable.
+        min Fz means the ground had to pull the foot down: those steps are not realizable. The
+        simulator keeps the stance foot attached, modelling neither lift-off nor slip, so such a run
+        still counts its steps in these tables. The box rule uses A's torque under the <em>same</em>
+        perturbation, and D₁, D₂ are measured from the perturbation itself; neither is available to a
+        controller in practice. These boxes are not the L₁ section's (1098 against 366&nbsp;Nm at ×1.5),
+        so the two sections are not comparable on torque budget.
       </div>
     </div>
 
@@ -676,7 +682,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
           The thesis reports Case IV walking that "slows down after several steps to a complete
           stop", and attributes it to an unstable orbit. Here C averages 1.576 m/s over the first
           three steps and 1.541 m/s over the last five, and a 120-step run is still at
-          1.563 m/s. The explanation cannot apply to this model: a uniform mass scale leaves the
+          1.563 m/s. If the thesis's Case IV is also a uniform mass scale &#8212; which this report has not
+          checked &#8212; the explanation cannot apply to this model: a uniform mass scale leaves the
           hybrid zero dynamics exactly invariant, and <code>posture_195</code>'s are stable
           (δ²_zero = 0.746). What does happen past step 25 is that the degradation stops being
           slight &#8212; max‖η‖ grows to about 10.9 by step 50 and holds there.
@@ -957,7 +964,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         the CLF-QP (blue) and both L₁ laws. In both perturbed panels the L₁ curves sit roughly an
         order of magnitude below the baseline and stay level from the first steps; with a
         perfect model they sit below it too. The panels are numbered in the L₁ preset's order,
-        so here "Case II" is ×0.7 and "Case III" is ×1.5.
+        so here "Case II" is ×0.7 and "Case III" is ×1.5 &#8212; the reverse of the robust table's numbering.
       </figcaption>
     </figure>
 
@@ -1026,7 +1033,9 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
           work.</li>
         <li><strong>The box.</strong> 1.25 × the loaded robot's own feedforward peak along the
           orbit &#8212; for a uniform scale, exactly the L₁ preset's rule. Sized by mass ratio
-          instead, <code>l1_con</code> fell within three steps at 46 and 70 kg.</li>
+          instead, <code>l1_con</code> fell within three steps at 46 and 70 kg. The box is built from the
+          <em>loaded</em> robot's feedforward, i.e. from the load no controller is told about: the budget is
+          equal for all, but chosen knowing the load.</li>
       </ul>
     </div>
 
@@ -1329,7 +1338,9 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
     <div class="col">
       <ul class="plainlist">
         <li><strong>Across all fifteen long runs, ρ = 0.75 falls once</strong>, against nine
-          without normalization and four with the cap. The one fall is seed 6, which the
+          without normalization and four with the cap. That total mixes the nine runs ρ was picked on
+          with six test runs; on the six fresh sequences, one fall against two (ρ = 1) is not a
+          distinguishable difference, and ρ = 0.75 has the largest excursion among completed runs (49.8). The one fall is seed 6, which the
           unnormalized law walks and which brings down all three 1 kHz limits tried on it. Both
           kinds of limit slow the estimator most when the error is largest &#8212; which is also when
           a changed load has to be learned. That is the likely reason; it has not been checked
@@ -1509,8 +1520,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
           law pays a steady error with a perfect model.
         </li>
         <li>
-          <strong>L₁ at 1 kHz needs sample-rate-aware design, and still falls in 1 of 15 long
-          runs.</strong> The adopted ρ sits in a window measured on this robot; a faster loop is
+          <strong>L₁ at 1 kHz needs sample-rate-aware design, and still falls on 1 of 6 fresh
+          load sequences.</strong> The adopted ρ sits in a window measured on this robot; a faster loop is
           the cleaner fix where the hardware allows it.
         </li>
         <li>
