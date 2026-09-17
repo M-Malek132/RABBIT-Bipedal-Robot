@@ -25,20 +25,25 @@ function [Lf2y, LgLfy, u_ff, info] = ch3_io_lin(x, alpha, p)
 % Every controller in stages 5-8 differs ONLY in how it picks mu.
 %
 % WHEN THE DECOUPLING MATRIX IS SINGULAR.  LgLfy = Jy*ddq_in loses rank where
-% the choice of outputs stops being independent of the inputs.  MEASURED, what
-% drives that is the PROFILE SLOPE, not the pose: dyd/ds enters Jy directly via
-% Jy = H - dyd*ds_dq, and stretching alpha about alpha_0 by 100x degrades rcond
-% from 5.8e-03 to 1.0e-04.
+% the choice of outputs stops being independent of the inputs.  Two things
+% lower rcond -- MEASURED on the 74 kg model along ch3_gait_posture_195 -- and
+% neither comes near the threshold below:
 %
-% Knee angle barely matters, contrary to what this comment used to claim.
-% Driving the stance knee to full extension leaves rcond flat (7.0e-03 at
-% q2 = 0, against 5.8e-03 at the gait's own 1.35), and a 121x121 grid over BOTH
-% knees across (-pi,pi) bottoms out at rcond 2.1e-07 -- at deep double FLEXION,
-% (q2,q4) = (2.13,1.87), not at lock.
+%   the PROFILE SLOPE.  dyd/ds enters Jy directly via Jy = H - dyd*ds_dq.
+%   Stretching alpha about alpha_0 by 100x takes rcond from 5.2e-03 to 8.7e-04,
+%   but not monotonically: 10x RAISES it, to 7.4e-03.  (On the 30 kg model
+%   before the 2026-09-02 regeneration, 100x took it to 1.0e-04.)
+%
+%   extreme POSES.  A 121x121 grid over BOTH knees across (-pi,pi) bottoms out
+%   at rcond 3.1e-04, at deep double FLEXION, (q2,q4) = (2.04,2.62).
+%
+% Knee LOCK is not one of them, contrary to what this comment used to claim.
+% Driving the stance knee to full extension leaves rcond flat (6.1e-03 at
+% q2 = 0, against 5.2e-03 at the gait's own 0.71).
 %
 % The pinv fallback below has never been observed to fire: over the reference
-% gait rcond stays in [5.6e-03, 8.3e-03], and across 20000 random states
-% spanning the full +-pi joint box the worst value is 8.0e-06, still five orders
+% gait rcond stays in [4.5e-03, 1.0e-02], and across 20000 random states
+% spanning the full +-pi joint box the worst value is 3.6e-06, still six orders
 % above the threshold.  It is genuinely defensive, not a path the pipeline
 % relies on.  info.rcond reports the conditioning; callers that must not fail
 % (the ODE right-hand side) should check it rather than discovering a NaN

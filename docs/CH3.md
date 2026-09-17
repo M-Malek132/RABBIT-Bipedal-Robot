@@ -7,6 +7,13 @@ non-obvious reasoning in the package. `Chapter3/README.md` is the how-to
 manual (quick start, entry points, design decisions); this is the
 architectural reference underneath it.
 
+> **Re-measured on today's model.** The dynamics were regenerated on 2026-09-02
+> and the model went from 30 kg to 74 kg (`M(1,1)`). The numbers below were
+> re-measured on 2026-09-16 along the reference gait
+> `Results/ch3_gait_posture_195.mat`; anything marked **(30 kg)** predates the
+> regeneration and is kept for the mechanism it shows, not its value. The
+> measured account of the whole chapter is [`ch3_report.html`](ch3_report.html).
+
 - [Part I — The big picture](#part-i-the-big-picture)
 - [Part II — Where stage 3 sits](#part-ii-where-stage-3-sits)
 - [Part III — Function map](#part-iii-function-map)
@@ -60,13 +67,13 @@ in two lines, calling stage 1 and stage 2 and joining them. The optimizer and
 the robot call *the same code*, so there is no separate "planning model" that
 can silently drift from the "control model".
 
-**Only `alpha` crosses between the flows.** The decision vector is 235 numbers
-at `N = 15`, but 210 of those are node states that exist purely to make the
+**Only `alpha` crosses between the flows.** The decision vector is 879 numbers
+at the reference gait's `N = 61`, but 854 of those are node states that exist purely to make the
 dynamics algebraic inside `fmincon`. What the robot carries away is 24 numbers.
 
 **`T` does not cross.** Note the runtime signature — `ch3_control(x, alpha, p)`
 — and that `ch3_ode_rhs(~, x, alpha, p)` discards time entirely. The gait *has*
-a duration (0.3009 s for the shipped reference gait), and the controller never
+a duration (0.2733 s for the reference gait, `posture_195`), and the controller never
 knows it. `T` is an output of the design, not an input to the control. This is
 the phase variable of stage 2 cashing out at the architectural level: the robot
 is not replaying a plan on a clock, it is obeying four joint relationships
@@ -80,7 +87,7 @@ dynamics surface `Z = {eta = 0}`, where any feedback term multiplies zero. So
 
 **The two flows meet only at verification.** `ch3_report` runs the forward
 simulation and compares it against the collocation — on the reference gait,
-step length 0.353 m and duration 0.301 s on all six steps, two independent
+step length 0.427 m and duration 0.273 s on all six steps, two independent
 computations agreeing. Then `ch3_poincare` returns the spectral radius, because
 periodicity is a property of the solve and stability is not
 ([Part IV §5](#periodic-is-not-stable)).
@@ -114,15 +121,15 @@ These *are* the model; everything above is assembly.
 
 | function | signature | returns | Chapter-3 callers |
 |---|---|---|---|
-| [`M`](../Dynamics/M.m) | `M(q)` | 7×7 mass matrix | `ch3_control_affine`, `ch3_impact` |
-| [`V`](../Dynamics/V.m) | `V([q;dq])` | 7×1 Coriolis / centrifugal | `ch3_control_affine` |
-| [`G`](../Dynamics/G.m) | `G(q)` | 7×1 gravity | `ch3_control_affine` |
+| [`M`](../Dynamics/M.m) | `M(q)` | 7×7 mass matrix | `ch3_control_affine`, `ch3_impact`, `ch3_zd_point` |
+| [`V`](../Dynamics/V.m) | `V([q;dq])` | 7×1 Coriolis / centrifugal | `ch3_control_affine`, `ch3_zd_point` |
+| [`G`](../Dynamics/G.m) | `G(q)` | 7×1 gravity | `ch3_control_affine`, `ch3_zd_point` |
 | [`input_matrix`](../Dynamics/input_matrix.m) | `input_matrix()` | 7×4 `B` | `ch3_control_affine` |
-| [`J_st`](../Dynamics/J_st.m) | `J_st(q)` | 2×7 stance-foot Jacobian | `ch3_control_affine`, `ch3_col_constraints` |
-| [`J_sw`](../Dynamics/J_sw.m) | `J_sw(q)` | 2×7 swing-foot Jacobian | `ch3_guard`, `ch3_impact` |
+| [`J_st`](../Dynamics/J_st.m) | `J_st(q)` | 2×7 stance-foot Jacobian | `ch3_control_affine`, `ch3_col_constraints`, `ch3_zd_point` |
+| [`J_sw`](../Dynamics/J_sw.m) | `J_sw(q)` | 2×7 swing-foot Jacobian | `ch3_guard`, `ch3_impact`, `ch3_col_eval` |
 | [`Jdotdq_st`](../Dynamics/Jdotdq_st.m) | `Jdotdq_st(q,dq)` | 2×1 | `ch3_control_affine` |
 | [`P_st`](../Dynamics/P_st.m) | `P_st(q)` | 2×1 stance-foot position | 9 files — the widest-used primitive |
-| [`P_sw`](../Dynamics/P_sw.m) | `P_sw(q)` | 2×1 swing-foot position | `ch3_guard`, `ch3_col_eval`, `ch3_step`, `ch3_forces` |
+| [`P_sw`](../Dynamics/P_sw.m) | `P_sw(q)` | 2×1 swing-foot position | `ch3_guard`, `ch3_col_eval`, `ch3_step`, `ch3_forces`, `ch3_body_points` |
 | `Tt`, `T2`, `T4` | `Tt(q)` | 4×4 homogeneous transform | `ch3_body_points` (drawing only) |
 
 Foot positions are returned in the **world frame, z up-positive**. The
@@ -226,8 +233,9 @@ are excluded above:
 - `M(` in `ch3_bezier.m` — the Bézier degree `M`, not the mass matrix.
 - `V(` in `ch3_test_control.m` — the CLF value `V`, not the Coriolis vector.
 
-So the mass matrix has exactly two Chapter-3 callers and the Coriolis vector
-exactly one. Re-run the same grep after any refactor; a primitive quietly
+So the mass matrix has exactly three Chapter-3 callers and the Coriolis vector
+exactly two — `ch3_zd_point`, which builds the zero dynamics behind the §6.3.4
+constraints, added one to each. Re-run the same grep after any refactor; a primitive quietly
 gaining callers is usually a sign that Layer 1 has been bypassed.
 
 ---
@@ -264,15 +272,16 @@ ch3_poincare produce the final reference gait.](figures/ch3_outer_workflow.svg)
 **The cold solve runs with NEC1 disabled.** NEC1 is the average-rate equality
 `L_step / T = v_des`. Finding a *periodic* gait is the hard part of the problem;
 pinning the speed at the same time is what makes a cold solve stall. Measured
-from the hand seed, periodicity alone starts at a residual of 0.78 while NEC1
-starts at 0 — the seed trivially walks at its own speed — so demanding a
-different speed immediately fights the constraint that was already binding, and
-feasibility oscillates instead of settling. See
-[`ch3_col_constraints.m:90`](../Chapter3/Optimization/ch3_col_constraints.m#L90).
+from the hand seed on the 30 kg model, periodicity alone started at a residual
+of 0.78 while NEC1 started at 0 — the seed trivially walks at its own speed — so
+demanding a different speed immediately fights the constraint that was already
+binding, and feasibility oscillates instead of settling. See
+[`ch3_col_constraints.m:141`](../Chapter3/Optimization/ch3_col_constraints.m#L141).
 
 **Speed is recovered by continuation, not imposed.** The seed rollout walks at
-about 0.12 m/s. Asking a cold solve for 0.35 m/s made `max|ceq|` oscillate
-2.76 → 0.10 → 1.05 while the cost fell by half — trading feasibility for
+about 0.12 m/s (0.123 on today's model). Asking a cold solve for 0.35 m/s made
+`max|ceq|` oscillate 2.76 → 0.10 → 1.05 on the 30 kg model while the cost fell by
+half — trading feasibility for
 objective and never settling. Marching `v_des` in small steps keeps every
 individual solve nearly feasible at its start, which is the regime SQP is good
 at. A speed whose solve fails to verify **stops the march**: continuing from a
@@ -284,17 +293,26 @@ chasing a division by zero. GRF first gets `Fz` positive, and only then does the
 cone mean anything.
 
 **Disabled inequalities are held at `-1`, not removed.** A gated constraint is
-trivially satisfied but still present, so `c` has a constant length of 8 and
+trivially satisfied but still present, so `c` has a constant length of 18 and
 `fmincon`'s problem dimensions never change between runs. That is what makes
 "enable them one at a time, warm-starting each phase" a safe workflow rather
 than a new problem each time.
 
 **Table 3.1 limits are ATRIAS numbers — measure before enforcing.** ATRIAS is
 63 kg with 50:1 harmonic drives, so its `|u| <= 5 Nm` is *motor* torque, 250 Nm
-at the joint. RABBIT is ~30 kg and direct drive, so `u` here *is* joint torque.
-Copying the numbers across produces an infeasible problem and a solver that
-fails for reasons that look like bugs. `ch3_report` prints every limit with its
-**measured** value whether or not it is enforced.
+at the joint. RABBIT's model is 74 kg and direct drive, so `u` here *is* joint
+torque. Copying the numbers across produces an infeasible problem and a solver
+that fails for reasons that look like bugs. `ch3_report` prints every limit with
+its **measured** value whether or not it is enforced.
+
+**On today's model this workflow has not yet produced a gait from a cold
+start.** `ch3_stage3_from_scratch` runs its limit-staging part (GRF → friction →
+torque → impulse) from the analytic seed, and none of its 18 solves
+(`Chapter3/Results/s3_*.mat`) verifies as a real trajectory. The reference gait
+was reached by warm start instead: an older gait re-converged on the new
+dynamics, then torque ladders and two posture rungs. Nor has a verified gait
+reached RABBIT's own 120 Nm torque box; the reference gait carries 195 Nm. See
+*The reference gait* in `Chapter3/README.md`.
 
 ### Inside one `fmincon` evaluation
 
@@ -317,10 +335,10 @@ iterations.](figures/ch3_col_eval.svg)
 |---|---|---|---|
 | `X` | `nx x N` = 14 x N | 14N | node states |
 | `T` | scalar | 1 | step duration, **free** — the gait finds its own timing |
-| `alpha` | `ny x n_ctrl` = 4 x 6 | 24 | degree-5 Bézier coefficients |
+| `alpha` | `ny x n_ctrl` = 4 x 6 | 24 | six coefficients per output: degree-5 Bézier, or the default degree-3 B-spline with six control points |
 
-Total `14N + 25`. At the default `p.N_nodes = 15` that is **235 unknowns**
-(319 at N = 21).
+Total `14N + 25`. At the default `p.N_nodes = 41` that is **599 unknowns**
+(879 at N = 61, the reference gait's mesh).
 
 `alpha` is what stage 3 is *actually* solving for. The node states exist only to
 make the dynamics **algebraic** rather than an ODE inside the optimizer — there
@@ -395,18 +413,18 @@ inaccurate one.
 
 #### Equalities — `ceq`
 
-| # | block | count | count at N = 15 |
+| # | block | count | count at N = 41 |
 |---|---|---|---|
 | 1 | node 1 on `Z`: `y = 0`, `ydot = 0` | 8 | 8 |
 | 2 | node 1 phase clock: `theta = theta_minus` | 1 | 1 |
 | 3 | node 1 gauge: `P_st(q_1) = [0;0]`, `J_st(q_1) dq_1 = 0` | 4 | 4 |
-| 4 | Hermite–Simpson defects | `nx (N-1)` | 196 |
+| 4 | Hermite–Simpson defects | `nx (N-1)` | 560 |
 | 5 | node N on the guard: `theta = theta_plus`, swing-foot height 0 | 2 | 2 |
 | 6 | periodicity `Delta(x_N) - x_1 = 0`, **excluding** `px` | `nx - 1` | 13 |
 | 7 | NEC1 `L_step / T = v_des` *(gated; 0 when off)* | 1 | 1 |
-| | **total** | `29 + nx(N-1)` | **225** |
+| | **total** | `29 + nx(N-1)` | **589** |
 
-225 equalities against 235 unknowns.
+589 equalities against 599 unknowns: 10 degrees of freedom, as `ch3_test_collocation` counts them.
 
 **Why the node-1 conditions are imposed only at node 1.** `y = 0`, `ydot = 0`
 and the contact conditions are all *invariant* under the collocation dynamics:
@@ -414,7 +432,7 @@ and the contact conditions are all *invariant* under the collocation dynamics:
 Hermite–Simpson is exact for cubics — it reproduces a linear `y` with no
 truncation error at all. Imposing them at every node instead would add
 `12(N-1)` equations the defects already imply, over-determining the system
-(532 equations against 319 unknowns at N = 21) and leaving `fmincon` to fight a
+(1069 equations against 599 unknowns at N = 41) and leaving `fmincon` to fight a
 rank-deficient KKT matrix. `ch3_report` measures the residual drift across the
 step to confirm this holds in practice rather than only in theory.
 
@@ -422,18 +440,32 @@ step to confirm this holds in practice rather than only in theory.
 must advance; requiring it to repeat would demand the robot end where it
 started, i.e. not walk.
 
-#### Inequalities — `c`, always length 8
+#### Inequalities — `c`, always length 18
 
-| # | constraint | gate |
-|---|---|---|
-| 1 | swing-foot clearance at mid-step (NIC3) | `limits.enable.clearance` |
-| 2 | no ground penetration at interior nodes | always |
-| 3 | step-length floor | always |
-| 4 | peak torque, over nodes **and** midpoints | `limits.enable.torque` |
-| 5 | friction cone | `limits.enable.friction` |
-| 6 | minimum normal force | `limits.enable.grf` |
-| 7 | impact impulse magnitude | `limits.enable.impulse` |
-| 8 | reserved, held at `-1` | — |
+| # | constraint | gate | source |
+|---|---|---|---|
+| 1 | mid-step swing-foot clearance | `clearance` | style |
+| 2 | no ground penetration at interior nodes | always | — |
+| 3 | step-length floor | always | — |
+| 4 | peak torque, over nodes **and** midpoints | `torque` | Table 3.1 |
+| 5 | friction cone `\|Fx\| <= mu_s Fz` | `friction` | NIC2 |
+| 6 | minimum normal force `Fz >= Fz_min` | `grf` | NIC1 |
+| 7 | impact impulse magnitude | `impulse` | Table 3.1 |
+| 8 | hip-height band | `height` | style |
+| 9 | swing foot strictly above ground | `swing_clear` | NIC3 |
+| 10 | transversal strike (foot descending at node N) | `swing_clear` | NIC3 |
+| 11 | post-impact swing-leg lift-off | `liftoff` | NEC2 |
+| 12 | impact impulse compressive, `Iz >= 0` | `impact` | NEC3 |
+| 13 | impact impulse inside the friction cone | `impact` | NEC3 |
+| 14 | existence of the fixed point | `hzd` | NEC4 |
+| 15 | stability of the fixed point | `hzd` | NEC5 |
+| 16 | `theta` strictly monotonic | `phase_mono` | HH6 |
+| 17 | decoupling matrix invertible on `Z` | `decoupling` | HH2 |
+| 18 | swing-foot height ceiling | `clearance_max` | style |
+
+Every gate is a field of `p.limits.enable`, and all of them default to on. What
+the §6.3.4 rows (9–17) mean, and what they measure on the reference gait, is in
+`Chapter3/README.md`.
 
 Torque is checked at midpoints as well as nodes because a midpoint can exceed
 both of its neighbours; checking nodes only would under-report the peak.
@@ -444,7 +476,9 @@ Sanity rails, not physics. Their job is to stop `fmincon` wandering into poses
 where the generated trig is meaningless (a torso rotated past vertical, a knee
 folded through itself) or velocities large enough that the KKT solve loses
 conditioning — a single bad evaluation early on can poison a whole solve.
-`T` is boxed by `[T_min, T_max]` and `alpha` by `[-3, 3]`.
+`T` is boxed by `[T_min, T_max]` and `alpha` by `[-3, 3]`. The one bound that is
+a design requirement rather than a rail is the torso pitch, boxed by
+`p.qt_range`.
 
 #### Solver options, and why
 
@@ -452,10 +486,11 @@ conditioning — a single bad evaluation early on can poison a whole solve.
 |---|---|---|
 | `Algorithm` | `sqp` | the transcription is mostly equality constrained with a smooth objective, which is where SQP is strongest; interior-point spends its effort on a barrier that has little to do here |
 | `FiniteDifferenceType` | `central` | constraint values pass through a KKT solve and a matrix inversion, so forward differences at the default step lose too many digits near a well-conditioned solution |
-| `ScaleProblem` | `false` | so the Feasibility number `fmincon` reports is directly comparable to `ConstraintTolerance` rather than to a rescaled surrogate |
+| `ScaleProblem` | `p.scale_problem`, `false` by default | so the Feasibility number `fmincon` reports is directly comparable to `ConstraintTolerance` rather than to a rescaled surrogate |
 | `OptimalityTolerance` | `1e-6` | |
 | `ConstraintTolerance` | `1e-6` | |
 | `StepTolerance` | `1e-10` | |
+| `MaxIterations`, `MaxFunctionEvaluations` | `p.max_iter`, `p.max_fun_evals` | a central-difference gradient costs about `2·n_vars` evaluations, so the evaluation cap can bind first — at N = 61 the default 3e5 allows about 170 iterations against `max_iter = 300`; [`ch3_col_budget`](../Chapter3/Optimization/ch3_col_budget.m) sizes it |
 | `OutputFcn` | checkpoint | writes `z` every `p.checkpoint_every` iterations; a crash then costs minutes, not a run, and the checkpoint doubles as a warm start |
 
 ### The gate: small defects do not mean a real trajectory
@@ -470,7 +505,7 @@ dynamics, the optimizer will happily find a **spurious discrete solution**, and
 every number derived from it — step length, duration, speed, cost, the
 Table 3.1 quantities — is then fiction.
 
-Measured on this project, at N = 15 on a fully converged solve:
+Measured on the 30 kg model, at N = 15 on a fully converged solve:
 
 ```
 interval-1 defect                      7.18e-07
@@ -502,7 +537,8 @@ repels (falls), no matter how small the periodicity residual is. It costs 26
 step simulations, which is why it is a post-hoc diagnostic rather than a
 constraint.
 
-The shipped reference gait reaches `rho = 0.760`.
+The reference gait, `posture_195`, reaches `rho = 0.746`, and the zero-dynamics
+quadrature `δ²_zero` agrees with it to 3e-05.
 
 ### File map
 
@@ -516,12 +552,22 @@ The shipped reference gait reaches `rho = 0.760`.
 | [`ch3_col_eval.m`](../Chapter3/Optimization/ch3_col_eval.m) | the cached single pass over all nodes and midpoints |
 | [`ch3_col_cost.m`](../Chapter3/Optimization/ch3_col_cost.m) | torque-squared per unit distance |
 | [`ch3_col_constraints.m`](../Chapter3/Optimization/ch3_col_constraints.m) | `ceq` and `c` |
+| [`ch3_col_check_limits.m`](../Chapter3/Optimization/ch3_col_check_limits.m) | does a gait satisfy the limits its own `p` enables? |
+| [`ch3_assert_limits.m`](../Chapter3/Optimization/ch3_assert_limits.m) | refuses to write a gait that violates its own enabled limits |
 | [`ch3_col_solve.m`](../Chapter3/Optimization/ch3_col_solve.m) | the `fmincon` driver, with checkpointing |
+| [`ch3_col_budget.m`](../Chapter3/Optimization/ch3_col_budget.m) | sizes `MaxFunctionEvaluations` so that `MaxIterations` is the cap that binds |
 | [`ch3_col_verify.m`](../Chapter3/Optimization/ch3_col_verify.m) | nodes vs a true rollout |
 | [`ch3_col_remesh.m`](../Chapter3/Optimization/ch3_col_remesh.m) | move a solution onto a finer mesh |
 | [`ch3_col_resume.m`](../Chapter3/Optimization/ch3_col_resume.m) | run a bounded chunk of a solve from a checkpoint, one MATLAB process per chunk |
 | [`ch3_continuation.m`](../Chapter3/Optimization/ch3_continuation.m) | march `v_des`, warm-starting each speed |
+| [`ch3_posture_march.m`](../Chapter3/Optimization/ch3_posture_march.m) | march the torso-pitch box and hip-height band |
+| [`ch3_impact_march.m`](../Chapter3/Optimization/ch3_impact_march.m) | march the NEC3 impulse friction cone down to `mu_s` |
 | [`ch3_lean_tall_march.m`](../Chapter3/Optimization/ch3_lean_tall_march.m) | end-to-end campaign driver for the forward-lean, ~0.94 m hip gait; resumable, `'warm'` (4 rungs from the converged lean gait) or `'cold'` (17 stages from a seed) |
+| [`ch3_realizability_march.m`](../Chapter3/Optimization/ch3_realizability_march.m) | finish Table 3.1 from `ch3_gait_fix`: torque, then impulse |
+| [`ch3_speed_march.m`](../Chapter3/Optimization/ch3_speed_march.m) | the forward-lean, raised-hip family across 0.35–1.20 m/s, inside all four Table 3.1 limits |
+| [`ch3_repose.m`](../Chapter3/Optimization/ch3_repose.m) | pitch the torso by `delta` at every node, holding both legs fixed in the world |
+| [`ch3_logln.m`](../Chapter3/Optimization/ch3_logln.m) | print a march progress line and append it to a log immediately |
+| [`ch3_stage3_from_scratch.m`](../Chapter3/ch3_stage3_from_scratch.m) | script: the staged GRF → friction → torque → impulse solve from the analytic seed |
 
 ---
 
@@ -535,7 +581,8 @@ numerical behaviour, and where the comments and the numbers disagree.
 Inventory and call graph: [Part III](#part-iii-function-map).
 Stage 3: [Part IV](#part-iv-the-optimization-flow-stage-3).
 
-All measurements below are on `Results/ch3_reference_gait.mat` unless stated;
+All measurements below are on today's model along `Results/ch3_gait_posture_195.mat`
+(N = 61), re-measured 2026-09-16, unless marked **(30 kg)**;
 the scripts are described in [How the numbers were measured](#how-the-numbers-were-measured).
 
 ### `ch3_control_affine` — building `f` and `g`
@@ -594,7 +641,7 @@ q̈ = q̈_drift + q̈_in·u          λ = λ_drift + λ_in·u
 
 Exactly — not linearized, not finite-differenced. This *is* the solution,
 rearranged. Verified against [`rabbit_constrained_dynamics`](../Dynamics/rabbit_constrained_dynamics.m)
-at **4.5e-13**.
+at **2.6e-13**.
 
 The vector fields then fall out:
 
@@ -613,27 +660,28 @@ error: `L_gL_f y` → `u_ff` → the collocation cost → every gradient `fminco
 estimates. Measured:
 
 ```
-one solve with 5 RHS  9.6 us | five separate solves 33.2 us (3.5x)
+one solve with 5 RHS  4.4 us | five separate solves 21.5 us (4.9x)
 ```
 
-3.5× faster **and** exact.
+4.9× faster **and** exact.
 
 #### Numerical character
 
 ```
-gait   : cond(A) min 456.7  max 490.8 | min rank(J_st) = 2
-random : cond(A) median 428.2  max 1.073e+03 | rank(J_st) < 2 in 0 of 4000
+gait   : cond(A) min 896.4  max 1610.8 | min rank(J_st) = 2
+random : cond(A) median 918.5  max 5850 | rank(J_st) < 2 in 0 of 4000
 ```
 
-Condition number around 450–500, barely varying, and `J_st` never lost rank.
+Condition number 900–1600 along the gait — about double the 30 kg model's
+450–500, and still far from trouble — and `J_st` never lost rank.
 
 Two structural notes:
 
-- **`A` is not symmetric** (`|A − Aᵀ| = 5.88`), because the top-right block is
+- **`A` is not symmetric** (`‖A − Aᵀ‖_F = 5.66`), because the top-right block is
   `−Jᵀ` while the bottom-left is `+J`. Flipping one sign would give the symmetric
   indefinite form that admits `LDLᵀ`. The current arrangement is equally correct
   and yields `λ` directly in the convention you want — **force the ground applies
-  to the robot**, `Fz > 0` pushing up (measured `Fz = +39.75 N` at `u = 0`). At
+  to the robot**, `Fz > 0` pushing up (measured `Fz = +27.86 N` at `u = 0`, node 1). At
   9×9 the solver choice is irrelevant.
 - **The solve is unguarded.** `ch3_io_lin` checks `rcond` and falls back to
   `pinv`; this function checks nothing. The justification is sound — `M` is
@@ -735,12 +783,13 @@ along the true flow `f + g·u`, never reusing the `ÿ` formula:
 
 | check | result |
 |---|---|
-| `u = u_ff` → `ÿ = 0` | max \|ÿ\| = 2.55e-09 |
-| `μ = [1.5, −2, 0.7, 3]` → `ÿ = μ` | max error 2.48e-09 |
-| `μ = e_k` moves only channel `k` | identity matrix to 1e-9 |
+| `u = u_ff` → `ÿ = 0` | max \|ÿ\| = 5.33e-09 |
+| `μ = [1.5, −2, 0.7, 3]` → `ÿ = μ` | max error 4.02e-09 |
+| `μ = e_k` moves only channel `k` | identity matrix to 3e-9 |
 
 `u_ff` is the torque that *walks*: hold the four constraints, let the pendulum do
-the rest. Peak over the reference step: **106.6 Nm**.
+the rest. Peak over the reference step, nodes and midpoints: **195.0 Nm** — exactly the
+box the gait was solved against.
 
 Every controller in stages 5–8 differs only in how it picks `μ`. That claim is
 enforced structurally by [`ch3_control`](../Chapter3/Control/ch3_control.m), where
@@ -776,9 +825,9 @@ if ~isfinite(rc) || rc < 1e-12
 Measured:
 
 ```
-gait      : rcond min 5.61e-03  max 8.34e-03 | cond min 80.2  max 128.0
-random 3k : rcond median 8.45e-03  min 2.04e-06 | below 1e-12 in 0 of 3000
-random 20k: worst rcond = 8.05e-06 | below 1e-12 (pinv path taken): 0
+gait      : rcond min 4.50e-03  max 1.02e-02 | cond min 53.0  max 136.2
+random 3k : rcond median 7.89e-03  min 3.26e-05 | below 1e-12 in 0 of 3000
+random 20k: worst rcond = 3.55e-06 | below 1e-12 (pinv path taken): 0
 ```
 
 **The `pinv` fallback never fires** — not on the gait, not in 20 000 random
@@ -789,37 +838,42 @@ or if dyd/ds drives Jy toward a rank-deficient combination."* Measured, those tw
 halves do not fare equally:
 
 **Knee lock: not supported.** Sweeping the stance knee to full extension leaves
-conditioning flat —
+conditioning flat (0.708 is the gait's own stance knee at node 1) —
 
 ```
-  q2 = 1.347  rcond = 5.762e-03      q2 = 0.100  rcond = 6.829e-03
-  q2 = 0.600  rcond = 5.190e-03      q2 = 0.000  rcond = 7.033e-03
+  q2 = 0.708  rcond = 5.190e-03      q2 = 0.100  rcond = 6.483e-03
+  q2 = 0.600  rcond = 8.705e-03      q2 = 0.000  rcond = 6.094e-03
 ```
 
 A 121×121 grid over **both** knees across `(−π, π)` puts the worst case at
 
 ```
-min rcond = 2.143e-07 at (q2,q4) = (2.125, 1.866)
+min rcond = 3.063e-04 at (q2,q4) = (2.042, 2.618)
 ```
 
-— deep double-knee **flexion** (≈122° and ≈107°), not extension. And still five
+— deep double-knee **flexion** (≈117° and 150°), not extension. And still eight
 orders above the `1e-12` threshold.
 
-**Profile slope: supported.** Stretching `alpha` about `alpha_0` degrades
-conditioning monotonically:
+**Profile slope: supported, but not monotone.** Stretching `alpha` about
+`alpha_0`:
 
 ```
-  scale   1  rcond = 5.762e-03  cond =   128.0
-  scale  10  rcond = 2.874e-04  cond =  2668.3
-  scale 100  rcond = 1.014e-04  cond =  8252.8
+  scale   1  rcond = 5.190e-03  cond =   110.6
+  scale  10  rcond = 7.437e-03  cond =    81.4
+  scale 100  rcond = 8.685e-04  cond =   872.6
 ```
 
-A 100× steeper profile costs about 1.75 orders of magnitude of `rcond`. So
-`dy_d/ds` really is the term that drives `Jy` toward rank deficiency; the knee
-attribution appears to have been a plausible guess rather than a measurement.
-**The docstring has been corrected** to state the profile-slope mechanism, to
-record that knee angle barely matters, and to note that the `pinv` fallback has
-never been observed to fire.
+A 100× steeper profile costs about 0.8 orders of magnitude of `rcond`, while a
+10× stretch slightly *improves* it. **(30 kg)** the same sweep degraded
+monotonically, 5.8e-03 → 2.9e-04 → 1.0e-04, 1.75 orders at 100×. So `dy_d/ds`
+can push `Jy` toward rank deficiency, but it is not a steady dial — and on both
+models an extreme pose, the double-flexion corner of the knee grid, reached a
+lower `rcond` than a 100× profile did. What survives the regeneration is the
+negative result: knee **lock** does not matter, and nothing measured comes
+within five orders of the `pinv` threshold. The knee-lock attribution appears
+to have been a plausible guess rather than a measurement. **The docstring was
+corrected** to drop it and to record that the `pinv` fallback has never been
+observed to fire, and it now carries today's numbers.
 
 ### `ch3_impact` — the same structure, applied to an instant
 
@@ -851,23 +905,26 @@ evaluated at the pre-impact configuration.
 The bottom row imposes `J_sw q̇⁺ = 0`: the foot strikes and **sticks**. No
 rebound, no slip — a rigid plastic impact.
 
-Measured: `cond(A) = 490.8`, essentially the same as the continuous KKT system.
-`J_sw q̇⁺ = 4.8e-16`.
+Measured: `cond(A) = 1009.6`, inside the range of the continuous KKT system along
+the gait (896–1611). `J_sw q̇⁺ = 4.4e-16`.
 
-#### It is violently dissipative
+#### It is heavily dissipative
 
 ```
-KE: 70.064 -> 20.269 J   dissipated 49.795 J (71.1%)
-impulse: [-11.851  4.858] Ns, norm 12.808
+KE: 142.355 -> 99.149 J   dissipated 43.206 J (30.4%)
+impulse: [-5.592  13.981] Ns, norm 15.058
 ```
 
-**71% of the kinetic energy vanishes in an instant.** That is the physical
+**30% of the kinetic energy vanishes in an instant.** That is the physical
 content of "plastic": the ground absorbs whatever it takes to stop the foot dead.
 This is why the impact is the dominant disturbance in the hybrid loop, and why
 stage 5's `ε` is squeezed — the controller has exactly one step to undo what Δ
-does in zero time.
+does in zero time. **(30 kg)** the old reference gait lost 71%, with an impulse
+of `[-11.851 4.858]` Ns, mostly horizontal; today's is mostly vertical, at the
+edge of the NEC3 cone (`|Ix|/Iz = 0.400`).
 
-The impulse norm of 12.8 Ns is the Table 3.1 impulse quantity.
+The impulse norm of 15.06 Ns is the Table 3.1 impulse quantity — 0.06 Ns over
+the 15 Ns limit, whose gate was off in this gait's solve.
 
 #### Order is not negotiable
 
@@ -886,9 +943,9 @@ x_plus(2) = x_plus(2) + foot(2);
 Swap 1 and 2 and here is what happens:
 
 ```
-wrong-order impulse [0.000 0.000] vs correct [-11.851 4.858]
-||dq+ correct - dq+ wrong|| = 13.8518  (correct norm 5.4861)
-correct J_sw*dq+ = 4.82e-16 | wrong, on the true swing foot = 0.6631
+wrong-order impulse [0.000 0.000] vs correct [-5.592 13.981]
+||dq+ correct - dq+ wrong|| = 25.0538  (correct norm 5.8115)
+correct J_sw*dq+ = 4.44e-16 | wrong, velocity of the foot that landed = 8.1568 m/s
 ```
 
 **The impulse is exactly zero — the impact becomes a no-op.** The reason is
@@ -898,8 +955,9 @@ describes the *old stance* foot. That foot was pinned, so it already satisfies
 `J·q̇ = 0`. The constraint the solver is asked to enforce is already satisfied,
 the multiplier comes out zero, and nothing happens.
 
-The velocity error is 13.85 against a correct norm of 5.49 — a 250% error — and
-the foot that actually landed is left sliding at 0.66 m/s instead of stuck. The
+The velocity error is 25.05 against a correct norm of 5.81 — a 431% error — and
+the foot that actually landed keeps its whole pre-impact velocity, 8.16 m/s,
+instead of sticking. The
 code runs, produces plausible-looking numbers, and is silently wrong. Hence:
 
 ```matlab
@@ -918,7 +976,7 @@ x_plus(2) = x_plus(2) + foot(2);
 `y` is down-positive, so `foot_z = −y − (joint terms)` and adding `foot(2)` to `y`
 drives the new stance foot to exactly `z = 0`. On a collocation solution the
 correction is negligible — node N is constrained to the guard, so the residual
-measured `1.7e-12 m` — but in forward simulation the event tolerance leaves a real
+measured `4.6e-12 m` — but in forward simulation the event tolerance leaves a real
 residual, and without this the contact point would ratchet downward across steps.
 
 `px` is deliberately **not** reset:
@@ -934,34 +992,39 @@ missing one is the point of walking.
 
 ### How the numbers were measured
 
-Each figure above comes from a script run against `Results/ch3_reference_gait.mat`:
+Each figure above comes from a script run against `Results/ch3_gait_posture_195.mat`
+on today's model (2026-09-16), except where marked **(30 kg)**:
 
 | claim | method |
 |---|---|
-| affine split exact | compare `f + g·u` and `λ_drift + λ_in·u` against `rabbit_constrained_dynamics` for random `u` |
+| affine split exact | compare `f + g·u` and `λ_drift + λ_in·u` against `rabbit_constrained_dynamics` for 4 random `u` at each of the 61 nodes |
 | `cond(A)`, `rank(J_st)` | assemble the KKT matrix at every gait node and at 4000 random poses |
 | 5-RHS timing | 2000 repetitions of `A\rhs` versus 2000×5 single-column solves |
 | `ÿ = μ` | central difference of `ẏ(x)` along `ẋ = f + g·u`, never reusing the `ÿ` formula |
-| `rcond(LgLfy)` | gait nodes, 3000 plausible states, 20 000 states over the full ±π box, a 121×121 knee grid, and an `alpha` stretch sweep |
+| `rcond(LgLfy)` | gait nodes, 3000 plausible states, 20 000 states over the full ±π box, a 121×121 knee grid, and an `alpha` stretch sweep (knee sweep and grid at node 1; stretch about the `s = 0` column) |
 | impact dissipation | `½q̇ᵀMq̇` before and after the KKT solve, `M` at the pre-impact configuration |
-| order matters | relabel first, then run the same momentum balance, and compare `q̇⁺` and the impulse |
+| order matters | relabel first, then run the same momentum balance, and compare `q̇⁺`, the impulse, and the landing foot's velocity (`J_st` on the relabelled coordinates) |
 
 Model-level invariants behind all of this — mass-matrix symmetry and positive
 definiteness, `M(1,1)` = total mass, `DM = dM/dt`, the passivity identity
 `q̇ᵀ(Ṁ − 2C)q̇ = 0` at 1.0e-14, `G = ∂P/∂q`, all four Jacobians against finite
 differences, and energy conservation at 1.1e-14 over 0.25 s of free rotation about
-the toe — were checked separately and all hold.
+the toe — were checked separately on the 30 kg model and all held. They were
+not re-run after the regeneration; `ch3_test_model`'s KKT and impact identities
+pass on today's model.
 
 Two documentation defects found while verifying, neither affecting behaviour:
 
-- `p.mass` in [`ch3_params.m`](../Chapter3/ch3_params.m) read `32` against an
-  actual total mass of **30 kg** (10 torso + 4×5 links, confirmed by `M(1,1)`).
+- `p.mass` in [`ch3_params.m`](../Chapter3/ch3_params.m) read `32` against the
+  then total mass of **30 kg** (10 torso + 4×5 links, confirmed by `M(1,1)`).
   The field is assigned and never read anywhere in the codebase.
-  **Corrected to 30.**
+  **Corrected to 30** — and since the regeneration it reads 74, matching
+  `M(1,1) = 74.000`.
 - The `ch3_io_lin` knee-lock attribution, discussed above. **Corrected** — the
-  docstring now states the profile-slope mechanism the measurements support,
-  drops the knee-lock claim they contradict, and records that the `pinv` path
-  has never been observed to fire.
+  docstring drops the knee-lock claim the measurements contradict and records
+  that the `pinv` path has never been observed to fire; since 2026-09-16 it
+  carries today's numbers, including that the profile-slope effect is not
+  monotone.
 
 Separately, verifying the smoothness of [`ch3_yd`](../Chapter3/VirtualConstraints/ch3_yd.m)
 turned up two real defects in the B-spline branch, **both fixed**: the clamp

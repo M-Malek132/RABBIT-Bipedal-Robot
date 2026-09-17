@@ -13,22 +13,43 @@ J_sw, Jdotdq_*, P_st, P_sw, T1–T4, Tt` in `Dynamics/` — and the **B-spline
 evaluator** (`Trajectory_Optimization/BSpline.m`), which is kept as a
 cross-check on the Bézier basis.
 
+> **The robot changed on 2026-09-02.** The dynamics were regenerated and the
+> model went from 30 kg to 74 kg (`M(1,1)`). The numbers below were re-measured
+> on today's model on 2026-09-16, along the reference gait
+> `Results/ch3_gait_posture_195.mat`. Anything marked **(30 kg)** predates the
+> regeneration and is kept for the mechanism it shows, not for its value. The
+> measured account of the whole chapter is
+> [`docs/ch3_report.html`](../docs/ch3_report.html) (Persian:
+> [`docs/ch3_report_fa.pdf`](../docs/ch3_report_fa.pdf)).
+
 ---
 
 ## Quick start
 
 ```matlab
 startup                 % from the repo root; adds Chapter3/ to the path
-ch3_test_all            % verify every stage (a few minutes)
-out = ch3_main;         % solve a gait end to end and report on it
+ch3_test_all            % verify every stage (~6 s)
 ```
 
-To look at a solved gait:
+To look at the reference gait, the one verified on today's model and the one
+Chapter 4 uses:
 
 ```matlab
-ch3_plot_gait(out.z_opt, out.p, 'Results/ch3_gait.png');
-ch3_compare_controllers(out.z_opt, out.p);
+S = load('Results/ch3_gait_posture_195.mat');
+p = ch3_upgrade_params(S.p);
+ch3_report(S.z, p);
+ch3_plot_gait(S.z, p, 'Results/ch3_gait.png');
 ```
+
+`out = ch3_main;` solves a gait end to end from the analytic seed and reports on
+it, but read this first:
+
+> **No cold start has produced a gait on today's model.** The one cold-start
+> campaign on record, `ch3_stage3_from_scratch`, left 18 solves in
+> `Chapter3/Results/s3_*.mat` (committed 2026-09-10), and none of them verifies
+> as a real trajectory: they crawl at 0.13–0.30 m/s with 1.2–1.5 s steps.
+> Everything verified on this model descends from one older gait re-converged
+> on the new dynamics — see *The reference gait* below.
 
 > **Long solves and this MATLAB install.** Solves here have been observed to
 > die mid-run from crashes inside MATLAB's own add-on registry and worker
@@ -42,7 +63,7 @@ ch3_compare_controllers(out.z_opt, out.p);
 
 ## What you call, and what you don't
 
-Chapter 3 is 55 `.m` files, but only **13 are entry points**. The other 42 are
+Chapter 3 is 64 `.m` files, but only **17 are entry points**. The other 47 are
 internals reached through them — you should rarely need to call one directly.
 If you are looking for "where do I start", it is one of these.
 
@@ -51,7 +72,7 @@ If you are looking for "where do I start", it is one of these.
 | Call | What it does |
 |------|--------------|
 | `ch3_main` | solve a gait end to end, then report on it |
-| `ch3_test_all` | run all six stage tests (`ch3_test_model`/`_vc`/`_hzd`/`_collocation`/`_control`/`_simulation`) |
+| `ch3_test_all` | run all seven test suites (`ch3_test_params`/`_model`/`_vc`/`_control`/`_collocation`/`_simulation`/`_hzd`) |
 | `ch3_params` | every knob in the pipeline; the single source of truth |
 
 **Optimization campaigns** — hand-run drivers that march one requirement at a
@@ -64,10 +85,20 @@ first* below for why marching is not optional, and what order to apply them in.
 | `ch3_posture_march` | torso-pitch box and hip-height band |
 | `ch3_impact_march` | the NEC3 impulse friction cone down to `mu_s` |
 | `ch3_lean_tall_march` | combined forward-lean + hip-height campaign |
+| `ch3_realizability_march` | finishes Table 3.1: torque, then impulse |
+| `ch3_speed_march` | a forward-lean, raised-hip family swept across 0.35–1.20 m/s inside all four Table 3.1 limits |
+| `ch3_stage3_from_scratch` | a script, not a function: the staged GRF → friction → torque → impulse solve from the analytic seed |
 | `ch3_col_resume` | not a march — runs a bounded chunk of one solve from a checkpoint, one MATLAB process per chunk, for the crash-prone install described above |
 
+The marches warm-start from the seed gaits their headers name —
+`ch3_realizability_march` from `ch3_gait_fix`, `ch3_speed_march` from
+`ch3_gait_full_constrained` — and neither file is an orbit of today's dynamics
+(max `|ceq|` 0.46 and 0.34). Re-converge a seed on the current model before
+marching from it.
+
 **Analysis** — the first four take `(z, p)` straight from a solve;
-`ch3_animate` takes an unpacked `(x0, alpha, p)`.
+`ch3_animate` takes an unpacked `(x0, alpha, p)`, and `ch3_doc_figures` takes
+nothing.
 
 | Call | Produces |
 |------|----------|
@@ -76,11 +107,12 @@ first* below for why marching is not optional, and what order to apply them in.
 | `ch3_compare_controllers(z, p)` | the stage-8 payoff: same gait under each control law |
 | `ch3_hip_accel(z, p)` | hip acceleration from the dynamics, not differenced in time (see below) |
 | `ch3_animate(x0, alpha, p)` | walk animation |
+| `ch3_doc_figures` | redraws the report's two MATLAB figures into `docs/figures`, at the width `docs/ch3_report_fa.tex` prints them |
 
 Everything else — `Model/`, `VirtualConstraints/`, `Control/`, `HZD/`,
 `Simulation/`, the `Optimization/ch3_col_*` transcription, `ch3_seed`,
 `ch3_repose`, `ch3_logln`, `ch3_forces`, `ch3_poincare`, `ch3_body_points`,
-`ch3_upgrade_params` — is internal. The stage table below says which stage each
+`ch3_assert_limits`, `ch3_upgrade_params` — is internal. The stage table below says which stage each
 one implements.
 
 ---
@@ -173,12 +205,13 @@ feedback.** Its `u(x)` is only *piecewise* smooth — the QP's active set change
 as torque bounds engage and disengage, and `u` kinks at every switch. An
 adaptive explicit solver reads each kink as a failed error test and shrinks its
 step without bound. This does not merely slow the simulation, it stalls it:
-measured, **51 908 RHS evaluations advanced 0.0015 s of a 0.3009 s step** (0.5%),
-with `h` collapsed to ~3e-8.
+measured on the 30 kg model, **51 908 RHS evaluations advanced 0.0015 s of a
+0.3009 s step** (0.5%), with `h` collapsed to ~3e-8.
 
 Setting `p.control_dt > 0` solves the QP once per control period and holds it,
 so within a period the integrand is the smooth `f + g·u` with `u` constant.
-The same step then completes in **1.6 s**. This is also the more faithful model
+The same step then completes in **1.6 s**. (On today's model
+`ch3_test_simulation` runs a constrained-QP step under the hold in 0.3 s.) This is also the more faithful model
 — the chapter's own framing is a QP solved "well above 1 kHz", which is a
 sampled controller, not a continuous-time law. `ch3_compare_controllers` samples
 *all three* controllers at 1 kHz, since a continuously-evaluated controller
@@ -187,7 +220,7 @@ would otherwise enjoy an advantage no digital implementation of it has.
 `ch3_test_simulation` validates the hold against the continuous rollout of the
 same controller, and checks the property that actually distinguishes a correct
 zero-order hold from one that is merely close: the error must be **first order
-in the period**. Measured halving ratios are 1.99 and 1.99.
+in the period**. Measured halving ratios are 1.97 and 2.00.
 
 **Each controller is judged against its own certificate.** The stage-7
 min-norm law is built from the CARE `P` and satisfies that rate by
@@ -195,7 +228,7 @@ construction — measured, it rides its bound at a ratio of exactly 1.0000. PD
 does *not* inherit that rate; its matching certificate is the Lyapunov
 equation `AᵀP + PA = −Q` with `A = [0 I; −K_p −K_d]`, which is the form the
 chapter writes. Measured against the CARE certificate instead, PD transiently
-exceeds the bound by 3.5× before converging further overall. Pairing them the
+exceeds the bound by 2.9× before converging further overall. Pairing them the
 wrong way is a category error, not a bug.
 
 ---
@@ -207,7 +240,7 @@ wrong way is a category error, not a bug.
 Small Hermite–Simpson defects mean the *discrete* equations are satisfied. They
 do not mean the nodes approximate a solution of the ODE. On a mesh too coarse
 for the dynamics, the optimizer will happily find a **spurious discrete
-solution**. Measured here, on a fully converged N = 15 solve:
+solution**. Measured on the 30 kg model, on a fully converged N = 15 solve:
 
 ```
 interval-1 defect                      7.18e-07
@@ -237,10 +270,16 @@ simulations, which is why it is a post-hoc diagnostic rather than a constraint.
 ## Table 3.1 limits — measure first
 
 The thesis limits are **ATRIAS** numbers: 63 kg with 50:1 harmonic drives, so
-its "|u| ≤ 5 Nm" is *motor* torque, 250 Nm at the joint. RABBIT is ~30 kg and
+its "|u| ≤ 5 Nm" is *motor* torque, 250 Nm at the joint. RABBIT's model is 74 kg and
 **direct drive** — `u` here *is* joint torque. Copying the numbers across
 produces an infeasible problem and a solver that fails for reasons that look
 like bugs.
+
+Even RABBIT's own torque box is out of reach on today's model: no verified gait
+sits inside the 120 Nm `ch3_params` still carries. Two warm-started torque
+ladders verified down to 212 Nm and to 195 Nm, then lost verification at their
+next rungs, 159 Nm and 180 Nm; the reference gait was solved against its own
+195 Nm box.
 
 Every limit in `ch3_report` is printed with its **measured** value whether or
 not it is enforced, and `[E]` marks the enforced ones. The workflow is: solve
@@ -284,8 +323,8 @@ This is not hypothetical. `b64160e` added the six NIC/NEC gates defaulting to
 `false`, so the merge read older files correctly. `e7e101b` then flipped every
 default to `true`, and from that commit the loader switched six constraints on
 underneath **eight** stored gaits. `Results/ch3_gait_forward_lean_tall.mat` is
-the sharp case: it verifies as a real trajectory at `1.30e-05` and misses NEC3
-by `0.92` (`|I_x|/I_z = 0.463` against `μ_s = 0.4`), and it is the documented
+the sharp case: on the 30 kg model it was solved on, it verified as a real
+trajectory at `1.30e-05` and missed NEC3 by `0.92` (`|I_x|/I_z = 0.463` against `μ_s = 0.4`), and it is the documented
 warm-start seed for `ch3_lean_tall_march`. Nothing was written and nothing
 re-solved to cause that — only a default in another file moved.
 
@@ -304,13 +343,14 @@ Two consequences worth keeping:
 
 ## Section 6.3.4 — the NIC / NEC constraint set
 
-The full constraint set of Westervelt et al. §6.3.4 is implemented as 17 rows in
-`ch3_col_constraints`, each individually gated:
+The full constraint set of Westervelt et al. §6.3.4 is implemented in
+`ch3_col_constraints`, whose inequality vector has 18 rows (the others hold
+Table 3.1 and gait-style limits). Each §6.3.4 row is individually gated:
 
 | row | constraint | gate | source |
 |---|---|---|---|
-| 5 | friction cone `\|F_x\| ≤ μ_s F_z` | `friction` | NIC1 |
-| 6 | minimum normal force `F_z ≥ F_z_min` | `grf` | NIC2 |
+| 5 | friction cone `\|F_x\| ≤ μ_s F_z` | `friction` | NIC2 |
+| 6 | minimum normal force `F_z ≥ F_z_min` | `grf` | NIC1 |
 | 9, 10 | swing foot strictly clear; transversal strike | `swing_clear` | NIC3 |
 | — | average walking rate (in `ceq`) | `enforce_nec1` | NEC1 |
 | 11 | post-impact swing-leg lift-off | `liftoff` | NEC2 |
@@ -325,7 +365,7 @@ discharged by rows 6 and 9, HI3 by rows 11–13, HGW6 by rows 3 and 16. HH4/HH5
 `y = ẏ = 0` at node 1 and equates `Δ(x_N)` to node 1, so invariance is *implied*.
 Adding it again would duplicate rows the periodicity block already spans — the
 same rank-deficiency argument that keeps `y = 0` at node 1 only. It is measured
-instead (`E.eta_post`, 3.9e-06 on the reference gait), so the implication is
+instead (`E.eta_post`, 7.5e-07 on the reference gait), so the implication is
 verified rather than assumed.
 
 **Where the book's "NEC" label is loose.** NEC2–NEC5 are filed under nonlinear
@@ -344,35 +384,49 @@ map is then affine in `ζ = σ²/2`, so its fixed point and eigenvalue are close
 form.
 
 The payoff is a **stability certificate that costs one quadrature instead of 26
-step simulations**. On the reference gait the two agree to five digits:
+step simulations**. On the reference gait the two agree to 3e-05:
 
 ```
-delta_zero^2 = 0.75988   (quadrature over alpha)
-Poincare rho = 0.75989   (26 forward step simulations)
+delta_zero^2 = 0.74619   (quadrature over alpha, 321 points)
+Poincare rho = 0.74621   (26 forward step simulations)
 ```
 
-`ch3_test_hzd` checks the reduction against the full 14-state model
-(7.8e-10), and checks that `½σ² + V_zero(θ)` is conserved along a real rollout
-(8.7e-07) — an invariant that cannot be satisfied by accident if `m` is wrong.
+`ch3_test_hzd` first checks that the reference gait is still a periodic orbit of
+the dynamics on disk (7.6e-07) — a gait file does not record which dynamics it
+was solved on, and a stale one would otherwise read as a broken reduction. It
+then checks the reduction against the full 14-state model (5.0e-10), and that
+`½σ² + V_zero(θ)` is conserved along a real rollout (2.3e-06) — an invariant that
+cannot be satisfied by accident if `m` is wrong.
 
-**`enable.hzd` defaults to false, and the cost is why.** Measured on the
-reference gait: one constraint evaluation goes from 0.003 s to 0.241 s, so one
-fmincon gradient goes from ~1 s to ~77 s. Also note that this transcription
-imposes periodicity *directly*, so a converged solve is already at the fixed
-point — NEC4/NEC5 are a **check** on the fixed point it found, not the mechanism
-that finds one. The book needs them as constraints because its optimization
-parametrizes `α` alone and never propagates a state.
+**`enable.hzd` is on by default, and it doubles the cost of an evaluation.**
+Measured on the reference gait (N = 61): one constraint evaluation takes 0.017 s
+with the gate off and 0.034 s with it on, so one central-difference gradient
+over its 879 variables goes from ~30 s to ~59 s. Also note that this
+transcription imposes periodicity *directly*, so a converged solve is already at
+the fixed point — NEC4/NEC5 are a **check** on the fixed point it found, not the
+mechanism that finds one. The book needs them as constraints because its
+optimization parametrizes `α` alone and never propagates a state.
 
-### What this found in the reference gait
+### What it measures on the reference gait
 
-**NEC3 fails.** The impact impulse is mostly *horizontal* where a walking impact
-should be mostly vertical, giving `|I_x|/I_z = 1.35` against `μ_s = 0.4`. The
-impact map imposes `J_sw dq⁺ = 0`, "the foot sticks"; at that ratio it would skid
-instead. Continuous-phase friction (NIC2) is a comfortable 0.194, so this is
-**invisible unless the impulse is checked separately** — exactly why the book
-lists NEC3 apart from NIC2.
+On `posture_195` every enforced row holds, and the gait presses on several at
+once. Three inequality rows are active to within the solve's 7e-06 tolerance:
+peak torque (195.0 Nm against its own 195 Nm box), interior swing clearance
+(1.0 mm against 1.0 mm) and the NEC3 impulse cone (`|I_x|/I_z = 0.400` against
+`μ_s = 0.4`). The torso pitch sits on the bottom of its box (+1.7°), and the
+normal force comes within 0.05 N of its 50 N floor. NIC2 friction is 0.246;
+NEC2 lift-off is 0.079 m/s against a 3.18 m/s strike; NEC4/NEC5 hold with
+`ζ*₂ = 2.580` against `V_max/δ² = 0.136`. Two limits whose gates were off during
+its solve are exceeded: the impulse norm, 15.06 Ns against 15, and the peak swing
+height, 0.212 m against 0.15.
 
-**And NEC3 is the one constraint in the set that a coarse mesh gets wrong.**
+The impulse cone being active is the gate doing its job. Continuous-phase
+friction says nothing about the single impulse filtered through `Δ` — on the
+30 kg model the old reference gait passed NIC2 at 0.194 while its impact ratio
+stood at `|I_x|/I_z = 1.35` — which is exactly why the book lists NEC3 apart
+from NIC2. That gait also taught the lesson below.
+
+**(30 kg) NEC3 is the one constraint in the set that a coarse mesh gets wrong.**
 
 | mesh | `\|I_x\|/I_z` | `I_z` | `ch3_col_verify` |
 |---|---|---|---|
@@ -392,75 +446,95 @@ constraint inactive — the ratio drifted *up*, 1.104 → 1.261 — and the opti
 wandered into a region N=41 could not resolve. Refine first, read the ratio, then
 ladder from just below it.
 
-NEC2 also only just holds: the trailing foot lifts off at 0.0495 m/s, two orders
-below the gait's own 3.88 m/s strike rate.
-
 ---
 
 ## The reference gait
 
-`Results/ch3_reference_gait.mat` (`z_opt`, `p`, `R`, `C`) — a periodic,
-mesh-verified, **stable** gait, found with NEC1 disabled:
+`Results/ch3_gait_posture_195.mat` (`z`, `p`) — a forward-leaning gait that is
+periodic, mesh-verified and **stable on today's 74 kg model**:
 
 | quantity | value |
 |---|---|
-| walking speed | 1.174 m/s |
-| step length / duration | 0.353 m / 0.301 s |
-| periodicity through Δ | 8.1e-07 |
-| mesh verification | 6.8e-04 (tol 1e-03) ✓ |
-| max \|η\| over nodes | 2.1e-04 |
-| stance-foot drift | 8.7e-07 m |
-| **Poincaré ρ** | **0.760 → stable** |
-| **δ²_zero** (NEC5) | **0.75996 → stable**, agrees with ρ to 2e-05 |
-| ζ*₂ vs `V_max/δ²` (NEC4) | 3.114 vs 0.601 → holds |
-| NEC3 impulse `\|I_x\|/I_z` | **2.44 vs μ_s = 0.4 → fails** |
+| walking speed | 1.563 m/s |
+| step length / duration | 0.427 m / 0.273 s |
+| basis / mesh | Bézier degree 5 / N = 61 |
+| periodicity through Δ | 4.8e-09 |
+| mesh verification | 1.6e-04 (tol 1e-03) ✓ |
+| max \|η\| over nodes | 2.7e-05 |
+| stance-foot drift | 1.0e-07 m |
+| **Poincaré ρ** | **0.746 → stable** |
+| **δ²_zero** (NEC5) | **0.746 → stable**, agrees with ρ to 3e-05 |
+| ζ*₂ vs `V_max/δ²` (NEC4) | 2.580 vs 0.136 → holds |
+| NEC3 impulse `\|I_x\|/I_z` | **0.400 vs μ_s = 0.4 → active** |
+| peak torque / impulse | 195.0 Nm (its own box) / 15.06 Ns (gate off) |
+| torso pitch / hip height | +1.7 … +4.5° / 0.916 … 0.943 m |
 
-The forward simulation reproduces the collocation exactly — step length 0.353
-and duration 0.301 on all six steps — which is the cross-check that matters.
-All four Table 3.1 quantities pass *without being enforced*: torque 109 Nm,
-impulse 12.8 Ns, friction 0.194, min GRF 166 N.
+The forward simulation reproduces the collocation — step length 0.427 and
+duration 0.273 on all six steps under PD — which is the cross-check that matters.
 
-> **NEC1 was the blocker.** Pinning `L_step/T_step = v_des` while the gait shape
-> was still far from periodic over-constrained the problem, and the solve
+It was **not** found from scratch. An older 61-node gait, solved before the
+regeneration, was re-converged on today's dynamics
+(`Results/ch3_gait_fix_reconverged.mat`: verified at 1.3e-05, 1.314 m/s,
+287 Nm peak), warm-started down torque ladders to 195 Nm, and then moved through
+two posture rungs, torso pitch −5.7…−0.9° → −1.1…+1.7° → +1.7…+4.5°. Every
+intermediate is in `Results/` (`gf2_*`, `gf3_*`, `posture_test_result*`).
+
+Like the old reference gait, it was solved with NEC1 off: it carries
+`v_des = 0.35` and walks at 1.563 m/s.
+
+> **(30 kg) NEC1 was the blocker.** Pinning `L_step/T_step = v_des` while the gait
+> shape was still far from periodic over-constrained the problem, and the solve
 > stalled on spurious discrete solutions. Dropping it and letting the speed
 > float converged to a genuine trajectory within 120 iterations. Speed is then
 > recovered by continuation, not imposed from the start.
 
 ## The stage-8 payoff, measured
 
-`ch3_compare_controllers` runs that one gait under all three laws at 1 kHz,
-with a torque box of 65.5 Nm — deliberately *below* the 109 Nm the gait needs,
-so it genuinely binds:
+The experiment `ch3_compare_controllers` runs, re-run step by step on the
+reference gait: every law sampled at 1 kHz with the gait's own CLF (CARE,
+ε = 0.5), four steps each. Only `clfqp_con` is told about the torque box — 60% of
+the gait's 195 Nm peak feedforward, as `ch3_compare_controllers` sets it, and
+also 80% and 100%:
 
-| controller | peak \|u\| | over box | max \|η\| | max δ |
+| controller | box | steps | max \|η\|, step by step | peak \|u\| |
 |---|---|---|---|---|
-| `iolin_pd` | 109.6 | 44.2 | 1.77e-02 | 0 |
-| `clfqp` | 203.3 | 137.8 | 2.77 | 0 |
-| `clfqp_con` | **65.5** | **0.0** | 17.4 | 71.5 |
+| `iolin_pd` | not told | 4 of 4 | 0.107, 0.215, 0.214, 0.213 | 195.2 |
+| `clfqp` | not told | falls in step 3 | 0.228, 2.44, fall | 283.5 (step 2) |
+| `clfqp_con` | 117 (60%) | falls in step 2 | 3.31, fall | 117.0 |
+| `clfqp_con` | 156 (80%) | falls in step 2 | 1.60, fall | 156.0 |
+| `clfqp_con` | 195 (100%) | falls in step 4 | 0.227, 2.41, 143, fall | 195.0 |
 
-Only the constrained QP holds the box, and it does so *by construction*. Two
-things are worth reading carefully:
+A step counts as a fall when it is shorter than `p.step_len_min` (0.15 m), its
+max `|η|` exceeds 1e3, or the state is not finite; steps were capped at 1 s of
+robot time (`p.T_max = 0.5`). **The Chapter 3 simulator has no fall detection
+of its own** — a guard crossing ends a step even when the robot is on the
+ground — so a fallen run keeps integrating to the `2·T_max` cap. With the default
+3 s cap, `ch3_compare_controllers` was still inside the unconstrained QP's run
+after 40 minutes of wall clock; lower `p.T_max` before running it on a gait that
+may fall.
 
 - **The unconstrained CLF-QP is the worst of the three here.** It asks for the
   least-norm `μ` that certifies the rate at each instant, and rides that bound
   at a ratio of exactly 1.0000. But the RES-CLF inequality is a *floor* on
-  convergence, not a target, and on this robot that floor is far too slow:
-  `c₃/ε = 0.732` is a time constant of **1.37 s against a step of 0.301 s**, so
-  meeting it exactly contracts `V` by only 20% per step — while the impact
-  expands `V` by up to **34×**. The hybrid budget is `0.80 × 34.1 = 27.3 > 1`,
-  so `η` grows step over step and the demanded torque nearly doubles. The
-  surplus convergence that min-norm so efficiently eliminates is exactly what
-  was paying for stability across the impact.
+  convergence, not a target, and at ε = 0.5 the floor is slow: `c₃/ε = 0.732` is
+  a time constant of **1.37 s against a 0.273 s step**, so meeting it exactly
+  contracts `V` by only 18% per step, while every impact kicks `η`. PD, which is
+  not tied to that rate, settles at max `|η|` ≈ 0.21 on the same gait. The
+  surplus convergence that min-norm so efficiently eliminates is exactly what was
+  paying for stability across the impact — which is why Chapter 4 tightens ε
+  from 0.5 to 0.20 before it measures anything.
 
-  **Sampling is not the cause.** Measured on the transverse dynamics, `dt` from
-  1 kHz to 100 Hz gives identical rollouts (peak `|μ| = 3.0`, `V(T)/V(0) =
-  0.802` at every rate) and `V` never exceeds its certified envelope. The
-  continuous-phase guarantee is not violated anywhere — it simply says nothing
-  about Δ, and the robot is a hybrid system. Minimum-norm is not the same as
-  well-behaved.
-- **δ = 71.5 is the point, not a wart.** It is the controller reporting that it
-  could not meet the convergence rate inside the actuator limit. Per Remark 3.2
-  the exponential guarantee holds only while δ = 0, so this is the theory's
-  boundary being crossed visibly — `max |η|` growing to 17.4 is the price.
-  A PD law has no comparable mechanism: it saturates and voids its guarantee
-  silently.
+  **(30 kg) Sampling is not the cause.** Measured on the transverse dynamics,
+  `dt` from 1 kHz to 100 Hz gave identical rollouts (peak `|μ| = 3.0`,
+  `V(T)/V(0) = 0.802` at every rate) and `V` never exceeded its certified
+  envelope. The continuous-phase guarantee is not violated anywhere — it simply
+  says nothing about Δ, and the robot is a hybrid system. Minimum-norm is not
+  the same as well-behaved.
+- **The constrained QP does what stage 8 promises, and no more.** The torque
+  never leaves the box, by construction, and δ reports the conflict visibly:
+  δ = 199 in step 1 at the 60% box, and at 100% it tracks the unconstrained law
+  until the box binds, then needs δ = 4.8e5 and 94 QP fallbacks in step 3. Per
+  Remark 3.2 the exponential guarantee holds only while δ = 0, so this is the
+  theory's boundary being crossed visibly; a saturating PD law voids its
+  guarantee silently. But its core is the same min-norm law, and on this 74 kg
+  gait no box it was given kept it walking.

@@ -23,9 +23,11 @@ function ch3_test_hzd()
 %      integrating factor m is wrong, and it cannot be satisfied by accident.
 %   7. delta_zero is a genuine ratio -- Delta is linear in velocity, so
 %      thetadot^+ must scale exactly with thetadot^-.
-%   8. Against the reference gait: the predicted fixed point matches the rate
-%      the collocation actually ends at, and delta_zero^2 matches the Poincare
-%      spectral radius computed by 26 independent step simulations.
+%   8. Against the reference gait, Results/ch3_gait_posture_195.mat: first that
+%      it is still a periodic orbit of the dynamics on disk, then that the
+%      predicted fixed point matches the rate the collocation actually ends
+%      at, and that delta_zero^2 matches the Poincare spectral radius computed
+%      by 26 independent step simulations.
 %   9. Constraint plumbing: length, gating, and that each gate moves only its
 %      own row.
 
@@ -115,11 +117,22 @@ d2 = p.c_theta * xp2(p.nq+1:2*p.nq);
 pass = report('Delta linear in qdot',   abs(d2 - 2*d1)/max(1,abs(d1)),    1e-10, pass);
 
 %% 8. against the reference gait, if it is present
-ref = fullfile('Results', 'ch3_reference_gait.mat');
+% THE REFERENCE MUST BE AN ORBIT OF TODAY'S DYNAMICS. M.m/V.m/G.m are global
+% and a gait file does not record which dynamics it was solved on: after the
+% 2026-09-02 regeneration (30 kg -> 74 kg) the old Results/ch3_reference_gait.mat
+% still loaded, but at a periodicity residual of 0.64, and this block reported
+% delta_zero^2 = 0.904 against rho = 1.180 -- a stale file read as a broken
+% reduction. So the orbit is checked first, and a stale reference fails as
+% exactly that. posture_195 is the gait verified on the current model, and the
+% one Chapter 4 uses.
+ref = fullfile('Results', 'ch3_gait_posture_195.mat');
 if exist(ref, 'file')
     S  = load(ref);
     pr = ch3_upgrade_params(S.p);
-    E  = ch3_col_eval(S.z_opt, pr);
+    if isfield(S, 'z'), zr = S.z; else, zr = S.z_opt; end
+    [~, ceq_r] = ch3_col_constraints(zr, pr);
+    pass = report('reference gait is an orbit', max(abs(ceq_r)), 1e-5, pass);
+    E  = ch3_col_eval(zr, pr);
     Zr = ch3_zero_dynamics(E.alpha, pr, 321);
 
     thdN = pr.c_theta * E.X(pr.nq+1:2*pr.nq, E.N);
