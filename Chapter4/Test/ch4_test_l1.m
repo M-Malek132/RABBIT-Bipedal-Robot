@@ -36,6 +36,11 @@ function ch4_test_l1()
 %      alpha's regressor settles it
 %  11. normalized adaptation divides the adaptation laws by m^2 and touches
 %      nothing else, and it settles the loop of check 10 without the cap
+%  12. leakage on alpha_hat acts on exactly the direction the data cannot see:
+%      without it alpha_hat stays put; with it, it decays at the leak rate
+%      while theta_hat stays on theta
+%  13. at a footstrike 'carry' leaves the estimates alone, while 'continuous'
+%      and 'fold' keep theta_hat continuous
 
 fprintf('\n=== ch4_test_l1 ===\n');
 pass = true;
@@ -473,6 +478,68 @@ fprintf(['  [%s] %-30s ||eta|| = 13: peak ||theta_hat||/||theta|| %.2f / %.2f, '
         tf(ok11), 'normalized loop at large eta', th_peak11 / norm(theta10), ...
         th_rms11(1), th_rms11(2));
 pass = pass && ok11;
+
+%% 12. leakage on alpha_hat, along the direction the data cannot see
+% With eta held at zero, alpha's regressor ||eta|| vanishes, so the prediction
+% error exerts no force on alpha_hat: whatever value it holds, it keeps. Hold
+% eta = 0 with theta cancelled exactly (mu = -theta), start alpha_hat far from
+% zero and beta_hat on theta, and advance one second. Without leakage alpha_hat
+% must not move at all. With it, alpha_hat must decay at exactly the leak rate
+% while theta_hat stays on theta.
+p12 = p; p12.l1.predictor = 'plant';
+theta12 = [40; -25; 10; 30];
+a012    = [120; -80; 60; 40];
+T12     = p12.control_dt;
+K12     = round(1 / T12);
+leak12  = 5;
+moved = zeros(1, 2); th_err = zeros(1, 2); spike = zeros(1, 2);
+for mode = 1:2
+    pm = p12; pm.l1.alpha_leak = (mode == 2) * leak12;
+    xi = ch4_l1_state('pack', pm, struct('eta_hat', zeros(2*ny,1), ...
+              'alpha_hat', a012, 'beta_hat', theta12, 'mu2', -theta12));
+    smp = struct('eta', zeros(2*ny,1), 'eta_next', zeros(2*ny,1), ...
+                 'mu', -theta12, 'mu1_hat', []);
+    for k = 1:K12
+        xi = ch4_l1_advance(xi, smp, clf, pm, T12);
+        s12 = ch4_l1_state('unpack', pm, xi);
+        th_err(mode) = max(th_err(mode), norm(s12.beta_hat - theta12, inf));
+    end
+    expect = a012 * exp(-pm.l1.alpha_leak * K12 * T12);
+    moved(mode) = norm(s12.alpha_hat - expect) / norm(a012);
+    spike(mode) = norm(s12.alpha_hat);       % theta_hat jump per unit ||eta|| jump
+end
+ok12 = moved(1) <= 1e-12 && moved(2) <= 1e-6 && all(th_err <= 1e-9) ...
+       && spike(2) <= 1.01 * exp(-leak12) * spike(1);
+fprintf(['  [%s] %-30s spike per unit ||eta|| jump after 1 s: %.1f -> %.2f; ' ...
+         'decay err %.1e, theta_hat err %.1e\n'], tf(ok12), ...
+        'alpha leakage, unseen direction', spike(1), spike(2), moved(2), max(th_err));
+pass = pass && ok12;
+
+%% 13. what the estimates do at a footstrike
+% ||eta|| jumps at the impact. 'carry' must leave both estimates untouched, so
+% theta_hat jumps by alpha_hat times the jump; 'continuous' and 'fold' must
+% make theta_hat identical on both sides, 'fold' with alpha_hat restarted at 0.
+xi13 = ch4_l1_state('pack', p, struct('eta_hat', zeros(2*ny,1), ...
+          'alpha_hat', [3; -2; 1; 4], 'beta_hat', [10; 20; -5; 7], ...
+          'mu2', zeros(ny,1)));
+eta_m13 = 0.4 * ones(2*ny, 1);
+eta_p13 = 2.5 * ones(2*ny, 1);
+modes13 = {'carry', 'continuous', 'fold'};
+gap13 = zeros(1, 3); a_after = zeros(1, 3);
+for mode = 1:3
+    pm = p; pm.l1.impact_estimate = modes13{mode};
+    sm = ch4_l1_state('unpack', pm, xi13);
+    th_m = sm.alpha_hat * norm(eta_m13) + sm.beta_hat;
+    sp = ch4_l1_state('unpack', pm, ch4_l1_state('reset', pm, xi13, eta_p13, eta_m13));
+    gap13(mode)   = norm(sp.alpha_hat * norm(eta_p13) + sp.beta_hat - th_m, inf);
+    a_after(mode) = norm(sp.alpha_hat, inf);
+end
+jump13 = norm(sm.alpha_hat * (norm(eta_p13) - norm(eta_m13)), inf);
+ok13 = abs(gap13(1) - jump13) <= 1e-12 && gap13(2) <= 1e-12 && gap13(3) <= 1e-12 ...
+       && a_after(1) == 4 && a_after(2) == 4 && a_after(3) == 0;
+fprintf(['  [%s] %-30s theta_hat jump carry %.2f / continuous %.1e / fold %.1e; ' ...
+         'fold restarts alpha_hat\n'], tf(ok13), 'impact estimate modes', gap13);
+pass = pass && ok13;
 
 fprintf('--- ch4_test_l1: %s ---\n\n', tf(pass));
 end

@@ -86,6 +86,18 @@ function [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %    L1 fall: leaking alpha_hat back to zero (2-50 /s), or keeping theta_hat
 %    continuous across footstrikes, made the long runs fall sooner.
 %
+%    AN OPTIONAL LEAK, p.l1.alpha_leak = lambda [1/s], a sigma-modification
+%    aimed at exactly that unconstrained direction:
+%
+%       alpha_hat_dot = Gamma_alpha/m^2 Proj(alpha_hat, y_alpha) - lambda alpha_hat
+%
+%    It pulls alpha_hat back to zero along the line the data cannot see, so
+%    beta_hat carries the steady part of theta, and it points inward, so the
+%    projection ball stays invariant. The price is the usual one: in (4.31) the
+%    leak adds -2 lambda alpha_tilde' Gamma^-1 alpha_hat, which bounds
+%    alpha_tilde but no longer lets it converge, so (4.35) gains a term in
+%    lambda ||alpha||^2. Off by default (ch4_params has why).
+%
 %    AND AN OPTIONAL CAP ON ITS REGRESSOR, p.l1.alpha_regressor_rate = kappa:
 %    in pieces 1 and 3, ||eta|| is replaced by phi = min(||eta||, phi_max), the
 %    same phi in both, so (4.24)-(4.31) go through unchanged and (4.17) still
@@ -180,8 +192,11 @@ y_alpha =  y_beta * nrm_eta;
 % normalization: exactly 1 when off or when the loop is under its ceiling
 m2 = max(1, (o.Gamma + o.Gamma_alpha * nrm_eta^2) / o.loop_gain_max);
 
+% the leak is a rate on alpha_hat itself, outside the normalization: it acts
+% where the data exerts no force, so there is no loop gain for m^2 to limit
 alpha_hat_dot = o.Gamma_alpha / m2 * ch4_proj(s.alpha_hat, y_alpha, ...
-                                              p.l1.alpha_max, p.l1.proj_eps);
+                                              p.l1.alpha_max, p.l1.proj_eps) ...
+                - o.alpha_leak * s.alpha_hat;
 beta_hat_dot  = o.Gamma / m2       * ch4_proj(s.beta_hat,  y_beta,  ...
                                               p.l1.beta_max,  p.l1.proj_eps);
 

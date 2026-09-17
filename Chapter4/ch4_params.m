@@ -246,6 +246,24 @@ p.l1.predictor_rate = 800;
 % beta alone and walked all 25 steps at max||eta|| 2.5 with both.
 p.l1.Gamma_alpha = [];
 
+% LEAKAGE ON alpha_hat [1/s], a sigma-modification: alpha_hat_dot gains
+% -alpha_leak * alpha_hat. 0 is the adaptation law as (4.26) writes it. See
+% ch4_l1_deriv for why alpha_hat, and only alpha_hat, would need it.
+%
+% OFF BY DEFAULT: over the long runs (CH4_UNCERTAINTY.md §5a) a leak of 2, 10
+% or 50 /s did not prevent the falls, and at 1.5x l1_con fell sooner at every
+% rate -- alpha_hat does real work within a step there. Kept so that
+% measurement can be repeated.
+p.l1.alpha_leak = 0;
+
+% WHAT THE ESTIMATES DO AT A FOOTSTRIKE: 'carry' | 'continuous' | 'fold'
+% (ch4_l1_state). ||eta|| jumps at impact, and carrying alpha_hat and beta_hat
+% unchanged makes theta_hat jump by alpha_hat times that jump. 'carry' is the
+% law as Section 4.2 writes it and the default: keeping theta_hat continuous
+% made the long runs fall sooner, not later. Kept for the same reason as the
+% leak.
+p.l1.impact_estimate = 'carry';
+
 % CAP ON alpha's REGRESSOR, as the fastest the estimator loop may run [rad per
 % control sample]; 0 or [] for no cap, the law as written. See ch4_l1_deriv.
 %
@@ -335,6 +353,30 @@ p.l1.u_max = 65;
 % Peak joint torque of the loaded gait, filled in by ch4_load_gait. Empty
 % when p is built standalone, since a bare parameter struct has no gait.
 p.gait_u_peak = [];
+
+% TORQUE BOX OF THE CONSTRAINED LAWS IN THE SWEEPS.  How ch4_compare_controllers
+% and ch4_load_study size the box for clfqp_con, rclfqp_con and l1_con.
+%
+%   'rating'  ONE ACTUATOR RATING for every controller, mass scale and load, as
+%             a hardware torque limit would be. It is sized once, from the
+%             envelope the robot is designed for, and never from the case being
+%             run: 1.25x (the L1 headroom, see ch4_load_gait) the heaviest
+%             feedforward peak in that envelope on posture_195 -- mass scales
+%             up to 1.5 (293 Nm) and hip loads up to 70 kg (445 Nm) -- so
+%             1.25 x 445 = 556 Nm. Case IV (scale 3, feedforward 585 Nm) lies
+%             outside that envelope and runs as its own experiment at
+%             1.25 x 585 = 731 Nm. Nothing about a case, including what
+%             another controller drew under it, reaches its box.
+%   'thesis'  the per-case rules this chapter used before 2026-09-18, which
+%             size each box FROM the perturbation: robust / case4
+%             max(0.8 x clfqp's peak under that case, s x feedforward peak);
+%             l1 244 x max(1, s); load 1.25 x the loaded robot's feedforward.
+%             Kept to reproduce the earlier tables.
+%
+% The two ratings are for posture_195. Another gait needs its own envelope.
+p.box.rule         = 'rating';
+p.box.rating       = 556;
+p.box.rating_case4 = 731;
 
 % PREDICTOR RESET AT IMPACT.  eta jumps discontinuously at every footstrike,
 % so eta_hat must be told about it or eta_tilde = eta_hat - eta would register

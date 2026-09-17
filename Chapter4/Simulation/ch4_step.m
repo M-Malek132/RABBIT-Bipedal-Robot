@@ -100,8 +100,9 @@ out.L_step  = foot_sw_end(1) - foot_st_0(1);
 % eta jumps here. p.l1.reset_predictor decides whether the predictor is told;
 % the parameter estimates are carried regardless (see ch4_l1_state).
 if stateful
-    [~, ~, o_plus] = ch3_outputs(out.x_next, alpha, p);
-    out.xi_next    = ch4_l1_state('reset', p, out.xi_end, o_plus.eta);
+    [~, ~, o_minus] = ch3_outputs(out.x_end,  alpha, p);
+    [~, ~, o_plus]  = ch3_outputs(out.x_next, alpha, p);
+    out.xi_next     = ch4_l1_state('reset', p, out.xi_end, o_plus.eta, o_minus.eta);
 else
     out.xi_next = zeros(0,1);
 end

@@ -213,6 +213,18 @@ else
 end
 pass = pass && ok;
 
+% --- torque-box rule ------------------------------------------------------
+% The sweeps' box is one actuator rating by default, and a parameter struct
+% saved before p.box existed must resolve to the per-case rule it ran with.
+pbx = ch4_params();
+ok  = strcmp(ch4_box_rule(pbx), 'rating') ...
+      && strcmp(ch4_box_rule(rmfield(pbx, 'box')), 'thesis') ...
+      && pbx.box.rating_case4 >= pbx.box.rating;
+fprintf('  [%s] %-30s default %s (%.0f / %.0f Nm), pre-p.box struct %s\n', ...
+        tf(ok), 'box rule: rating by default', ch4_box_rule(pbx), ...
+        pbx.box.rating, pbx.box.rating_case4, ch4_box_rule(rmfield(pbx, 'box')));
+pass = pass && ok;
+
 fprintf('--- ch4_test_model: %s ---\n\n', tf(pass));
 end
 

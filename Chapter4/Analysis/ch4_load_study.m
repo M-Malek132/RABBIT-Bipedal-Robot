@@ -39,6 +39,14 @@ function S = ch4_load_study(x0, alpha, p, opts)
 % prints these measurements for the loads it runs.
 %
 % ------------------------------------------------------------------- the box
+% UNDER p.box.rule = 'rating' (the default, ch4_params) every case runs at the
+% one actuator rating p.box.rating, which was sized once from the heaviest load
+% in the design envelope (70 kg) and not from the case at hand. The controllers
+% are never told the load, and now neither is their box. The feedforward peak
+% below is still measured and printed, as a diagnostic of how close each load
+% runs to the rating.
+%
+% UNDER 'thesis' (the rule before 2026-09-18) each case gets its own box.
 % 'l1_con' bounds the torque it applies (p.l1.constrain_applied), so its box
 % must be able to carry the loaded robot, and a hip load does not raise the
 % torque demand in proportion to mass. The box is therefore the gait box's
@@ -95,6 +103,7 @@ if isempty(p.gait_u_peak)
            'the L1 box to the gait this study scales it from.']);
 end
 headroom = p.l1.u_max / p.gait_u_peak;
+rule     = ch4_box_rule(p);
 
 X = opts.X_orbit;
 if isempty(X)
@@ -113,14 +122,14 @@ if ~isempty(opts.range)
     m = measure(X, alpha, p, max(opts.range));
     cases(end+1) = struct('label', sprintf('random %g-%g kg', opts.range), ...
                           'load_mass', 0, 'range', opts.range, ...
-                          'box', headroom * m.ff_peak, 'ff_peak', m.ff_peak, ...
+                          'box', case_box(rule, p, headroom, m), 'ff_peak', m.ff_peak, ...
                           'n2', m.n2, 'n2_iso', m.n2_iso, 'eig_min', m.eig_min);
 end
 for mL = opts.loads(:).'
     m = measure(X, alpha, p, mL);
     cases(end+1) = struct('label', sprintf('%g kg', mL), ...
                           'load_mass', mL, 'range', [], ...
-                          'box', headroom * m.ff_peak, 'ff_peak', m.ff_peak, ...
+                          'box', case_box(rule, p, headroom, m), 'ff_peak', m.ff_peak, ...
                           'n2', m.n2, 'n2_iso', m.n2_iso, 'eig_min', m.eig_min); %#ok<AGROW>
 end
 
@@ -136,6 +145,7 @@ if opts.verbose
     end
     fprintf(' L1: Gamma %.0e, filter %.0f rad/s, predictor %s, %s\n', ...
             p.l1.Gamma, p.l1.omega_c, l1o.predictor, nrm);
+    fprintf(' box rule: %s\n', rule);
     fprintf(' %-16s %14s %10s %10s %14s %9s\n', 'case', 'feedfwd peak', ...
             '||Delta2||', 'isotropic', 'min eig(I+D2)', 'box');
     for c = cases
@@ -182,6 +192,16 @@ if opts.verbose
     fprintf('%s\n\n', repmat('=',1,105));
 end
 
+end
+
+% ---------------------------------------------------------------------------
+function b = case_box(rule, p, headroom, m)
+%CASE_BOX  The box one load case runs at, under the rule in force.
+if strcmp(rule, 'rating')
+    b = p.box.rating;
+else
+    b = headroom * m.ff_peak;
+end
 end
 
 % ---------------------------------------------------------------------------

@@ -4,18 +4,21 @@ function o = ch4_l1_opts(p)
 %   o = ch4_l1_opts(p)
 %
 % The L1 law reads its structural options -- which predictor, the predictor's
-% error-injection rate, alpha's own adaptation gain, the two limits on the
-% estimator loop's speed, and whether the constrained law bounds the torque it
-% actually applies -- through here rather than from p.l1 directly, for one
-% reason: a parameter struct saved before these options existed (an old
-% ch4_result .mat) does not carry them, and re-analysing it must reproduce the
-% controller that run actually used. So a missing field resolves to the
-% Section 4.2 formulation: the thesis predictor, one gain for both estimates,
-% no cap, no normalization, and the box on mu1 alone.
+% error-injection rate, alpha's own adaptation gain and leakage, what the
+% estimates do at a footstrike, the two limits on the estimator loop's speed,
+% and whether the constrained law bounds the torque it actually applies --
+% through here rather than from p.l1 directly, for one reason: a parameter
+% struct saved before these options existed (an old ch4_result .mat) does not
+% carry them, and re-analysing it must reproduce the controller that run
+% actually used. So a missing field resolves to the Section 4.2 formulation:
+% the thesis predictor, one gain for both estimates, no leakage, estimates
+% carried through the impact, no cap, no normalization, and the box on mu1
+% alone.
 %
 % Output
 %   o : struct .predictor ('thesis' | 'plant') .predictor_rate [rad/s]
-%              .Gamma .Gamma_alpha
+%              .Gamma .Gamma_alpha .alpha_leak [1/s]
+%              .impact_estimate ('carry' | 'continuous' | 'fold')
 %              .phi_max (cap on alpha's regressor; Inf for none)
 %              .loop_gain_max (normalization ceiling [rad^2/s^2]; Inf for none)
 %              .constrain_applied
@@ -24,6 +27,7 @@ function o = ch4_l1_opts(p)
 
 o = struct('predictor', 'thesis', 'predictor_rate', 0, ...
            'Gamma', p.l1.Gamma, 'Gamma_alpha', p.l1.Gamma, ...
+           'alpha_leak', 0, 'impact_estimate', 'carry', ...
            'constrain_applied', false);
 
 if isfield(p.l1, 'predictor') && ~isempty(p.l1.predictor)
@@ -34,6 +38,23 @@ if isfield(p.l1, 'predictor_rate') && ~isempty(p.l1.predictor_rate)
 end
 if isfield(p.l1, 'Gamma_alpha') && ~isempty(p.l1.Gamma_alpha)
     o.Gamma_alpha = p.l1.Gamma_alpha;
+end
+if isfield(p.l1, 'alpha_leak') && ~isempty(p.l1.alpha_leak)
+    o.alpha_leak = p.l1.alpha_leak;
+end
+if ~(isscalar(o.alpha_leak) && isfinite(o.alpha_leak) && o.alpha_leak >= 0)
+    error('ch4_l1_opts:leak', ...
+          ['p.l1.alpha_leak must be a nonnegative rate [1/s] (got %s): a ' ...
+           'negative leak pushes alpha_hat outward instead of pulling it in.'], ...
+          mat2str(o.alpha_leak));
+end
+if isfield(p.l1, 'impact_estimate') && ~isempty(p.l1.impact_estimate)
+    o.impact_estimate = lower(p.l1.impact_estimate);
+end
+if ~any(strcmp(o.impact_estimate, {'carry', 'continuous', 'fold'}))
+    error('ch4_l1_opts:impact', ...
+          'Unknown p.l1.impact_estimate "%s" (expected carry|continuous|fold).', ...
+          o.impact_estimate);
 end
 
 % The alpha regressor's cap, phi_max, from the fastest the estimator loop may

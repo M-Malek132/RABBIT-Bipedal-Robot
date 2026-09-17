@@ -6,6 +6,7 @@ function out = ch4_l1_state(action, p, varargin)
 %   s   = ch4_l1_state('unpack', p, xi)
 %   xi  = ch4_l1_state('pack',   p, s)
 %   xi  = ch4_l1_state('reset',  p, xi, eta_plus)
+%   xi  = ch4_l1_state('reset',  p, xi, eta_plus, eta_minus)
 %
 % Unlike every controller in Chapter 3, the L1 controller HAS MEMORY. It is not
 % a function of x; it is a dynamical system driven by x, and the simulation has
@@ -43,7 +44,7 @@ function out = ch4_l1_state(action, p, varargin)
 % 'reset' therefore re-seeds eta_hat = eta+ so that eta_tilde starts each step
 % at zero, under p.l1.reset_predictor.
 %
-% alpha_hat and beta_hat are ALWAYS carried across the impact, and that is
+% alpha_hat and beta_hat are carried across the impact by default, and that is
 % deliberate, not an oversight: they describe a property of the robot -- how
 % wrong its model is -- and footstrike does not change the robot. Throwing them
 % away every step would restart the estimation from scratch at ~3 Hz and the
@@ -51,7 +52,25 @@ function out = ch4_l1_state(action, p, varargin)
 % the filter is a physical part of the controller and has no reason to be
 % discontinuous.
 %
-% See also CH4_CTRL_L1, CH4_ODE_RHS, CH4_STEP.
+% WHAT IS CARRIED IS A CHOICE, though, because theta_hat = alpha_hat ||eta|| +
+% beta_hat and ||eta|| jumps at the impact. Carrying both estimates unchanged
+% makes theta_hat jump by alpha_hat times the jump in ||eta|| -- an uncertainty
+% the estimator invents at every footstrike, which mu2 then applies. Pass
+% eta_minus, the transverse state just before the impact, and
+% p.l1.impact_estimate decides:
+%
+%   'carry'       both estimates unchanged (the law as Section 4.2 writes it,
+%                 and the default)
+%   'continuous'  alpha_hat carried; beta_hat absorbs alpha_hat times the jump,
+%                 so theta_hat is continuous across the impact
+%   'fold'        theta_hat folded into beta_hat and alpha_hat restarted at 0,
+%                 so theta_hat is continuous and alpha_hat is re-learned each
+%                 step
+%
+% ||eta|| here is alpha's regressor as ch4_l1_deriv uses it, capped at
+% phi_max. beta_hat is returned to its projection ball after either adjustment.
+%
+% See also CH4_CTRL_L1, CH4_ODE_RHS, CH4_STEP, CH4_L1_OPTS.
 
 ny = p.ny;
 
@@ -86,6 +105,25 @@ switch lower(action)
         if p.l1.reset_predictor
             out(1:2*ny) = eta_plus(:);
         end
+        if numel(varargin) >= 3 && ~isempty(varargin{3})
+            o = ch4_l1_opts(p);
+            if ~strcmp(o.impact_estimate, 'carry')
+                s = ch4_l1_state('unpack', p, out);
+                % alpha's regressor as ch4_l1_deriv uses it, capped
+                n_minus = min(norm(varargin{3}), o.phi_max);
+                n_plus  = min(norm(eta_plus),    o.phi_max);
+                switch o.impact_estimate
+                    case 'continuous'
+                        s.beta_hat = s.beta_hat - s.alpha_hat * (n_plus - n_minus);
+                    case 'fold'
+                        s.beta_hat  = s.beta_hat + s.alpha_hat * n_minus;
+                        s.alpha_hat = zeros(ny, 1);
+                end
+                s.beta_hat = to_ball(s.beta_hat, ...
+                                     p.l1.beta_max * sqrt(1 + p.l1.proj_eps));
+                out = ch4_l1_state('pack', p, s);
+            end
+        end
 
     otherwise
         error('ch4_l1_state:action', ...
@@ -93,4 +131,10 @@ switch lower(action)
               action);
 end
 
+end
+
+% ---------------------------------------------------------------------------
+function v = to_ball(v, r)
+n = norm(v);
+if n > r, v = v * (r / n); end
 end

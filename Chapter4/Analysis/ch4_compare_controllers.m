@@ -11,12 +11,31 @@ function C = ch4_compare_controllers(x0, alpha, p, preset, opts)
 % controller and Section 4.2.4 for the adaptive one -- and the table it prints
 % is what Figures 4.2 and 4.8 plot.
 %
+% ---------------------------------------------------------------- the boxes
+% p.box.rule decides how the constrained laws' torque box is sized (ch4_params):
+%
+%   'rating'  (default) ONE box for every scale of every preset: p.box.rating,
+%             and p.box.rating_case4 for 'case4'. The box is a property of the
+%             robot, not of the case, so no controller's box carries knowledge
+%             of the perturbation it is about to meet, and the robust and L1
+%             sweeps run at the same torque budget. The exception is the L1
+%             thesis form (p.l1.constrain_applied = false), whose box bounds
+%             mu1 alone: it keeps p.l1.u_max, since an actuator rating on the
+%             nominal component is no box at all.
+%   'thesis'  the per-case rules described under each preset below, which
+%             size the box from the perturbation. A parameter struct saved
+%             before p.box existed resolves here, so re-analysing an old run
+%             reproduces the boxes it used.
+%
+% opts.u_box, when given, overrides both.
+%
 % ------------------------------------------------------------------ presets
 % 'robust'  Section 4.1.4.  Controllers A/B/C = min-norm CLF-QP, CLF-QP with
-%           torque saturation, robust CLF-QP with torque saturation, over
-%           Cases I-III (mass scale 1, 1.5, 0.7).
+%           torque saturation and contact rows, robust CLF-QP with torque
+%           saturation and contact rows, over Cases I-III (mass scale 1, 1.5,
+%           0.7).
 %
-%           THE TORQUE BOX IS PER-CASE, AND THAT IS THE POINT. Section 4.1.4
+%           UNDER 'thesis' THE TORQUE BOX IS PER-CASE. Section 4.1.4
 %           sets it "slightly below the maximum torque that controller A uses"
 %           for each perturbation -- 60, 80, 150 Nm for scales 0.7, 1, 1.5.
 %           A fixed box across cases would be an unfair comparison: a 1.5x
@@ -155,6 +174,23 @@ names  = opts.controllers;
 scales = opts.scales;
 boxes  = opts.u_box;
 
+% THE ACTUATOR RATING, see the header. Resolved before the thesis rules below,
+% which then see a box already set and leave it alone.
+rule = ch4_box_rule(p);
+if isempty(boxes) && strcmp(rule, 'rating')
+    switch lower(preset)
+        case 'case4'
+            boxes = p.box.rating_case4;
+        case 'l1'
+            l1b = ch4_l1_opts(p);
+            if l1b.constrain_applied
+                boxes = p.box.rating;
+            end
+        otherwise
+            boxes = p.box.rating;
+    end
+end
+
 % THE L1 BOX. Under the thesis form it bounds mu1 alone, so one box from p
 % serves every scale. Under p.l1.constrain_applied it bounds the TOTAL torque,
 % and a box that cannot carry the heaviest robot makes the sweep measure the
@@ -221,6 +257,8 @@ if opts.verbose
     if measure_box
         fprintf(' box per case: max(%.2f x clfqp peak, scale x %.1f Nm feedforward peak)\n', ...
                 opts.box_frac, u_ff_peak);
+    else
+        fprintf(' box rule: %s\n', rule);
     end
     fprintf('%s\n', repmat('-',1,105));
     fprintf(' %-11s %6s %7s %6s %9s %9s %10s %10s %9s %7s %8s\n', ...
