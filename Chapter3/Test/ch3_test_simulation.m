@@ -22,7 +22,9 @@ function ch3_test_simulation()
 %      that a single-tolerance comparison would pass.
 %   2. the guard still fires and the step still completes;
 %   3. the constrained QP, which cannot be run continuously at all, completes a
-%      step under sampling and respects its torque box exactly.
+%      step under sampling and respects its torque box exactly;
+%   4. the contact force the sampled step records is the KKT force under the
+%      held torque, and ch3_validity scores lift-off and slip from it.
 %
 % See also CH3_STEP, CH3_PARAMS, CH3_COMPARE_CONTROLLERS.
 
@@ -85,6 +87,37 @@ ok = report('clfqp_con respects torque box', ...
             max(F.torque_max - pq.limits.u_max, 0), 1e-6, ok);
 fprintf('        box %.2f Nm, peak |u| %.2f Nm, max delta %.3e, %.1f s wall\n', ...
         pq.limits.u_max, F.torque_max, F.delta_max, el);
+
+%% ---- 4. physical validity: the recorded contact force, and its score ----
+% ch3_step records the stance contact force at every solver point under the
+% torque held over that period. It must equal the KKT force recomputed there,
+% one column per point of .t, and the held torques must sit inside the box.
+% Scoring: the step's own score is 0 or 1 valid steps, and the same step with
+% its first sample forced to lift off, or to slip, must score zero and say so.
+if sq.ok
+    j  = find(sq.t > 0.4 * sq.T, 1);
+    ku = find(sq.t_u < sq.t(j), 1, 'last');
+    [~, ~, aux] = ch3_control_affine(sq.x(:, j), pq);
+    err_lam = norm(sq.lambda(:, j) - (aux.lam_drift + aux.lam_in * sq.u(:, ku)), inf);
+    ok = report('recorded contact force', err_lam, 1e-8, ok);
+    ok = report('one force per solver point', ...
+                double(size(sq.lambda, 2) ~= numel(sq.t)), 0, ok);
+    ok = report('held torque inside the box', ...
+                max(max(abs(sq.u(:))) - pq.limits.u_max, 0), 1e-6, ok);
+
+    simq = struct('steps', sq);
+    Vq   = ch3_validity(simq, pq);
+    lift = simq; lift.steps.lambda(:, 1) = [0; -1];
+    slip = simq; slip.steps.lambda(:, 1) = [0.5; 1];
+    Vl = ch3_validity(lift, pq);
+    Vs = ch3_validity(slip, pq);
+    bad = ~(Vq.available && any(Vq.valid_steps == [0 1])) ...
+          || Vl.valid_steps ~= 0 || ~strcmp(Vl.first_kind, 'lift-off') ...
+          || Vs.valid_steps ~= 0 || ~strcmp(Vs.first_kind, 'slip');
+    ok = report('validity scores lift-off, slip', double(bad), 0, ok);
+    fprintf('        this step: valid %d/1, min Fz %.1f N, max mu %.3f\n', ...
+            Vq.valid_steps, Vq.Fz_min, Vq.mu_max);
+end
 
 %% ------------------------------------------------------------------------
 if ok

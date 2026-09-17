@@ -41,6 +41,10 @@ function C = ch3_compare_controllers(z, p, u_box, n_steps)
 %   C : 1xk struct array, one entry per controller, with
 %         .name .steps_completed .peak_torque .box_violation
 %         .max_eta .delta_max .frac_delta_active .qp_infeasible .reason
+%         .valid_steps .invalid_step .invalid_kind .frac_invalid .Fz_min
+%         .mu_max   physical validity (ch3_validity): steps completed before
+%                   the first sample whose contact force lifts off or asks for
+%                   more than p.limits.mu_s of friction, and where that is
 %
 % See also CH3_CTRL_CLF_QP, CH3_REPORT.
 
@@ -58,15 +62,18 @@ end
 names = {'iolin_pd', 'clfqp', 'clfqp_con'};
 C = struct('name', {}, 'steps_completed', {}, 'peak_torque', {}, ...
            'box_violation', {}, 'max_eta', {}, 'delta_max', {}, ...
-           'frac_delta_active', {}, 'qp_infeasible', {}, 'reason', {});
+           'frac_delta_active', {}, 'qp_infeasible', {}, 'reason', {}, ...
+           'valid_steps', {}, 'invalid_step', {}, 'invalid_kind', {}, ...
+           'frac_invalid', {}, 'Fz_min', {}, 'mu_max', {});
 
-fprintf('\n%s\n CONTROLLER COMPARISON on one gait\n', repmat('=',1,74));
+fprintf('\n%s\n CONTROLLER COMPARISON on one gait\n', repmat('=',1,92));
 fprintf(' gait peak feedforward torque = %.1f Nm;  imposed box = %.1f Nm\n', ...
         peak_ff, u_box);
-fprintf('%s\n', repmat('-',1,74));
-fprintf(' %-11s %6s %10s %10s %10s %10s %8s\n', ...
-        'controller', 'steps', 'peak |u|', 'over box', 'max|eta|', 'max delta', 'QP fail');
-fprintf('%s\n', repmat('-',1,74));
+fprintf('%s\n', repmat('-',1,92));
+fprintf(' %-11s %6s %6s %10s %10s %10s %10s %8s %8s %7s\n', ...
+        'controller', 'steps', 'valid', 'peak |u|', 'over box', 'max|eta|', ...
+        'max delta', 'QP fail', 'min Fz', 'max mu');
+fprintf('%s\n', repmat('-',1,92));
 
 % Sample ALL THREE at the same fixed rate. Two reasons, and the second is the
 % one that matters: it is the only fair comparison (a controller evaluated
@@ -99,20 +106,30 @@ for i = 1:numel(names)
         peak = NaN; maxeta = NaN; dmax = NaN; fdel = NaN; nqp = NaN;
     end
 
+    Vd = ch3_validity(sim, pc);
+
     C(i) = struct('name', names{i}, 'steps_completed', sim.n_ok, ...
                   'peak_torque', peak, 'box_violation', max(peak - u_box, 0), ...
                   'max_eta', maxeta, 'delta_max', dmax, ...
                   'frac_delta_active', fdel, 'qp_infeasible', nqp, ...
-                  'reason', sim.reason);
+                  'reason', sim.reason, ...
+                  'valid_steps', Vd.valid_steps, 'invalid_step', Vd.first_step, ...
+                  'invalid_kind', Vd.first_kind, 'frac_invalid', Vd.frac_invalid, ...
+                  'Fz_min', Vd.Fz_min, 'mu_max', Vd.mu_max);
 
-    fprintf(' %-11s %6d %10.1f %10.1f %10.3e %10.2e %8d\n', ...
-            names{i}, sim.n_ok, peak, C(i).box_violation, maxeta, dmax, nqp);
+    fprintf(' %-11s %6d %6d %10.1f %10.1f %10.3e %10.2e %8d %8.0f %7.2f\n', ...
+            names{i}, sim.n_ok, Vd.valid_steps, peak, C(i).box_violation, ...
+            maxeta, dmax, nqp, Vd.Fz_min, Vd.mu_max);
 end
 
-fprintf('%s\n', repmat('-',1,74));
+fprintf('%s\n', repmat('-',1,92));
 fprintf(' "over box" is how far the COMMANDED torque exceeds the limit. Only\n');
 fprintf(' clfqp_con is constrained to keep it at zero; the other two are not\n');
 fprintf(' told the limit exists, which is precisely the gap stage 8 closes.\n');
-fprintf('%s\n\n', repmat('=',1,74));
+fprintf(' "valid" counts the steps before the first sample whose contact force\n');
+fprintf(' lifts off or asks for more than mu_s = %.2f of friction (ch3_validity):\n', p.limits.mu_s);
+fprintf(' the stance foot is simulated as a pin, so "steps" alone can count\n');
+fprintf(' steps no real foot could have taken.\n');
+fprintf('%s\n\n', repmat('=',1,92));
 
 end
