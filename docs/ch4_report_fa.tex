@@ -160,7 +160,7 @@ $\mathcal{L}_1$ در سه مقیاس جرم کامل می‌شوند، و کنت
 \textbf{اندازه‌گیری‌شده} از پیاده‌سازی حاضرند و نه مقادیر نقل‌شده از متون. هر
 اجرا $25$ گام با نرخ کنترل $1$ کیلوهرتز و $\varepsilon=0.20$ است و در مطالعه افق
 بلند تا $120$ گام ادامه می‌یابد. سه نوع نتیجه گزارش می‌شود: آنچه بازتولید
-می‌شود، آنچه تنها پس از اصلاح بازتولید می‌شود، و آنچه بازتولید نمی‌شود.
+می‌شود، آنچه تنها پس از اصلاح بازتولید می‌شود، و آنچه بازتولید نمی‌شود. استخراج گام‌به‌گام روابط در پیوست~«\ref{app:deriv}» آمده است.
 
 % =====================================================================
 \section{دو مدل و شکاف میان آن‌ها}
@@ -1014,5 +1014,240 @@ $1$ کیلوهرتز همان‌جا کار می‌کند که برایش تنظ
 \begin{LTR}
 \printbibliography[title={مراجع}]
 \end{LTR}
+
+
+% =====================================================================
+% پیوست: استخراج روابط
+% =====================================================================
+\onecolumn
+\setcounter{section}{0}
+\renewcommand{\thesection}{پ}
+\renewcommand{\thesubsection}{پ-\arabic{subsection}}
+\section{استخراج روابط}
+\label{app:deriv}
+این پیوست هر رابطه متن را گام‌به‌گام از رابطه پیش از خود به دست می‌آورد و ترتیب آن
+همان ترتیب متن است. نمادگذاری: $\eta=(y,\dot y)$ خطای ردیابی،
+$V=\eta^{\mathsf T}P\eta$ تابع لیاپانوف فصل سوم، و
+$\dot\eta=F\eta+G\mu$ با $G=\begin{bmatrix}0\\ I\end{bmatrix}$. علامت مد
+($\tilde f,\tilde g$) مدل \textbf{اسمی} است که کنترل‌کننده در اختیار دارد و بدون
+مد، ربات \textbf{واقعی}. برای اختصار $A:=L_gL_fy$ و $\tilde A:=L_{\tilde g}L_{\tilde f}y$.
+
+% ---------------------------------------------------------------------
+\subsection{منشأ $\Delta_1$ و $\Delta_2$ (روابط~\eqref{eq:unc} و \eqref{eq:deltas})}
+دینامیک خروجی ربات واقعی $\ddot y=L_f^2y+A\,u$ است. کنترل‌کننده $u$ را از مدل اسمی
+می‌سازد: پیش‌خور، رانش اسمی را خنثی می‌کند، $\tilde u_{\mathrm{ff}}=-\tilde A^{-1}L_{\tilde f}^2y$، پس
+\begin{equation*}
+    u=-\tilde A^{-1}L_{\tilde f}^2y+\tilde A^{-1}\mu .
+\end{equation*}
+با جای‌گذاری در دینامیک واقعی و افزودن و کاستن $\mu$:
+\begin{equation*}
+    \ddot y=L_f^2y-A\tilde A^{-1}L_{\tilde f}^2y+A\tilde A^{-1}\mu
+    =\mu+\underbrace{\big(L_f^2y-A\tilde A^{-1}L_{\tilde f}^2y\big)}_{\Delta_1}
+    +\underbrace{\big(A\tilde A^{-1}-I\big)}_{\Delta_2}\mu .
+\end{equation*}
+اگر مدل دقیق باشد ($A=\tilde A$ و $L_f^2y=L_{\tilde f}^2y$) هر دو جمله صفر می‌شوند و
+$\ddot y=\mu$ فصل سوم بازمی‌گردد.
+
+% ---------------------------------------------------------------------
+\subsection{مقیاس یکنواخت جرم (رابطه~\eqref{eq:scale})}
+در فاز اتکا، دینامیک همراه با قید تماس یک دستگاه \en{KKT} است:
+\begin{equation*}
+    \begin{bmatrix}D & J^{\mathsf T}\\ J & 0\end{bmatrix}
+    \begin{bmatrix}\ddot q\\ \lambda\end{bmatrix}
+    =\begin{bmatrix}-C\dot q-G_{\mathrm{grav}}+Bu\\ -\dot J\dot q\end{bmatrix}.
+\end{equation*}
+مقیاس جرم و اینرسی با $s$ یعنی $D\to sD$، $C\to sC$ و
+$G_{\mathrm{grav}}\to sG_{\mathrm{grav}}$؛ ژاکوبین تماس $J$ هندسی است و تغییر نمی‌کند.
+با تقسیم سطر بالا بر $s$ و در نظر گرفتن $\lambda/s$ به‌عنوان مجهول:
+\begin{equation*}
+    \begin{bmatrix}D & J^{\mathsf T}\\ J & 0\end{bmatrix}
+    \begin{bmatrix}\ddot q\\ \lambda/s\end{bmatrix}
+    =\begin{bmatrix}-C\dot q-G_{\mathrm{grav}}+\tfrac1s Bu\\ -\dot J\dot q\end{bmatrix}.
+\end{equation*}
+این همان دستگاه اسمی است که در آن $u$ با $u/s$ جایگزین شده. بنابراین شتاب رانش مستقل
+از $s$ است، $L_f^2y=L_{\tilde f}^2y$، و شتاب ورودی با $1/s$ مقیاس می‌گیرد،
+$A=\tfrac1s\tilde A$. جای‌گذاری در بخش قبل:
+\begin{equation*}
+    \Delta_2=\tfrac1s\tilde A\tilde A^{-1}-I=\Big(\tfrac1s-1\Big)I,\qquad
+    \Delta_1=L_{\tilde f}^2y-\tfrac1s L_{\tilde f}^2y=-\Big(\tfrac1s-1\Big)L_{\tilde f}^2y .
+\end{equation*}
+سه نتیجه: (۱)~$\|\Delta_2\|<1\iff|1/s-1|<1\iff 0<1/s<2\iff s>0.5$.
+(۲)~همان حرکت به $u\to s\,u$ نیاز دارد؛ پس جعبه گشتاور با $s$ مقیاس می‌گیرد و
+$195\times1.5=293$ نیوتن‌متر از جعبه ثابت $244$ فراتر می‌رود.
+(۳)~باری که به ران آویخته شود $D$ را غیریکنواخت تغییر می‌دهد (نه به صورت $sD$)،
+دستگاه جدا نمی‌شود و $\Delta_2$ دیگر مضربی از $I$ نیست.
+
+% ---------------------------------------------------------------------
+\subsection{مشتق $V$ تحت عدم قطعیت}
+با عدم قطعیت، $\dot\eta=F\eta+G(\mu+\Delta_1+\Delta_2\mu)$، پس
+\begin{equation*}
+    \dot V=\eta^{\mathsf T}(F^{\mathsf T}P+PF)\eta+2\eta^{\mathsf T}PG\,(\mu+\Delta_1+\Delta_2\mu)
+    =L_fV+L_gV\,\Delta_1+L_gV\,(I+\Delta_2)\,\mu ,
+\end{equation*}
+با همان تعاریف فصل سوم: $L_fV=\eta^{\mathsf T}(F^{\mathsf T}P+PF)\eta$ و
+$L_gV=2\eta^{\mathsf T}PG$.
+
+% ---------------------------------------------------------------------
+\subsection{قانون مقاوم $\mu^*$ (رابطه~\eqref{eq:rclf})}
+شرط $\dot V\le-(c_3/\varepsilon)V$ باید برای \emph{هر} عدم قطعیت مجاز برقرار باشد. با
+$\psi=L_fV+(c_3/\varepsilon)V$:
+\begin{equation*}
+    \max_{\|\Delta_1\|\le D_1,\ |d_2|\le D_2}\ \psi+L_gV\,\Delta_1+L_gV\,\mu+d_2\,L_gV\,\mu\ \le 0 .
+\end{equation*}
+
+\textbf{گام ۱: جمله $\Delta_1$.} طبق نامساوی کوشی\nd{}شوارتز،
+$L_gV\,\Delta_1\le\|L_gV\|\,\|\Delta_1\|\le D_1\|L_gV\|$، و تساوی در
+$\Delta_1=D_1L_gV^{\mathsf T}/\|L_gV\|$ رخ می‌دهد. این بدترین حالت به $\mu$ وابسته نیست،
+پس در یک ثابت جذب می‌شود: $a:=\psi+D_1\|L_gV\|$.
+
+\textbf{گام ۲: جمله $\Delta_2$.} $d_2$ اسکالری در $[-D_2,D_2]$ است، پس بدترین حالت
+$d_2(L_gV\mu)$ برابر $D_2|L_gV\mu|$ است. قدرمطلق به دو نامساوی خطی تبدیل می‌شود:
+\begin{equation*}
+    a+(1+D_2)\,L_gV\,\mu\le0,\qquad a+(1-D_2)\,L_gV\,\mu\le0 .
+\end{equation*}
+
+\textbf{گام ۳: کوچک‌ترین $\mu$.} اگر $a\le0$، $\mu=0$ کافی است. اگر $a>0$، باید
+$L_gV\mu<0$ باشد و آنگاه سطر $(1-D_2)$ سخت‌تر است:
+$c^{\mathsf T}\mu\le-a$ با $c=(1-D_2)L_gV^{\mathsf T}$. کوچک‌ترین بردار این نیم‌فضا تصویر
+مبدأ روی مرز آن است، $\mu^*=-a\,c/\|c\|^2$ (لاگرانژ نیز همین را می‌دهد:
+$2\mu+\lambda c=0$ با قید فعال). بنابراین
+\begin{equation*}
+    \mu^*=-\frac{a(1-D_2)L_gV^{\mathsf T}}{(1-D_2)^2\|L_gV\|^2}
+    =-\frac{a\,L_gV^{\mathsf T}}{(1-D_2)\,\|L_gV\|^2}.
+\end{equation*}
+با $D_1=D_2=0$ داریم $a=\psi$ و قانون فصل سوم به دست می‌آید. اگر $D_2\ge1$، مخرج
+نامثبت است: بدترین مدل درون کران می‌تواند اثر کنترل را خنثی یا وارونه کند و هیچ $\mu$
+متناهی وجود ندارد.
+
+% ---------------------------------------------------------------------
+\subsection{چرا قانون دقیق، مُد لغزشی است}
+$\psi$ درجه دوم در $\eta$ است، یعنی $O(\|\eta\|^2)$؛ اما $L_gV=2\eta^{\mathsf T}PG$ خطی است،
+پس $D_1\|L_gV\|$ از مرتبه $O(\|\eta\|)$ است. نزدیک مدار جمله خطی غالب است،
+$a\approx D_1\|L_gV\|$، و
+\begin{equation*}
+    \mu^*\approx-\frac{D_1\|L_gV\|\,L_gV^{\mathsf T}}{(1-D_2)\|L_gV\|^2}
+    =-M\,\frac{L_gV^{\mathsf T}}{\|L_gV\|},\qquad
+    M=\frac{D_1}{1-D_2}=\frac{279.1}{0.486}\approx574 .
+\end{equation*}
+این بردار یکه‌ای با اندازه ثابت است که با عبور $L_gV$ از صفر علامت عوض می‌کند: کنترل
+مُد لغزشی. اندازه جابه‌جایی $L_gV$ در یک نمونه نگهداری‌شده از مشتق آن به دست می‌آید،
+\begin{equation*}
+    \frac{d}{dt}L_gV^{\mathsf T}=2G^{\mathsf T}P\dot\eta\ \ni\ 2\,G^{\mathsf T}PG\,\mu=2P_{22}\,\mu ,
+\end{equation*}
+پس با $\|\mu\|=M$ در دوره $T$:
+$\phi_T=\|2P_{22}\|\,M\,T\approx0.029$. اگر $L_gV$ به صفر نزدیک‌تر از این باشد، از
+آن رد می‌شود، علامت عوض می‌کند و نمونه بعد برمی‌گرداند؛ این همان لرزش است.
+
+% ---------------------------------------------------------------------
+\subsection{لایه مرزی و شرط‌های $\kappa>1/2$ و $\kappa\ge1$}
+درون لایه $\|L_gV\|<\phi$، جمله $D_1\|L_gV\|$ با $D_1\|L_gV\|^2/\phi$ جایگزین می‌شود و
+بخش مقاوم قانون به فیدبک خطی تبدیل می‌شود:
+\begin{equation*}
+    \mu^*\approx-\frac{D_1\|L_gV\|^2/\phi}{(1-D_2)\|L_gV\|^2}\,L_gV^{\mathsf T}
+    =-\frac{M}{\phi}\,L_gV^{\mathsf T}.
+\end{equation*}
+یک نمونه از آن روی رباتی با بهره واقعی $(1+d_2)$ (با همان تقریب نرم که $\phi_T$ را داد):
+\begin{equation*}
+    L_gV_{k+1}\approx L_gV_k\Big(1-(1+d_2)\,\frac{\phi_T}{\phi}\Big).
+\end{equation*}
+با $\phi=\kappa(1+D_2)\phi_T$ ضریب برابر $1-\frac{1+d_2}{\kappa(1+D_2)}$ است و بدترین حالت
+آن در $d_2=D_2$ برابر $1-1/\kappa$. همگرایی یعنی $|1-1/\kappa|<1$، یعنی
+$\kappa>1/2$؛ و نبود فراجهش (ضریب نامنفی، بدون تغییر علامت و بدون لرزش) یعنی
+$\kappa\ge1$.
+
+\textbf{بها: $D_1\phi/4$.} درون لایه، بدترین حالت واقعی به اندازه
+$g(x)=D_1x-D_1x^2/\phi$ با $x=\|L_gV\|$ از آنچه \en{QP} اعمال می‌کند فراتر می‌رود.
+از $g'(x)=0$ داریم $x=\phi/2$ و بیشینه $g=D_1\phi/4$. پس
+\begin{equation*}
+    \dot V\le-\frac{c_3}{\varepsilon}V+\frac{D_1\phi}{4}
+    \quad\Rightarrow\quad
+    V(t)\le e^{-c_3t/\varepsilon}\,V(0)+\frac{\varepsilon D_1\phi}{4c_3}
+\end{equation*}
+(لم مقایسه). $V$ درون یک گوی مستقر می‌شود و به صفر نمی‌رسد: کران‌داری نهایی، نه همگرایی.
+
+% ---------------------------------------------------------------------
+\subsection{خطای پیش‌بین $\mathcal{L}_1$ (رابطه~\eqref{eq:plant})}
+عدم قطعیت در $\theta$ جمع می‌شود: $\dot\eta=F\eta+G(\mu+\theta)$. پیش‌بین
+$\dot{\hat\eta}=F\eta+G(\mu+\hat\theta)-a(\hat\eta-\eta)$ است. با تفریق و
+$\tilde\eta=\hat\eta-\eta$ و $\tilde\theta=\hat\theta-\theta$، جملات $F\eta$ و $G\mu$
+دقیقاً حذف می‌شوند:
+\begin{equation*}
+    \dot{\tilde\eta}=-a\tilde\eta+G\tilde\theta .
+\end{equation*}
+مدل مرجع در این رابطه حضور ندارد و به همین دلیل \en{QP} دوم کنار گذاشته می‌شود.
+
+% ---------------------------------------------------------------------
+\subsection{قانون تطبیق و دلیل $P=I$}
+با $\hat\theta=\hat\alpha\|\eta\|+\hat\beta$ داریم $\tilde\theta=\tilde\alpha\|\eta\|+\tilde\beta$.
+تابع لیاپانوف
+\begin{equation*}
+    W=\tilde\eta^{\mathsf T}\tilde\eta+\frac{\tilde\alpha^{\mathsf T}\tilde\alpha}{\Gamma_\alpha}
+    +\frac{\tilde\beta^{\mathsf T}\tilde\beta}{\Gamma}
+\end{equation*}
+برای $\alpha,\beta$ واقعیِ کندتغییر مشتقی چنین دارد:
+\begin{equation*}
+    \dot W=-2a\|\tilde\eta\|^2
+    +\underbrace{2\tilde\eta^{\mathsf T}G(\tilde\alpha\|\eta\|+\tilde\beta)}_{\text{جمله متقاطع}}
+    +\frac{2\tilde\alpha^{\mathsf T}\dot{\hat\alpha}}{\Gamma_\alpha}
+    +\frac{2\tilde\beta^{\mathsf T}\dot{\hat\beta}}{\Gamma}.
+\end{equation*}
+قوانین تطبیق طوری انتخاب می‌شوند که جمله متقاطع دقیقاً حذف شود:
+\begin{equation*}
+    \dot{\hat\beta}=-\Gamma\,G^{\mathsf T}\tilde\eta,\qquad
+    \dot{\hat\alpha}=-\Gamma_\alpha\,G^{\mathsf T}\tilde\eta\,\|\eta\|
+    \quad\Rightarrow\quad \dot W=-2a\|\tilde\eta\|^2\le0 ,
+\end{equation*}
+و تصویر روی کران‌ها $\dot W$ را فقط کوچک‌تر می‌کند. $P=I$ کافی است زیرا
+$(-aI)^{\mathsf T}I+I(-aI)=-2aI$؛ و $G^{\mathsf T}\tilde\eta$ همان بخش سرعتِ خطای پیش‌بینی است.
+
+% ---------------------------------------------------------------------
+\subsection{حلقه $s^2+as+\Gamma$ و میرایی $1.26$}
+کانال $\hat\beta$ را به‌تنها و با $\theta$ ثابت در نظر بگیرید، پس
+$\dot{\tilde\beta}=\dot{\hat\beta}$. با $e=G^{\mathsf T}\tilde\eta$:
+\begin{equation*}
+    \dot e=-ae+\tilde\beta,\qquad \dot{\tilde\beta}=-\Gamma e
+    \quad\Rightarrow\quad \ddot e+a\dot e+\Gamma e=0 ,
+\end{equation*}
+پس $\omega_n=\sqrt\Gamma=\sqrt{10^5}=316$ رادیان بر ثانیه و
+$\zeta=a/(2\sqrt\Gamma)=800/632=1.26$. کانال $\hat\alpha$ بهره
+$\Gamma_\alpha\|\eta\|^2$ را می‌افزاید، پس حلقه با
+$\omega\approx\sqrt{\Gamma+\Gamma_\alpha\|\eta\|^2}$ کار می‌کند؛ در $\|\eta\|=13$ این
+$\sqrt{10^5(1+169)}\approx4120$ رادیان بر ثانیه، یعنی $4.1$ رادیان در هر نمونه
+$1$ میلی‌ثانیه‌ای است.
+
+% ---------------------------------------------------------------------
+\subsection{نرمال‌سازی $m^2$ (رابطه~\eqref{eq:norm})}
+تقسیم هر دو قانون بر $m^2$ بهره‌های مؤثر را $\Gamma/m^2$ و $\Gamma_\alpha/m^2$ می‌کند و
+بسامد حلقه $\sqrt{(\Gamma+\Gamma_\alpha\|\eta\|^2)/m^2}$ می‌شود. با
+$m^2=(\Gamma+\Gamma_\alpha\|\eta\|^2)/(\rho/\Delta t)^2$ این بسامد دقیقاً $\rho/\Delta t$،
+یعنی $\rho$ رادیان بر نمونه است؛ و $\max(1,\cdot)$ قانون را هر جا حلقه کندتر است
+دست‌نخورده می‌گذارد.
+
+برای آنچه از استدلال لیاپانوف باقی می‌ماند، خطای پیش‌بینی با $1/m^2$ وزن می‌گیرد:
+\begin{equation*}
+    W=\frac{\|\tilde\eta\|^2}{m^2}+\frac{\tilde\alpha^{\mathsf T}\tilde\alpha}{\Gamma_\alpha}
+    +\frac{\tilde\beta^{\mathsf T}\tilde\beta}{\Gamma}.
+\end{equation*}
+جمله متقاطع اکنون ضریب $1/m^2$ دارد و قوانین نیز، پس همچنان حذف می‌شود. تنها جمله
+تازه از مشتق $1/m^2$ می‌آید:
+\begin{equation*}
+    \dot W=-\frac{2a\|\tilde\eta\|^2}{m^2}-\frac{\dot{(m^2)}}{m^4}\|\tilde\eta\|^2
+    =-\Big(2a+\frac{d\ln m^2}{dt}\Big)\frac{\|\tilde\eta\|^2}{m^2}.
+\end{equation*}
+این مقدار تنها تا وقتی نامثبت است که $\frac{d\ln m^2}{dt}>-2a$، یعنی $m^2$ کندتر از
+$e^{-2at}$ کاهش یابد. در این صورت $\|\tilde\eta\|^2/m^2\le W(0)$ و
+$\|\tilde\eta\|\le m\sqrt{W(0)}$: کران به ضریب $m$ گشاد می‌شود.
+
+% ---------------------------------------------------------------------
+\subsection{فیلتر $\mu_2=-C(s)\hat\theta$}
+با $C(s)=\frac{\omega_c}{s+\omega_c}$ و $\mu=\mu_1+\mu_2$:
+\begin{equation*}
+    \dot\eta=F\eta+G\big(\mu_1+\theta-C\hat\theta\big)
+    =F\eta+G\mu_1+G\big[(1-C)\theta-C\tilde\theta\big].
+\end{equation*}
+در بسامدهای پایین $C\approx1$ و $\hat\theta\approx\theta$، پس کروشه به صفر می‌رود و ربات
+حلقه بسته فصل سوم، $\dot\eta=F\eta+G\mu_1$، را دنبال می‌کند. فیلتر اجازه می‌دهد
+$\hat\theta$ تند باشد ($\sqrt\Gamma=316$) در حالی که گشتاور ارسالی به مفاصل کندتر
+می‌ماند ($\omega_c=150$).
 
 \end{document}
