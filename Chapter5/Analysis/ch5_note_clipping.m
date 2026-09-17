@@ -27,9 +27,18 @@ n_out  = sum(au > lim);
 % finally drawn, and with subplot panels that get resized afterwards -- row 3
 % here calls axis equal -- the label can end up rendered against a different
 % panel entirely. A title is anchored to the axes object and cannot drift.
-title(ax, sprintf('peak %.0f %s at t = %.2f s (%d sample%s off-axis)', ...
-                  pk, unit, sim.t(k), n_out, plural(n_out)), ...
-      'FontSize', 8, 'FontWeight', 'normal', 'Color', [0.6 0 0]);
+%
+% Two lines: on one, the note is wider than a column of a figure drawn at the
+% size the report prints it (ch5_figure).
+%
+% Size and weight go through the AXES (TitleFontSizeMultiplier,
+% TitleFontWeight), not the title text: on axes placed by hand, a FontSize set
+% on the text reverted to the axes' title size in some panels and not others.
+title(ax, {sprintf('peak %.0f %s at t = %.2f s', pk, unit, sim.t(k)), ...
+           sprintf('(%d sample%s off-axis)', n_out, plural(n_out))}, ...
+      'Color', [0.6 0 0]);
+ax.TitleFontSizeMultiplier = 8 / ax.FontSize;      % 8 pt
+ax.TitleFontWeight = 'normal';
 
 end
 

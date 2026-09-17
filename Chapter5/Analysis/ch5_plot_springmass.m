@@ -39,8 +39,9 @@ n = numel(runs);
 figs = gobjects(0);
 
 %% ============================================================ fig 1: Fig 5.3
-f1 = figure('Name', 'ch5: Fig 5.3 serial spring-mass (relative degree 6)', ...
-            'Position', [60 60 380*n 720]);
+f1 = ch5_figure('ch5: Fig 5.3 serial spring-mass (relative degree 6)', 'page', 12.5);
+t1 = tiledlayout(f1, 3, n, 'TileSpacing', 'compact', 'Padding', 'compact');
+ax = gobjects(3, n);
 
 u_lim = ch5_robust_ulim(runs);
 
@@ -57,14 +58,17 @@ for i = 1:n
     x3d = s.p.plant.x3d;
 
     % --- row 1: all three carts
-    subplot(3, n, i); hold on; grid on;
-    plot(s.t, s.x(1,:), 'LineWidth', 1.2);
-    plot(s.t, s.x(2,:), 'LineWidth', 1.2);
-    plot(s.t, s.x(3,:), 'LineWidth', 1.8);
+    ax(1,i) = nexttile(t1, i); hold on; grid on;
+    plot(s.t, s.x(1,:), 'LineWidth', 0.9);
+    plot(s.t, s.x(2,:), 'LineWidth', 0.9);
+    plot(s.t, s.x(3,:), 'LineWidth', 1.3);
     ylim(x_lim); xlim([0 s.t(end)]);
-    ylabel('cart positions  [m]');
-    title(runs(i).label, 'Interpreter', 'none', 'FontWeight', 'normal');
-    if i == 1, legend({'x_1','x_2','x_3'}, 'Location','southeast'); end
+    title(run_title(runs(i).label));
+    if i == 1
+        ylabel('cart positions (m)');
+        % two columns, in the corner the carts have left by t = 8 s
+        legend({'x_1','x_2','x_3'}, 'Location','southeast', 'NumColumns', 2);
+    end
 
     % --- row 2: the constrained cart against its limit
     %
@@ -72,48 +76,67 @@ for i = 1:n
     % trace leaves the zoomed y-range early gets a shorter time axis than its
     % neighbours, and a figure whose entire purpose is comparing columns then
     % compares them on different axes.
-    subplot(3, n, n+i); hold on; grid on;
-    plot(s.t, s.x(3,:), 'LineWidth', 1.8);
-    yline(x3d, 'k--', 'LineWidth', 1.0);
-    yline(lvl, 'r-',  'LineWidth', 1.5);
+    ax(2,i) = nexttile(t1, n+i); hold on; grid on;
+    plot(s.t, s.x(3,:), 'LineWidth', 1.3);
+    yline(x3d, 'k--', 'LineWidth', 0.8);
+    yline(lvl, 'r-',  'LineWidth', 1.1);
     ylim([min(2.0, lvl-0.2), max([lvl, max(s.x(3,:))]) + 0.15]);
     xlim([0 s.t(end)]);
-    ylabel('x_3  [m]');
-    if i == 1, legend({'x_3','x_{3d}','x_3^{max}'}, 'Location','southeast'); end
+    if i == 1
+        ylabel('x_3 (m)');
+        % two columns, below the settling x_3 and right of its rise: stacked
+        % in one, the entries reached up into the first; in one row, across
+        % the second
+        legend({'x_3','x_{3d}','x_3^{max}'}, 'Location','southeast', 'NumColumns', 2);
+    end
 
     % --- row 3: input force, SHARED axis (see the header)
-    ax3 = subplot(3, n, 2*n+i); hold on; grid on;
-    plot(s.t, s.u(1,:), 'LineWidth', 1.4, 'Color', [0.85 0.33 0.10]);
+    ax(3,i) = nexttile(t1, 2*n+i); hold on; grid on;
+    plot(s.t, s.u(1,:), 'LineWidth', 1.0, 'Color', [0.85 0.33 0.10]);
     ylim([-u_lim u_lim]);
     xlim([0 s.t(end)]);
-    ch5_note_clipping(ax3, s, u_lim, 'N');
-    xlabel('Time (s)'); ylabel('u  [N]');
+    ch5_note_clipping(ax(3,i), s, u_lim, 'N');
+    if i == 1, ylabel('u (N)'); end
 end
+xlabel(t1, 'Time (s)');
+for i = 1:n, share_time(ax(:,i)); end    % a column is one run
 
 figs(end+1) = f1;
 
 %% ====================================================== fig 2: barrier record
-f2 = figure('Name', 'ch5: springmass barrier record', 'Position', [80 80 900 520]);
+f2 = ch5_figure('ch5: springmass barrier record', 'page', 10);
+t2 = tiledlayout(f2, 2, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+ax2 = gobjects(2, 1);
+cols = lines(max(n, 3));
 
-subplot(2,1,1); hold on; grid on;
+ax2(1) = nexttile(t2); hold on; grid on;
 for i = 1:n
-    plot(runs(i).sim.t, runs(i).sim.h, 'LineWidth', 1.5);
+    plot(runs(i).sim.t, runs(i).sim.h, 'Color', cols(i,:), 'LineWidth', 1.1, ...
+         'DisplayName', runs(i).label);
 end
-yline(0, 'k-', 'LineWidth', 1.2);
-ylabel('h(x) = x_3^{max} - x_3   [m]');
-title('The claim: h \geq 0 for all t');
-legend({runs.label}, 'Interpreter','none', 'Location','best');
+yline(0, 'k-', 'LineWidth', 0.8, 'HandleVisibility', 'off');
+ylabel('h (m)');
+title('The claim: h = x_3^{max} - x_3 \geq 0 for all t');
 
-subplot(2,1,2); hold on; grid on;
+% Each run in ITS OWN colour. Left to the colour order, skipping the baseline
+% (which has no barrier row) drew every ECBF run here in the colour the panel
+% above gives the run before it.
+ax2(2) = nexttile(t2); hold on; grid on;
 for i = 1:n
     y = runs(i).sim.y_rb;
     if all(isnan(y)), continue; end
-    plot(runs(i).sim.t, sign(y).*log10(1 + abs(y)), 'LineWidth', 1.5);
+    plot(runs(i).sim.t, sign(y).*log10(1 + abs(y)), 'Color', cols(i,:), ...
+         'LineWidth', 1.1);
 end
-yline(0, 'k-', 'LineWidth', 1.2);
-xlabel('Time (s)');
-ylabel('sgn(y_{r_b})\cdot log_{10}(1+|y_{r_b}|)');
+yline(0, 'k-', 'LineWidth', 0.8);
+ylabel({'$\mathrm{sgn}(y_{r_b})\,\times$', '$\log_{10}(1+|y_{r_b}|)$'}, ...
+       'Interpreter', 'latex');
 title('The row the QP enforces (Remark 5.6): y_{r_b} \geq 0; zero means binding');
+xlabel(t2, 'Time (s)');
+% one legend for both panels, above them; TeX, since the labels are written in it
+lg = legend(ax2(1), 'Orientation', 'horizontal');
+lg.Layout.Tile = 'north';
+share_time(ax2);
 
 figs(end+1) = f2;
 
@@ -123,8 +146,28 @@ if ~isempty(savedir)
     names = {'ch5_springmass_fig53', 'ch5_springmass_barrier'};
     for k = 1:numel(figs)
         exportgraphics(figs(k), fullfile(savedir, [names{k} '.png']), ...
-                       'Resolution', 150);
+                       'Resolution', 600);
     end
 end
 
+end
+
+% ---------------------------------------------------------------------------
+function c = run_title(label)
+%RUN_TITLE  A run label as a column title, a line per comma-separated part.
+% On one line "ECBF-CLF-QP, x_3^{max}-x_{3d} = 15 cm" is wider than a column
+% at print size. The labels are TeX, which is the title's default interpreter.
+c = strtrim(strsplit(label, ','));
+end
+
+function share_time(ax)
+%SHARE_TIME  Stacked panels on one time axis, labelled on the bottom panel.
+% The ticks are copied from the bottom panel rather than left to each axes: an
+% axes whose tick labels are hidden picks its ticks differently, and its grid
+% lines then disagree with the panel below. drawnow first, since the ticks
+% MATLAB picks depend on the size the layout leaves the panel.
+linkaxes(ax, 'x');
+drawnow;
+set(ax, 'XTick', ax(end).XTick);
+set(ax(1:end-1), 'XTickLabel', {});
 end
