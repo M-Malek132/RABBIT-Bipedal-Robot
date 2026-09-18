@@ -346,7 +346,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
     <div class="meta">
       <div><b>Implementation</b><span>Chapter4/ &#8212; 35 files</span></div>
       <div><b>Result sets</b><span>ch4_l1_2026-09-14_22-33-20 + 3</span></div>
-      <div><b>Test suite</b><span>50 checks, 0 failures, 9.8 s</span></div>
+      <div><b>Test suite</b><span>54 checks, 0 failures, 5.1 s</span></div>
       <div><b>Robot</b><span>RABBIT, 74 kg &#8212; posture_195 gait</span></div>
     </div>
   </div>
@@ -1472,13 +1472,13 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
     </div>
 
     <div class="plate">
-      <div class="plate-head"><span>Full suite &#8212; 50 checks, 0 failures, 9.8 s</span><span class="tag">MATLAB R2021b · run 2026-09-14</span></div>
+      <div class="plate-head"><span>Full suite &#8212; 54 checks, 0 failures, 5.1 s</span><span class="tag">MATLAB R2023b · run 2026-09-18</span></div>
       <div class="tscroll">
         <table>
           <thead><tr><th>Module</th><th class="num">Checks</th><th class="wl">What it pins down</th><th class="num">Sharpest result</th></tr></thead>
           <tbody>
             <tr>
-              <td class="name">ch4_test_model</td><td class="num">17</td>
+              <td class="name">ch4_test_model</td><td class="num">19</td>
               <td class="wl">the nominal model is Chapter 3's; the exact Δ structure under a mass scale; the load's mass matrix, gravity and impact map; forces under a per-step load</td>
               <td class="num">Δ₂ == (1/s − 1)I, err 2.1e−13</td>
             </tr>
@@ -1488,7 +1488,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
               <td class="num">held-torque jumps 1000 → 0 per 1000 samples</td>
             </tr>
             <tr>
-              <td class="name">ch4_test_l1</td><td class="num">19</td>
+              <td class="name">ch4_test_l1</td><td class="num">21</td>
               <td class="wl">projection, both predictors' error dynamics, the filter, the perfect-model identity, the rows on the applied torque, the sampled advance, and the estimator loop at a post-impact error</td>
               <td class="num">at ‖η‖ = 13: diverges as written, settles normalized</td>
             </tr>
@@ -1588,7 +1588,7 @@ ch4_main('l1.predictor', 'thesis', 'l1.constrain_applied', false, 'l1.Gamma', 1e
             <tr><td class="name">ch4_result_2026-09-13_20-45-50.mat</td><td class="wl">§4.1.4 Cases I&#8211;III, robust figures</td><td><span class="pill safe">L₁ plays no part</span></td></tr>
             <tr><td class="name">ch4_result_2026-09-14_13-50-53.mat</td><td class="wl">Case IV</td><td><span class="pill safe">L₁ plays no part</span></td></tr>
             <tr><td class="name">docs/CH4_UNCERTAINTY.md</td><td class="wl">long-horizon screens, the κ sweep and the rows-off runs (ε = 0.35), the plateau runs, the unnormalized L₁ numbers</td><td><span class="pill neutral">quoted, not re-run</span></td></tr>
-            <tr><td class="name">ch4_test_all</td><td class="wl">50 checks, the chatter and loop-speed isolations</td><td><span class="pill safe">re-run 2026-09-14</span></td></tr>
+            <tr><td class="name">ch4_test_all</td><td class="wl">54 checks, the chatter and loop-speed isolations, and the recorded contact force</td><td><span class="pill safe">re-run 2026-09-18</span></td></tr>
             <tr><td class="name">Thesis, Chapter 4</td><td class="wl">Cases I&#8211;IV, the thesis's boxes and loads, the claims scored above</td><td><span class="pill neutral">published reference</span></td></tr>
           </tbody>
         </table>

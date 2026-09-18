@@ -1,7 +1,8 @@
 # Handoff — Chapter 3–5 report review follow-up
 
-Written 2026-09-17 on the laptop, to continue on another machine. Start a
-Claude Code session in the repo root and ask it to read this file.
+Written 2026-09-17 on the laptop; **the follow-up is finished** (2026-09-18,
+commits `ccce627`, `a910b7c`, `517e5d2` and the test-stamp commit after them).
+This is now a record of what was decided, run and changed, not a to-do list.
 
 ## Where things stand
 
@@ -57,33 +58,35 @@ review debt:
 - **Workflow**: update the Chapter 3/4 reports and commit only after ALL
   reruns have finished, in one pass.
 
-## What to run next
+## How to reproduce the runs behind the reports
 
-1. Copy from the laptop into `Results/` (git-ignored, not on GitHub):
-   `ch4_result_2026-09-17_17-27-44.mat` (robust preset, rating rule) and
-   `ch4_result_2026-09-17_17-47-55.mat` (Case IV), plus optionally the figure
-   folders `ch4_robust_2026-09-17_17-27-44/`, `ch4_case4_2026-09-17_17-47-55/`.
-   Without them the driver simply reruns those two presets (~20 min).
-2. In MATLAB at the repo root: `startup`, then `ch4_rerun_all`
-   (`Chapter4/Analysis/reruns/`). It resumes and skips finished presets. Stages:
-   `robust case4 l1 load ch3tests ch3table long_robust long_sweep long_nine
-   long_oos long_summary`. On macOS/Linux, `Chapter4/Analysis/reruns/run_reruns.sh`
-   runs one stage per MATLAB session with retries.
-3. **Check `ch3tests` first**: the Chapter 3 validity code (`cca8dd4`) has not
-   been run. The collocation order test is a *known, intentional* failure;
-   anything else failing is new.
-4. Outputs: `Results/ch4_result_*.mat` (presets), `Results/reruns/ch3/table.log`,
+Everything below has been run; this is the recipe, not a to-do list. `Results/`
+is git-ignored, so on a fresh machine the runs have to be redone (~3 hours) or
+the folder copied across.
+
+1. One MATLAB session at a time. In MATLAB at the repo root: `startup`, then
+   `ch4_rerun_all` (`Chapter4/Analysis/reruns/`). It resumes and skips finished
+   presets. Stages: `robust case4 l1 load ch3tests ch3table long_robust
+   long_sweep long_nine long_oos long_summary`. On macOS/Linux,
+   `Chapter4/Analysis/reruns/run_reruns.sh` runs one stage per MATLAB session
+   with retries.
+2. **ε = 0.20 diagnostics** (issue 4): `ch3_table_rerun(0.20)` →
+   `Results/reruns/ch3_eps020/table.log`, then `ch4_eps020_diagnostics`
+   (`Chapter4/Analysis/reruns/`) → the κ table, the robust growth ablation and
+   the thesis predictor's θ̂ overshoot, in `Results/reruns/ch4_eps020/`.
+3. Outputs: `Results/ch4_result_*.mat` (presets, the four the reports cite are
+   `2026-09-17_17-27-44` robust, `_17-47-55` case4, `_20-33-53` l1,
+   `_20-36-27` load), `Results/reruns/ch3/table.log`,
    `Results/reruns/ch4/progress.log` and `summary.log`.
+4. Figures: `ch4_doc_figures` reads the four stamps pinned at its head — repin
+   them when the results change. Then re-embed them in `docs/ch4_report.html`
+   by hand (see the loose ends above).
+5. Test suites: `ch3_test_all` (83 checks, 1 known failure, 5.3 s) and
+   `ch4_test_all` (54 checks, 0 failures, 5.1 s), both on R2023b, 2026-09-18.
+   The collocation order test is a *known, intentional* failure; anything else
+   failing is new.
 
-Expect roughly 2–3 hours for everything after the presets.
-
-5. **ε = 0.20 reruns** (issue 4), after the above, same one-session rule:
-   `ch3_table_rerun(0.20)` → `Results/reruns/ch3_eps020/table.log`, then
-   `ch4_eps020_diagnostics` (`Chapter4/Analysis/reruns/`) → the κ table,
-   the robust growth ablation and the thesis predictor's θ̂ overshoot, in
-   `Results/reruns/ch4_eps020/summary.log`. Both resume.
-
-## Results so far (rating rule + validity, 25 steps)
+## What the reruns found
 
 Robust preset (`17-27-44`), "valid" = steps before first lift-off/slip:
 
@@ -100,7 +103,7 @@ Notable: validity changes verdicts (unconstrained clfqp slips beyond 0.4 even
 with a perfect model); the larger box changes the robust law itself at ×1
 (max‖η‖ 1.13 → 2.85, peak torque 195 → 371 N·m).
 
-### Rating reruns finished (2026-09-17 evening)
+### Rating reruns (2026-09-17 evening)
 
 All stages done, none failed. Full numbers: `Results/reruns/ch4/summary.log`,
 `Results/reruns/ch3/table.log`, `Results/ch4_result_2026-09-17_20-33-53.mat`
@@ -138,30 +141,21 @@ All stages done, none failed. Full numbers: `Results/reruns/ch4/summary.log`,
   at ×1.5 (3–5× at 0.35); plant predictor 1.29× / 1.01×. Scale 1 ratios are
   meaningless (true θ ≈ 0) and now report NaN.
 
-## Report updates to make when the reruns finish
-
-Chapter 4 (`docs/ch4_report_fa.tex` + rebuild PDF, and `docs/ch4_report.html`):
-- the box rule paragraphs (robust section, L1 section, load study) — replace
-  the per-case rules and the disclosures added in `373b9e1` with the rating;
-- tables `tab:robust`, `tab:case4`, `tab:l1`, `tab:load`, `tab:loads` (box
-  column), `tab:track`, `tab:rate`, `tab:plateau`, `tab:mitig`, `tab:window`,
-  `tab:oos`, `tab:claims`: add a valid-steps entry, update numbers;
-- the "negative normal force" paragraph → now scored by validity;
-- abstract, conclusion, and every number quoted from those tables;
-- `Chapter4/Analysis/ch4_doc_figures.m`: repin the result stamps, redraw
-  figures; `docs/CH4_UNCERTAINTY.md` §5a.
-Chapter 3 (`docs/ch3_report_fa.tex`, `docs/ch3_report.html`): the controller
-table `tab:ctrl` from `Results/reruns/ch3/table.log`, with valid steps.
-
 ## Conventions that bite
 
 - **MATLAB**: never run two `-batch` sessions at once (they hang). On the Mac,
   `-batch` aborts intermittently in libcurl — retry; long jobs checkpoint.
-  stdout is buffered, so long runs log to a file.
-- **Persian PDFs**: build with `latexmk -xelatex <file>.tex` in `docs/`. Do not
-  use `\appendix` — with this xepersian preamble it loops forever; the
-  appendices number sections by hand (`\renewcommand{\thesection}{پ}`). If a
-  build is killed, delete the `.aux` and `.out` before rebuilding.
+  stdout is buffered, so long runs log to a file. `diary` **appends**: delete
+  the log first or a rerun doubles every count read back from it.
+- **Persian PDFs**: build with `latexmk -f -xelatex <file>.tex` in `docs/`.
+  **The `-f` is required**: the xepersian preamble raises real font errors
+  ("B Nazanin" lacks U+066A/U+066B) and without `-f` latexmk discards the build
+  and writes no PDF at all. It exits **12** even on a good build, so check the
+  page count and `Latex failed to resolve` in the log, not the exit code
+  (2026-09-18: ch3 10 pages, ch4 13, ch5 10, zero unresolved). Do not use
+  `\appendix` — with this preamble it loops forever; the appendices number
+  sections by hand (`\renewcommand{\thesection}{پ}`). If a build is killed,
+  delete the `.aux` and `.out` before rebuilding.
 - **Figures** are drawn at the width the report prints them, text ≥ 9 pt
   (`ch3_doc_figures`, `ch4_doc_figures`, `ch5_doc_figures`).
 - **Commits** end with a `Co-Authored-By` line; keep another session's

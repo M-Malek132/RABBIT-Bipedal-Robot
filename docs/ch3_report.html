@@ -356,7 +356,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
     <div class="meta">
       <div><b>Implementation</b><span>Chapter3/ &#8212; 64 files</span></div>
       <div><b>Reference gait</b><span>ch3_gait_posture_195</span></div>
-      <div><b>Test suite</b><span>79 checks, 1 failure, 5.9 s</span></div>
+      <div><b>Test suite</b><span>83 checks, 1 failure, 5.3 s</span></div>
       <div><b>Robot</b><span>RABBIT, 74 kg, point feet</span></div>
     </div>
   </div>
@@ -1102,7 +1102,7 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
     </div>
 
     <div class="plate">
-      <div class="plate-head"><span>Full suite &#8212; 79 checks, 1 failure, 5.9 s</span><span class="tag">MATLAB R2021b · run 2026-09-16 · today's model</span></div>
+      <div class="plate-head"><span>Full suite &#8212; 83 checks, 1 failure, 5.3 s</span><span class="tag">MATLAB R2023b · run 2026-09-18 · today's model</span></div>
       <div class="tscroll">
         <table>
           <thead><tr><th>Suite</th><th class="num">Checks</th><th class="wl">What it pins down</th><th>Result</th></tr></thead>
@@ -1112,7 +1112,7 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
             <tr><td class="name">ch3_test_vc</td><td class="num">12</td><td class="wl">Bézier derivatives, the Bézier/B-spline equivalence, and <code>ÿ</code> against the true flow</td><td><span class="pill safe">pass</span></td></tr>
             <tr><td class="name">ch3_test_control</td><td class="num">13</td><td class="wl">CARE and Lyapunov residuals, the closed form against <code>quadprog</code>, each law against its own certificate</td><td><span class="pill safe">pass</span></td></tr>
             <tr><td class="name">ch3_test_collocation</td><td class="num">4</td><td class="wl">pack/unpack, seed quality, degrees of freedom, and the Hermite–Simpson order</td><td><span class="pill warn">1 fail: order</span></td></tr>
-            <tr><td class="name">ch3_test_simulation</td><td class="num">7</td><td class="wl">the zero-order hold against the continuous rollout, first order in the period; the box under the constrained QP</td><td><span class="pill safe">pass</span></td></tr>
+            <tr><td class="name">ch3_test_simulation</td><td class="num">11</td><td class="wl">the zero-order hold against the continuous rollout, first order in the period; the box under the constrained QP</td><td><span class="pill safe">pass</span></td></tr>
             <tr><td class="name">ch3_test_hzd</td><td class="num">17</td><td class="wl">the reduction to scalar zero dynamics, the conserved energy, and &#8212; once the reference is confirmed to be an orbit &#8212; δ² against ρ</td><td><span class="pill safe">pass</span></td></tr>
           </tbody>
         </table>
@@ -1193,7 +1193,7 @@ out = ch3_main;</pre>
             <tr><td class="name">controller comparison</td><td class="wl">three laws at 1 kHz, the constrained QP at three boxes, step by step</td><td><span class="pill safe">re-run 2026-09-16</span></td></tr>
             <tr><td class="name">defect-order study</td><td class="wl">seed rollouts at six meshes for three bases</td><td><span class="pill safe">re-run 2026-09-16</span></td></tr>
             <tr><td class="name">saved gaits and ladders</td><td class="wl">every gait file in the two tables, re-evaluated against today's dynamics</td><td><span class="pill safe">re-run 2026-09-16</span></td></tr>
-            <tr><td class="name">ch3_test_all</td><td class="wl">79 checks, and the unit-level identities quoted in §3.1–§3.5</td><td><span class="pill safe">re-run 2026-09-16</span></td></tr>
+            <tr><td class="name">ch3_test_all</td><td class="wl">83 checks, and the unit-level identities quoted in §3.1–§3.5</td><td><span class="pill safe">re-run 2026-09-18</span></td></tr>
             <tr><td class="name">Chapter3/README.md, docs/CH3.md</td><td class="wl">design rationale only: why the transcription, the gates and the phase variable are built as they are. Both were brought onto today's model from this report's measurements on 2026-09-17</td><td><span class="pill neutral">quoted, no numbers</span></td></tr>
           </tbody>
         </table>
