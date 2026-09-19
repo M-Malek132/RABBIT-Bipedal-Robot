@@ -979,25 +979,29 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
     </div>
 
     <div class="plate">
-      <div class="plate-head"><span>Controllers on posture_195 at 1 kHz</span><span class="tag">max‖η‖ per step · peak |u| · slack δ</span></div>
+      <div class="plate-head"><span>Controllers on posture_195 at 1 kHz</span><span class="tag">max‖η‖ per step · peak |u| · valid steps (Fz &gt; 0, |Fx|/Fz ≤ 0.4)</span></div>
       <div class="tscroll">
         <table>
-          <thead><tr><th>Controller</th><th class="num">box</th><th class="num">steps</th><th class="num"><span class="nt">max‖η‖</span>, step by step</th><th class="num">peak <span class="nt">|u|</span></th><th class="wl">What happens</th></tr></thead>
+          <thead><tr><th>Controller</th><th class="num">box</th><th class="num">steps</th><th class="num">valid</th><th class="num"><span class="nt">max‖η‖</span>, step by step</th><th class="num">peak <span class="nt">|u|</span></th><th class="wl">What happens</th></tr></thead>
           <tbody>
-            <tr><td class="name"><code>iolin_pd</code></td><td class="num">not told</td><td class="num">4 of 4</td><td class="num">0.107, 0.215, 0.214, 0.213</td><td class="num">195.2</td><td class="wl">walks, settling on its own orbit; exceeds a 117&nbsp;Nm box by 78&nbsp;Nm</td></tr>
-            <tr><td class="name"><code>clfqp</code></td><td class="num">not told</td><td class="num">falls in 3</td><td class="num">0.228, 2.44, fall</td><td class="num">283.5 in step 2</td><td class="wl">the error grows tenfold in step 2; the third step ends 0.42&nbsp;m behind its start</td></tr>
-            <tr><td class="name"><code>clfqp_con</code></td><td class="num">117 (60%)</td><td class="num">falls in 2</td><td class="num">3.31, fall</td><td class="num">117.0</td><td class="wl">holds the box exactly; δ reaches 199 in step 1</td></tr>
-            <tr><td class="name"><code>clfqp_con</code></td><td class="num">156 (80%)</td><td class="num">falls in 2</td><td class="num">1.60, fall</td><td class="num">156.0</td><td class="wl">holds the box; step 1 overshoots to 0.66&nbsp;m</td></tr>
-            <tr class="hl"><td class="name"><code>clfqp_con</code></td><td class="num">195 (100%)</td><td class="num">falls in 4</td><td class="num">0.227, 2.41, 143, fall</td><td class="num">195.0</td><td class="wl">tracks the unconstrained law until the box binds; step 3 needs δ = 4.8×10⁵ and 94 QP fallbacks</td></tr>
+            <tr><td class="name"><code>iolin_pd</code></td><td class="num">not told</td><td class="num">4 of 4</td><td class="num">4</td><td class="num">0.107, 0.215, 0.214, 0.213</td><td class="num">195.2</td><td class="wl">walks, settling on its own orbit; the only law valid throughout, μ ≤ 0.25</td></tr>
+            <tr><td class="name"><code>clfqp</code></td><td class="num">not told</td><td class="num">falls in 3</td><td class="num">1</td><td class="num">0.228, 2.44, fall</td><td class="num">283.5 in step 2</td><td class="wl">slips in step 2 (μ 25, min Fz −883&nbsp;N) long before it falls in step 3</td></tr>
+            <tr><td class="name"><code>clfqp_con</code></td><td class="num">117 (60%)</td><td class="num">falls in 2</td><td class="num"><b>0</b></td><td class="num">3.31, fall</td><td class="num">117.0</td><td class="wl">holds the box exactly; δ reaches 199 in step 1, and it slips inside that first step</td></tr>
+            <tr><td class="name"><code>clfqp_con</code></td><td class="num">156 (80%)</td><td class="num">falls in 2</td><td class="num"><b>0</b></td><td class="num">0.859, fall</td><td class="num">156.0</td><td class="wl">holds the box; step 1 overshoots to 0.64&nbsp;m and slips within it</td></tr>
+            <tr class="hl"><td class="name"><code>clfqp_con</code></td><td class="num">195 (100%)</td><td class="num">falls in 4</td><td class="num">1</td><td class="num">0.227, 2.41, 143, fall</td><td class="num">195.0</td><td class="wl">tracks the unconstrained law until the box binds; slips in step 2, then step 3 needs δ = 4.8×10⁵ and 93 QP fallbacks</td></tr>
           </tbody>
         </table>
       </div>
       <div class="plate-note">
         Steps are capped at 1&nbsp;s of robot time; the gait's own step is 0.273&nbsp;s. The Chapter&nbsp;3
         simulator has no fall detection of its own &#8212; a guard crossing ends a step even when the robot
-        is on the ground &#8212; which is why the fall criterion is applied here. With the default 3&nbsp;s step
-        cap, the same experiment was still inside the unconstrained QP's run after 40&nbsp;minutes of wall
-        clock.
+        is on the ground &#8212; which is why the fall criterion is applied here. It also pins the stance
+        foot, modelling neither lift-off nor slip, so the <b>valid</b> column scores each run against the
+        contact it assumes: the steps completed before the first sample with Fz ≤ 0 or |Fx|/Fz &gt; 0.4.
+        By that measure only PD walks the whole experiment; both CLF-QP forms slip within a step or two,
+        so "falls in step 3" flatters the unconstrained law. Rerunning the table at ε = 0.20, the value
+        Chapter&nbsp;4 adopts, delays the falls by a step (3, 1, 2, 4) but leaves every valid count
+        unchanged.
       </div>
     </div>
 

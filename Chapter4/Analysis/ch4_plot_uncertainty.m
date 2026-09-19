@@ -53,7 +53,7 @@ scales = unique([C.mass_scale], 'stable');
 nC = numel(names); nS = numel(scales);
 
 if nargin < 4 || isempty(case_names)
-    case_names = arrayfun(@roman, 1:nS, 'UniformOutput', false);
+    case_names = arrayfun(@case_of_scale, scales, 'UniformOutput', false);
 elseif numel(case_names) ~= nS
     error('ch4_plot_uncertainty:caseNames', ...
           'case_names has %d entries for a sweep over %d scales.', ...
@@ -347,4 +347,22 @@ end
 function s = roman(k)
 r = {'I','II','III','IV','V','VI'};
 if k <= numel(r), s = r{k}; else, s = num2str(k); end
+end
+
+function s = case_of_scale(s_mass)
+%CASE_OF_SCALE  The chapter's case numeral for a mass scale.
+%
+% NUMBER THE PANEL BY ITS PERTURBATION, NOT BY ITS POSITION. Section 4.1.4
+% numbers the scales I = 1, II = 1.5, III = 0.7, IV = 3, but the two presets
+% sweep them in different orders -- 'robust' runs 1, 1.5, 0.7 and 'l1' runs
+% 1, 0.7, 1.5 -- so numbering by position labelled the L1 panels II and III in
+% the reverse of the robust table, and the same mass scale carried two
+% different numerals across the report's figures.
+switch round(100 * s_mass)
+    case 100, s = 'I';
+    case 150, s = 'II';
+    case  70, s = 'III';
+    case 300, s = 'IV';
+    otherwise, s = sprintf('%.2g', s_mass);
+end
 end
