@@ -58,7 +58,7 @@ q.cbf.problem = 'stones';
 q.stone = ch6_resolve_stone(q.stones, 0.05, 1.20);   % a window nothing can bind
 clf = ch3_res_clf(q);
 err = 0;  n_slack = 0;
-for i = 1:40
+for i = 1:200     % most sampled states bind SOME row; 40 found only one that did not
     x = sample_state();
     alpha = 0.2*randn(q.ny, q.n_ctrl);
 
@@ -73,14 +73,22 @@ for i = 1:40
     bar_slack = min(arrayfun(@(b) ch6_cbf_row(b, q).b - ...
                                   ch6_cbf_row(b, q).A * u_pd, B));
 
+    % The contact rows of (6.25) count too. On the 74 kg model a sampled state
+    % often needs more normal force than u_pd delivers, and there the QP is
+    % SUPPOSED to leave PD -- the first version of this check skipped them and
+    % failed a correct controller for it.
+    lam = info.aux.lam_drift + info.aux.lam_in * u_pd;
+    contact_slack = min([lam(2) - q.limits.Fz_min, ...
+                         q.limits.mu_s*lam(2) - abs(lam(1))]);
+
     if clf_slack_at_pd > 1e-6 && bar_slack > 1e-6 && ...
-            max(abs(u_pd)) < q.limits.u_max
+            contact_slack > 1e-6 && max(abs(u_pd)) < q.limits.u_max
         n_slack = n_slack + 1;
         u_qp = ch6_control(0, x, alpha, q);
         err  = max(err, norm(u_qp - u_pd) / max(1, norm(u_pd)));
     end
 end
-ok = n_slack > 0 && err < 1e-6;
+ok = n_slack >= 3 && err < 1e-6;
 fprintf('  [%s] %-42s rel diff %.2e over %d fully slack states\n', tf(ok), ...
         'reference pd, no row binding => u == u_PD', err, n_slack);
 pass = pass && ok;

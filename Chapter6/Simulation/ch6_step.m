@@ -215,7 +215,8 @@ if isempty(L.h)
 end
 for j = 1:nb
     L.h(j, i)          = ci.B(j).g;
-    L.h_cbf(j, i)      = p.cbf.gamma_b * ci.B(j).g + ci.B(j).gdot;
+    row                = ch6_cbf_row(ci.B(j), p);   % per-barrier poles
+    L.h_cbf(j, i)      = row.h_cbf;
     L.margin(j, i)     = ci.qp.margin(j);
     L.cbf_active(j, i) = ci.qp.cbf_active(j);
 end

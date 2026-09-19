@@ -130,8 +130,9 @@ p.control_dt = 1e-3;
 p.cbf = struct();
 p.cbf.problem = 'stones';       % 'stones' | 'obstacle' | 'none'
 p.cbf.form    = 'exponential';  % 'reciprocal' (6.1) | 'exponential' (6.2/6.4)
-p.cbf.gamma_b = 40;             % gamma_b in (6.1); the FIRST ECBF pole
-p.cbf.gamma   = 40;             % gamma2 (exponential) or gamma (reciprocal)
+p.cbf.gamma_b = 30;             % gamma_b in (6.1); the FIRST ECBF pole
+p.cbf.gamma   = 30;             % gamma2 (exponential) or gamma (reciprocal)
+p.cbf.poles_by_label = {'ls >= lmin', [60 60]};  % {label, [gamma_b gamma]; ...}
 
 % ------------------------------------------------- what the QP's cost pulls to
 % (6.26) is written as min ||mu||^2 -- the MINIMUM-NORM control that certifies
@@ -253,29 +254,32 @@ p.stone = ch6_resolve_stone(p.stones, p.stones.l_min, p.stones.l_max);
 % obstacle at (l_m, h_m) -- the green circle of Fig. 6.1 -- so unlike the
 % ceiling it only costs head height where the obstacle actually is.
 %
-% THE NUMBERS BELOW ARE MEASURED OFF THE REFERENCE GAIT, not chosen. Running it
-% with no obstacle, the torso top travels
+% THE NUMBERS BELOW ARE MEASURED OFF THE NOMINAL GAIT (posture_195), not chosen.
+% Running it with no obstacle, the torso top travels
 %
-%       h_H in [1.265, 1.285] m       l_H in [-0.659, -0.305] m
+%       h_H in [1.666, 1.691] m       l_H in [-0.112, 0.315] m
 %
-% both relative to the stance foot. Two things follow, and neither is guessable:
+% relative to the stance foot. It starts the step at 1.677 m, dips to 1.666 m
+% at t = 0.05 s and peaks at 1.691 m at l_H = 0.22 m. Two things follow:
 %
-%   * A ceiling has to sit just under 1.265 m to be a constraint at all, and not
-%     much under it to be a satisfiable one. At h_r = 1.05 -- a plausible-looking
-%     round number -- the head starts 22 cm inside the obstacle and the QP is
-%     infeasible from the first sample; the run then reports a friction
-%     violation, which is true and completely misleading about the cause.
+%   * A ceiling must sit ABOVE the starting 1.677 m -- below it the head begins
+%     the step inside the obstacle and g < 0 from the first sample (at h_r =
+%     1.65 the run "completes" with g_min = -0.027, i.e. through the ceiling) --
+%     and below the 1.691 m peak to be a constraint at all. That is a 1.4 cm
+%     window; 1.685 m is in it.
 %
-%   * The head is BEHIND the stance foot for the whole step. The reference gait
-%     walks with the torso pitched back about 50 degrees (the repo README
-%     documents this), so 0.75 m of torso puts the top 0.3-0.66 m behind the
-%     hip. An obstacle placed at a positive l_m is one the head never reaches,
-%     and the 'circle' constraint would sit inactive while appearing to work.
+%   * The torso leans FORWARD on this gait, so the head is behind the stance
+%     foot only for the first 70 ms and ahead of it after. The circular obstacle
+%     is put where the head peaks, l_m = 0.21 m. MEASURED: resting it at
+%     h_m = 1.685 m walks 3/3 steps with g_min = +0.005; lowering it 5 mm to
+%     1.680 m falls in step 2, and at 1.675 m in step 1. The same momentum
+%     argument as the stepping stones (p.cbf) applies to the head: keeping it
+%     down costs forward speed this gait does not have to spare.
 p.obstacle = struct();
 p.obstacle.type = 'ceiling';    % 'ceiling' | 'circle'
-p.obstacle.h_r  = 1.25;         % [m] ceiling height above the stance foot
-p.obstacle.l_m  = -0.45;        % [m] obstacle position, in the head's own path
-p.obstacle.h_m  = 1.24;         % [m] obstacle height above the stance foot
+p.obstacle.h_r  = 1.685;        % [m] ceiling height above the stance foot
+p.obstacle.l_m  = 0.21;         % [m] obstacle position, where the head peaks
+p.obstacle.h_m  = 1.685;        % [m] obstacle height above the stance foot
 p.obstacle.R1o  = 0.20;         % [m] radius of the keep-out disc, R1 in (6.4)
 
 %% -------------------------------------------- Section 6.3.2: step-width circles
@@ -340,10 +344,13 @@ p.width.w0    = 0.233;          % [m] previous step width (w0 in 6.19)
 p.lib = struct();
 p.lib.enable  = false;          % false = one nominal gait (controller II)
 p.lib.file    = '';             % '' -> Results/ch6_gait_library.mat
-p.lib.targets = 0.26 : 0.03 : 0.44;   % [m] the march, and the library
+p.lib.targets = 0.277 : 0.03 : 0.577; % [m] the march, and the library
 p.lib.iters   = 250;            % fmincon iterations per library gait
 p.lib.T_band  = 0.25;           % T within +-25% of the seed's, see ch6_lib_solve
-p.lib.N_nodes = 31;             % remesh the seed before marching
+p.lib.N_nodes = [];             % [] keeps the seed's mesh
+p.lib.cost     = 'proximal';    % 'proximal' | 'ch3', see ch6_lib_solve
+p.lib.parallel = true;          % finite-difference gradients on a pool
+p.lib.workers  = 8;             % pool size (10 cores, 16 GB here)
 
 %% ------------------------------------------------------- Table 6.1 Monte Carlo
 % The thesis runs 100 problem sets x 10 stones for each of 7 ranges and 3
@@ -399,7 +406,7 @@ p.demo_band = [0.20 0.32];      % [m] desired step lengths for the ch6_main runs
 p.limits.enable.torque   = true;
 p.limits.enable.friction = true;
 p.limits.enable.grf      = true;
-p.limits.u_max  = 300;          % [Nm]  joint torque, direct drive
+p.limits.u_max  = 250;          % [Nm]  joint torque, direct drive
 p.limits.mu_s   = 0.6;          % [-]   kf in (6.25)
 p.limits.Fz_min = 50;           % [N]   delta_N in (6.25)
 
@@ -407,6 +414,10 @@ p.limits.Fz_min = 50;           % [N]   delta_N in (6.25)
 % A stepping-stone run is many steps, and a step that never strikes must not
 % burn the whole budget before the run notices.
 p.n_steps = 10;                 % steps per stepping-stone run
+
+% Rewrite alpha_0, alpha_1 at the start of every step so the outputs start at
+% zero from wherever the previous step left the robot. See ch6_correct_alpha.
+p.post_impact_correction = true;
 
 %% -------------------------------------------------------------- overrides
 % Nested structs are addressed with dots: ch6_params('stones.l_max', 0.55).
