@@ -128,8 +128,13 @@ for r = 1:numel(runs)
                 rows(end).ran     = true;
                 rows(end).ok      = sim.ok;
                 rows(end).reason  = sim.reason;
-                rows(end).t_end   = sim.t(end);
-                rows(end).t_frac  = sim.t(end) / p.T;
+                % sim.t is the FULL preallocated grid even when the loop
+                % breaks early, so sim.t(end) is always T and says nothing
+                % about how far the run got. sim.n counts the samples that
+                % were actually logged; use that.
+                rows(end).n_samp  = sim.n;
+                rows(end).t_end   = sim.t(min(max(sim.n,1), numel(sim.t)));
+                rows(end).t_frac  = sim.n / numel(sim.t);
                 rows(end).h_min   = sim.h_min;
                 rows(end).tau_p99 = prctile(max(abs(sim.u), [], 1), 99);
                 rows(end).tau_max = max(abs(sim.u(:)));
@@ -153,6 +158,7 @@ for r = 1:numel(runs)
                 rows(end).ran    = false;
                 rows(end).ok     = false;
                 rows(end).reason = rows(end).err;
+                rows(end).n_samp = NaN;
                 rows(end).t_end  = NaN;
                 rows(end).t_frac = NaN;
                 rows(end).feas   = false;
