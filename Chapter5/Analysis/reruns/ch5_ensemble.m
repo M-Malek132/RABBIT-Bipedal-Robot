@@ -47,8 +47,15 @@ function R = pendulum_ensemble(odir)
 % equilibrium by up to 2 degrees, which is the scale of a real initial-pose
 % error and is far larger than the 5.6e-1 rad solver divergence is small.
 
-f = fullfile(odir, 'pendulum_ensemble.mat');
+f    = fullfile(odir, 'pendulum_ensemble.mat');
+ckpt = fullfile(odir, 'pendulum_ckpt.mat');
 if exist(f, 'file'), R = load_field(f, 'R'); fprintf(' already done: %s\n', f); return; end
+
+rows_done = struct([]);
+if exist(ckpt, 'file')
+    rows_done = load_field(ckpt, 'rows');
+    fprintf(' resuming from checkpoint: %d runs already done\n', numel(rows_done));
+end
 
 solvers = {'rk4', 'ode45'};
 % 1 nominal + 8 perturbed poses, deterministic.
@@ -56,7 +63,7 @@ rng(5);
 dth = [zeros(2,1), (2*pi/180) * (2*rand(2,8) - 1)];
 runs = struct('controller', {'clfqp','ecbfclfqp','ecbfclfqp'}, 'level', {[], -1.0, -0.5});
 
-rows = struct([]);
+rows = rows_done;
 for r = 1:numel(runs)
     for s = 1:numel(solvers)
         for m = 1:size(dth,2)
@@ -72,8 +79,23 @@ for r = 1:numel(runs)
             end
             p = ch5_params(args{:});
             assert(strcmp(p.integrator, solvers{s}), 'integrator was overridden');
+
+            % WALL-CLOCK BUDGET. A perturbed x0 whose trajectory diverges makes
+            % ode45 shrink its step without bound: the run never returns, while
+            % rk4 on the same member fails fast. A run that cannot finish in
+            % BUDGET seconds is recorded as skipped rather than stalling the
+            % ensemble. Completed runs here take 20-40 s, so the budget is
+            % loose enough not to truncate a healthy run.
+            budget = 180;
+            deadline = tic;
+            p.ode_opts.OutputFcn = @(t, y, flag) deadline_stop(deadline, budget);
             x0 = ch5_x0(p);
             x0(1:2) = x0(1:2) + dth(:,m);
+            if ~isempty(rows) && any(arrayfun(@(q) strcmp(q.controller, runs(r).controller) ...
+                    && isequal(q.level, runs(r).level) && strcmp(q.solver, solvers{s}) ...
+                    && q.member == m, rows))
+                continue;                % already in the checkpoint
+            end
             fprintf('  %-9s %-5s level %s  member %d ... ', runs(r).controller, ...
                     solvers{s}, mat2str(runs(r).level), m);
 
@@ -99,7 +121,15 @@ for r = 1:numel(runs)
             t0 = tic;
             try
                 sim = ch5_simulate(p, 'x0', x0);
+                % A run that ABORTS early still returns an h_min, over a
+                % truncated window. Reporting that next to a completed run's
+                % h_min would compare different experiments, so completion is
+                % recorded and the summary splits on it.
                 rows(end).ran     = true;
+                rows(end).ok      = sim.ok;
+                rows(end).reason  = sim.reason;
+                rows(end).t_end   = sim.t(end);
+                rows(end).t_frac  = sim.t(end) / p.T;
                 rows(end).h_min   = sim.h_min;
                 rows(end).tau_p99 = prctile(max(abs(sim.u), [], 1), 99);
                 rows(end).tau_max = max(abs(sim.u(:)));
@@ -108,18 +138,29 @@ for r = 1:numel(runs)
                 rows(end).th2_min = min(sim.x(2,:));
                 rows(end).feas    = all(sim.feasible);
                 rows(end).err     = '';
-                fprintf('h_min %+.4f  th2_min %+.3f  adm %d  %.0fs\n', ...
-                        sim.h_min, rows(end).th2_min, rows(end).adm_ok, toc(t0));
+                fprintf('h_min %+.4f  th2_min %+.3f  adm %d  ok %d  t %.2f/%.0f  %.0fs\n', ...
+                        sim.h_min, rows(end).th2_min, rows(end).adm_ok, ...
+                        sim.ok, sim.t(end), p.T, toc(t0));
             catch ME
+                if strcmp(ME.identifier, 'ch5_ensemble:budget') || ...
+                        contains(ME.message, 'ch5_ensemble:budget')
+                    rows(end).err = 'skipped:walltime';
+                else
+                    rows(end).err = ME.identifier;
+                end
                 [rows(end).h_min, rows(end).tau_p99, rows(end).tau_max, ...
                  rows(end).pct_act, rows(end).th1_err, rows(end).th2_min] = deal(NaN);
-                rows(end).ran  = false;
-                rows(end).feas = false;
-                rows(end).err  = ME.identifier;
+                rows(end).ran    = false;
+                rows(end).ok     = false;
+                rows(end).reason = rows(end).err;
+                rows(end).t_end  = NaN;
+                rows(end).t_frac = NaN;
+                rows(end).feas   = false;
                 fprintf('FAILED (adm %d, slack %+.3g): %s\n', ...
                         rows(end).adm_ok, rows(end).adm_slack, ME.message(1:min(60,end)));
             end
             rows(end).cpu = toc(t0);
+            save(ckpt, 'rows');          % checkpoint: a kill costs one run
         end
     end
 end
@@ -142,9 +183,13 @@ for k = 1:numel(u)
     R(k).name = u{k};
     R(k).n    = numel(sel);
     R(k).n_ran        = sum([sel.ran]);
+    R(k).n_complete   = sum([sel.ok] == 1);
+    R(k).t_frac_lo    = min([sel.t_frac]);
     R(k).n_admissible = sum([sel.adm_ok] == 1);
     R(k).adm_slack_lo = min([sel.adm_slack]);
-    ran = sel([sel.ran]);
+    % Metrics are summarized over runs that COMPLETED; an aborted run's
+    % h_min describes a shorter experiment and is counted, not averaged in.
+    ran = sel([sel.ok] == 1);
     R(k).all_feasible = ~isempty(ran) && all([ran.feas]);
     R(k).all_safe     = ~isempty(ran) && all([ran.h_min] >= 0);
     for j = 1:numel(flds)
@@ -159,11 +204,11 @@ end
 function print_summary(R)
 fprintf('\n--- pendulum ensemble (ranges over solvers x initial poses) ---\n');
 for k = 1:numel(R)
-    fprintf(['%-20s n=%2d ran=%2d adm=%2d (min slack %+.3g)\n' ...
+    fprintf(['%-20s n=%2d ran=%2d complete=%2d adm=%2d (min slack %+.3g)\n' ...
              '    h_min [%+.4f, %+.4f]  p99|tau| [%.1f, %.1f]  max|tau| [%.1f, %.1f]\n' ...
              '    %%act [%.1f, %.1f]  |th1(T)-pi| [%.4f, %.4f]  min th2 [%+.3f, %+.3f]' ...
              '  safe=%d feas=%d\n'], ...
-        R(k).name, R(k).n, R(k).n_ran, R(k).n_admissible, R(k).adm_slack_lo, ...
+        R(k).name, R(k).n, R(k).n_ran, R(k).n_complete, R(k).n_admissible, R(k).adm_slack_lo, ...
         R(k).h_min_lo, R(k).h_min_hi, ...
         R(k).tau_p99_lo, R(k).tau_p99_hi, R(k).tau_max_lo, R(k).tau_max_hi, ...
         R(k).pct_act_lo, R(k).pct_act_hi, R(k).th1_err_lo, R(k).th1_err_hi, ...
@@ -217,4 +262,14 @@ end
 % ---------------------------------------------------------------------------
 function v = load_field(f, name)
 S = load(f, name); v = S.(name);
+end
+
+% ---------------------------------------------------------------------------
+function status = deadline_stop(tstart, budget)
+%DEADLINE_STOP  ode45 OutputFcn that aborts a run past its wall-clock budget.
+if toc(tstart) > budget
+    error('ch5_ensemble:budget', ...
+          'run exceeded its %g s wall-clock budget', budget);
+end
+status = 0;
 end

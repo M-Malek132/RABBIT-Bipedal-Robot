@@ -168,7 +168,11 @@ function x = advance(x, u, dt, p)
 switch lower(p.integrator)
 
     case 'ode45'
-        opts = odeset('RelTol', p.ode_opts.RelTol, 'AbsTol', p.ode_opts.AbsTol);
+        % Built from p.ode_opts so a caller can pass any other odeset field
+        % (e.g. an OutputFcn that enforces a wall-clock budget on a run that
+        % is diverging). Default p.ode_opts is RelTol/AbsTol only, so this is
+        % identical to the previous behaviour for every existing caller.
+        opts = odeset(p.ode_opts);
         [~, Z] = ode45(@(tt,zz) ch5_ode_rhs(tt, zz, u, p), [0 dt], x, opts);
         x = Z(end,:).';
 
