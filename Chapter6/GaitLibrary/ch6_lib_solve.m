@@ -81,6 +81,22 @@ if isfield(p, 'lib') && isfield(p.lib, 'T_band') && ~isempty(p.lib.T_band)
     p.T_max = min(p.T_max, T0 * (1 + p.lib.T_band));
 end
 
+% RESUME. A solve on posture_195's 61-node mesh costs about four minutes per
+% SQP iteration serially, so a session abort must not throw the iterations
+% away: p.lib.ckpt_file, when set, is written every 5 iterations and a rerun
+% starts from it instead of from z0.
+z_ref = z0;       % the neighbour this rung is measured from, before any resume
+ck_file = '';
+if isfield(p.lib, 'ckpt_file'), ck_file = p.lib.ckpt_file; end
+if ~isempty(ck_file) && exist(ck_file, 'file')
+    CK = load(ck_file, 'z', 'iteration');
+    if numel(CK.z) == numel(z0)
+        fprintf('[ch6_lib_solve] resuming from %s (iteration %d)\n', ...
+                ck_file, CK.iteration);
+        z0 = CK.z;
+    end
+end
+
 N = (numel(z0) - 1 - p.ny*p.n_ctrl) / p.nx;
 [lb, ub] = ch3_col_bounds(p, N);
 
@@ -93,11 +109,45 @@ options = optimoptions('fmincon', ...
     'ConstraintTolerance',    1e-6, ...
     'StepTolerance',          1e-10, ...
     'FiniteDifferenceType',   'central', ...
-    'ScaleProblem',           false);
+    'ScaleProblem',           false, ...
+    'UseParallel',            isfield(p.lib, 'parallel') && p.lib.parallel);
+% PARALLEL GRADIENTS. Central differences over the 879 variables of a 61-node
+% mesh are 1759 evaluations per iteration, and they are independent, so they
+% go to a pool when p.lib.parallel is set. ch3_col_eval's cache is per worker,
+% which costs nothing: the cache only ever pairs a cost with its constraints.
+if ~isempty(ck_file)
+    options = optimoptions(options, 'OutputFcn', ...
+        @(z, ov, state) save_ckpt(z, ov, state, ck_file));
+end
 
 t0 = tic;
+% ======================================================== WHICH OBJECTIVE
+% 'proximal' (default): min ||z - z_ref||^2, the gait in the family NEAREST
+% the neighbour it was marched from. 'ch3': Chapter 3's own torque cost.
+%
+% MEASURED on posture_195, why the default is not Chapter 3's cost: the seed is
+% feasible to 1e-2 but NOT a minimiser of int||u||^2 -- first-order optimality
+% 8.4e4 at iteration 0 -- so with the step length pinned and NEC1 off, SQP
+% spends its first iterations descending the cost (1.60e4 -> 1.26e4) and
+% throws feasibility away doing it: 9.9e-03 -> 1.1e+02 -> 8.4e+02 in two
+% iterations on a 1 cm rung, step norm 26, and a 3 cm rung ended three
+% iterations at L = 1.11 m with the zero-dynamics integrals stalling ode45.
+% Every iteration out there cost four to five minutes.
+%
+% (6.22) interpolates NEIGHBOURS, so the library wants gaits that differ from
+% each other only as much as the step length forces, which is what the
+% proximal cost asks for. The gaits are still Chapter 3's -- every defect,
+% periodicity row, limit and the mesh check are unchanged -- they are just not
+% re-optimised for torque. ch6_lib_build records each one's int||u||^2 anyway.
+if isfield(p.lib, 'cost') && strcmpi(p.lib.cost, 'ch3')
+    cost = @(z) ch3_col_cost(z, p);
+else
+    options = optimoptions(options, 'SpecifyObjectiveGradient', true);
+    cost = @(z) proximal(z, z_ref);
+end
+
 [z_opt, fval, exitflag] = fmincon( ...
-    @(z) ch3_col_cost(z, p), z0, [], [], [], [], lb, ub, ...
+    cost, z0, [], [], [], [], lb, ub, ...
     @(z) nonlcon(z, p, L_target), options);
 wall = toc(t0);
 
@@ -105,7 +155,8 @@ wall = toc(t0);
 [~, T, alpha] = ch3_col_unpack(z_opt, p);
 E = ch3_col_eval(z_opt, p);
 
-out = struct('fval', fval, 'exitflag', exitflag, 'alpha', alpha, ...
+out = struct('fval', fval, 'J_ch3', ch3_col_cost(z_opt, p), ...
+             'exitflag', exitflag, 'alpha', alpha, ...
              'T', T, 'L_step', E.L_step, 'speed', E.L_step / T, ...
              'L_target', L_target, ...
              'max_ceq', max(abs(ceq)), 'max_c', max(c), ...
@@ -130,4 +181,18 @@ function [c, ceq] = nonlcon(z, p, L_target)
 [c, ceq] = ch3_col_constraints(z, p);
 E = ch3_col_eval(z, p);            % cache hit on the call inside the line above
 ceq = [ceq; E.L_step - L_target];
+end
+
+function stop = save_ckpt(z, ov, state, file)
+stop = false;
+if strcmp(state, 'iter') && mod(ov.iteration, 5) == 0 && ov.iteration > 0
+    iteration = ov.iteration; %#ok<NASGU>
+    save(file, 'z', 'iteration');
+end
+end
+
+function [J, dJ] = proximal(z, z_ref)
+d  = z - z_ref;
+J  = d.' * d;
+dJ = 2 * d;
 end

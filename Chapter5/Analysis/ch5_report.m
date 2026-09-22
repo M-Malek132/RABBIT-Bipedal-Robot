@@ -122,16 +122,31 @@ end
 function s = safe_tag(sim)
 %SAFE_TAG  Distinguish "not enforced" from "enforced, sampled".
 %
-% The threshold is the control period, not an arbitrary epsilon: an excursion
-% that scales with dt is the discretization, and one that does not is the
-% controller.
+% A sampled excursion is bounded by how far h can travel in one control
+% period, so the threshold is c*dt*max|hdot| -- dimensionally a length, and
+% measured from this run's own h history. The old threshold, 10*control_dt,
+% compared metres with seconds and silently assumed |hdot| <~ 10 m/s.
 if sim.h_min >= 0
     s = 'SAFE';
-elseif abs(sim.h_min) <= 10 * sim.p.control_dt
+elseif abs(sim.h_min) <= sampled_bound(sim)
     s = 'safe~O(dt)';
 else
     s = 'VIOLATED';
 end
+end
+
+function b = sampled_bound(sim)
+%SAMPLED_BOUND  c * dt * max|hdot|, with hdot from the recorded h history.
+c = 10;
+h = sim.h(:); t = sim.t(:);
+k = ~isnan(h);
+h = h(k); t = t(k);
+if numel(h) < 2
+    b = 0; return;
+end
+hdot_max = max(abs(diff(h) ./ diff(t)));
+if ~isfinite(hdot_max), b = 0; return; end
+b = c * sim.p.control_dt * hdot_max;
 end
 
 function s = fmt(v)

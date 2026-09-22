@@ -63,7 +63,8 @@ function row = ch6_cbf_row(B, p)
 %
 % Inputs
 %   B : one element of the array from ch6_barrier / ch6_bar_lift
-%   p : parameter struct (uses p.cbf)
+%   p : parameter struct (uses p.cbf; p.cbf.poles_by_label overrides the
+%       poles for the barrier whose label matches)
 %
 % Output
 %   row : struct
@@ -79,6 +80,18 @@ function row = ch6_cbf_row(B, p)
 
 gb = p.cbf.gamma_b;
 gm = p.cbf.gamma;
+
+% Per-barrier poles. The two footstep rows fail in opposite directions (see
+% ch6_params, p.cbf.poles_by_label), so one pair for both is a compromise
+% neither row wants.
+if isfield(p.cbf, 'poles_by_label')
+    for i = 1:size(p.cbf.poles_by_label, 1)
+        if strcmp(p.cbf.poles_by_label{i, 1}, B.label)
+            gb = p.cbf.poles_by_label{i, 2}(1);
+            gm = p.cbf.poles_by_label{i, 2}(2);
+        end
+    end
+end
 
 h_cbf = gb * B.g + B.gdot;                 % (6.1)
 

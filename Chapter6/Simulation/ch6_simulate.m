@@ -107,9 +107,17 @@ for k = 1:n
         alpha_k = gait;
     end
 
+    % Start this step's virtual constraints where the last step actually left
+    % the robot. See ch6_correct_alpha for why a single gait cannot do without.
+    corr = struct('applied', false);
+    if ~isfield(p, 'post_impact_correction') || p.post_impact_correction
+        [alpha_k, corr] = ch6_correct_alpha(x, alpha_k, p);
+    end
+
     s = ch6_step(x, alpha_k, pk);
     s.stone = pk.stone;
     s.alpha = alpha_k;
+    s.corrected = corr.applied;
     s.k     = k;
 
     steps{end+1} = s;                       %#ok<AGROW>

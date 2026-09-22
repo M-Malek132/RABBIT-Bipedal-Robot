@@ -18,8 +18,7 @@ function pass = ch6_test_sim()
 fprintf('\n=== ch6_test_sim ===\n');
 pass = true;
 
-[x0, alpha] = reference_gait();
-p = ch6_params();
+[x0, alpha, p, meta] = ch6_load_gait();
 p.limits.enable.torque   = true;  p.limits.u_max  = 300;
 p.limits.enable.friction = true;  p.limits.mu_s   = 0.6;
 p.limits.enable.grf      = true;  p.limits.Fz_min = 50;
@@ -27,7 +26,7 @@ p.limits.enable.grf      = true;  p.limits.Fz_min = 50;
 %% ------------------------------------- 1. the baseline reproduces the gait
 q = p;  q.controller = 'iolin_pd';  q.cbf.problem = 'none';
 s0 = ch6_step(x0, alpha, q);
-ok = s0.ok && abs(s0.T - 0.3009) < 5e-3 && abs(s0.l_s - 0.3533) < 5e-3;
+ok = s0.ok && abs(s0.T - meta.T) < 5e-3 && abs(s0.l_s - meta.L_step) < 5e-3;
 fprintf('  [%s] %-42s T = %.4f s, l_s = %.4f m\n', tf(ok), ...
         'no-CBF baseline == reference gait', s0.T, s0.l_s);
 pass = pass && ok;
@@ -43,8 +42,10 @@ pass = pass && ok;
 % A window that the nominal step misses. The baseline must miss it (it has no
 % mechanism not to); the CBF run must land somewhere different. This is the
 % weakest form of "the barrier does something" that cannot be satisfied by
-% accident.
-win = [0.25 0.30];
+% accident. The window is placed relative to the gait's own step, 5-10 cm short
+% of it, so the check follows the nominal gait rather than a number typed for
+% an earlier one.
+win = meta.L_step - [0.10 0.05];
 qb = p;  qb.controller = 'iolin_pd';  qb.cbf.problem = 'none';
 qc = p;  qc.controller = 'cbf_clf_qp';
 qb.stone = ch6_resolve_stone(p.stones, win(1), win(2));
@@ -63,13 +64,14 @@ pass = pass && ok;
 qm = p;
 qm.stones.motion  = 'linear';
 qm.stones.v_stone = 0.20;                    % 20 cm/s drift
-qm.stone = ch6_resolve_stone(qm.stones, 0.30, 0.40);
+lm0 = meta.L_step - 0.08;
+qm.stone = ch6_resolve_stone(qm.stones, lm0, lm0 + 0.10);
 sm = ch6_step(x0, alpha, qm);
-expect = 0.30 + 0.20*sm.T;
+expect = lm0 + 0.20*sm.T;
 ok = abs(sm.stone_end.l_min - expect) < 1e-9 && ...
-     abs(sm.stone_end.l_min - 0.30) > 1e-3;
+     abs(sm.stone_end.l_min - lm0) > 1e-3;
 fprintf('  [%s] %-42s l_min: %.4f at t=0 -> %.4f at T=%.3f\n', tf(ok), ...
-        'moving window read at the impact time', 0.30, sm.stone_end.l_min, sm.T);
+        'moving window read at the impact time', lm0, sm.stone_end.l_min, sm.T);
 pass = pass && ok;
 
 %% ------------------------------------- 5. the zero-order hold is consistent
@@ -82,7 +84,8 @@ pass = pass && ok;
 % and the impact TIME itself moves with dt, so comparing x_end measures the
 % state at three different instants of a trajectory travelling at metres per
 % second -- an O(1) difference that says nothing about the integrator. The
-% comparison here is at t* = 0.15 s, mid-swing and well before any guard.
+% comparison here is at t* = 0.15 s, mid-swing and well before any guard
+% (the nominal step lasts 0.273 s).
 t_star = 0.15;
 d1 = state_at(qc, x0, alpha, 2e-3, t_star);
 d2 = state_at(qc, x0, alpha, 1e-3, t_star);
@@ -98,7 +101,7 @@ pass = pass && ok;
 qf = p;
 qf.limits.u_max = 0.5;                       % no authority at all
 qf.limits.enable.torque = true;
-terr = ch6_terrain(4, [0.30 0.32], 0.05, 1);
+terr = ch6_terrain(4, meta.L_step - [0.02 0], 0.05, 1);
 sf = ch6_simulate(x0, alpha, qf, terr);
 ok = sf.failed && ~isempty(sf.reason) && ~strcmp(sf.reason, 'completed');
 fprintf('  [%s] %-42s "%s"\n', tf(ok), ...
@@ -122,17 +125,6 @@ end
 % so linear interpolation between neighbours is well inside the sampling error
 % being measured.
 xt = interp1(s.t.', s.x.', t_star, 'linear').';
-end
-
-function [x0, alpha] = reference_gait()
-persistent X A
-if isempty(X)
-    root = fileparts(fileparts(fileparts(mfilename('fullpath'))));
-    S = load(fullfile(root, 'Results', 'ch3_reference_gait.mat'));
-    [Xn, ~, A] = ch3_col_unpack(S.z_opt, S.p);
-    X = Xn(:,1);
-end
-x0 = X;  alpha = A;
 end
 
 function s = trunc(s, n)

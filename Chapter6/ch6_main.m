@@ -47,6 +47,9 @@ for k = 1:2:numel(varargin), opt.(varargin{k}) = varargin{k+1}; end
 p = opt.params;
 if isempty(p), p = ch6_params(); end
 
+% The gait's parametrization is merged into p here, before anything uses it.
+[x0, alpha, p, gait] = ch6_load_gait('', p);
+
 root = fileparts(fileparts(mfilename('fullpath')));
 stamp = datestr(now, 'yyyy-mm-dd_HH-MM-SS'); %#ok<TNOW1,DATST>
 dir_out = fullfile(root, 'Results', ['ch6_' stamp]);
@@ -54,17 +57,17 @@ if opt.plot || opt.save
     if ~exist(dir_out, 'dir'), mkdir(dir_out); end
 end
 
-[x0, alpha] = load_reference(root);
 
 fprintf('\n=============== CHAPTER 6 ===============\n');
-fprintf(' gait: L_step %.4f m, controller %s, barrier %s\n', ...
-        0.3533, p.controller, p.cbf.form);
+fprintf(' gait: %s\n       L_step %.4f m, T %.4f s, %.3f m/s, peak %.0f Nm\n', ...
+        gait.file, gait.L_step, gait.T, gait.v_avg, gait.u_peak);
+fprintf(' controller %s, barrier %s\n', p.controller, p.cbf.form);
 fprintf(' poles (%.4g, %.4g), torque box %s at %.0f Nm\n', ...
         p.cbf.gamma_b, p.cbf.gamma, onoff(p.limits.enable.torque), ...
         p.limits.u_max);
 fprintf(' output: %s\n', dir_out);
 
-out = struct('p', p, 'dir', dir_out);
+out = struct('p', p, 'dir', dir_out, 'gait', rmfield(gait, {'source_p', 'z'}));
 want = @(s) any(strcmpi(s, opt.studies));
 
 %% ================================================== 6.1.2 overhead obstacles
@@ -195,20 +198,6 @@ fprintf('=========================================\n');
 end
 
 % ---------------------------------------------------------------------------
-function [x0, alpha] = load_reference(root)
-%LOAD_REFERENCE  The Chapter-3 reference gait: periodic, mesh-verified, stable.
-f = fullfile(root, 'Results', 'ch3_reference_gait.mat');
-if ~exist(f, 'file')
-    error('ch6_main:noGait', ...
-          ['Chapter 6 runs on the Chapter-3 reference gait and it is not at\n' ...
-           '  %s\n' ...
-           'Solve one with ch3_main, or point ch6_main at another result.'], f);
-end
-S = load(f);
-[X, ~, alpha] = ch3_col_unpack(S.z_opt, S.p);
-x0 = X(:,1);
-end
-
 function s = onoff(b)
 if b, s = 'on'; else, s = 'off'; end
 end

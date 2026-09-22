@@ -36,14 +36,26 @@ function lib = ch6_lib_build(p, seed_file, out_file)
 % costs.
 %
 % ------------------------------------------------------------------- the seed
-% seed_file must contain a converged Chapter-3 result (`z_opt` and `p`). The
-% repo's reference gait, Results/ch3_reference_gait.mat, is the default: it is
-% periodic, mesh-verified and stable, and its own step length (0.353 m) sits
-% inside the default target grid so the march runs both ways.
+% seed_file must contain a converged Chapter-3 result (z or z_opt, and p). The
+% default is Results/ch3_gait_posture_195.mat, the nominal gait of Sections
+% 6.1-6.3, so the library is a family of exactly that gait and controller II of
+% Table 6.1 is its member at the seed's own step length (0.427 m).
+%
+% THE SEED'S OWN DESIGN PROBLEM IS SOLVED, NOT CHAPTER 6'S. Every library gait
+% is the seed's collocation problem -- its mesh, basis, torque box, torso band,
+% hip-height band, friction coefficient -- with one equality added, the step
+% length. Solving it under ch6_params' limits instead (300 Nm, mu 0.6, the
+% Chapter-3 default hip band) would make the library a family of some OTHER
+% gait that happens to pass through the seed's step length, and (6.22)
+% interpolates between neighbours. Chapter 6's knobs govern the controller that
+% TRACKS the library; they never enter its design.
+%
+% The seed is re-verified as an orbit of today's dynamics first (ch6_load_gait),
+% because a stale seed marches a family of stale gaits.
 %
 % Inputs
 %   p         : parameter struct (uses p.lib.targets, p.lib.iters)
-%   seed_file : .mat with z_opt (default Results/ch3_reference_gait.mat)
+%   seed_file : .mat with z/z_opt and p (default Results/ch3_gait_posture_195.mat)
 %   out_file  : where to write (default Results/ch6_gait_library.mat)
 %
 % Output
@@ -61,34 +73,18 @@ root = fileparts(fileparts(mfilename('fullpath')));   % .../Chapter6
 root = fileparts(root);                               % repo root
 
 if nargin < 2 || isempty(seed_file)
-    seed_file = fullfile(root, 'Results', 'ch3_reference_gait.mat');
+    seed_file = fullfile(root, 'Results', 'ch3_gait_posture_195.mat');
 end
 if nargin < 3 || isempty(out_file)
     out_file = fullfile(root, 'Results', 'ch6_gait_library.mat');
 end
 
-S = load(seed_file);
-if ~isfield(S, 'z_opt')
-    error('ch6_lib_build:seed', ...
-          'Seed file "%s" has no z_opt (fields: %s).', ...
-          seed_file, strjoin(fieldnames(S).', ', '));
-end
-z_seed = S.z_opt;
+% Refuses a seed that is no longer an orbit of the dynamics on the path.
+[~, ~, ~, seed] = ch6_load_gait(seed_file, p);
+z_seed = seed.z;
 
-% The seed's own parameters define the MESH, and the mesh is baked into the
-% length of z. Take p's controller/limit settings but the seed's transcription,
-% or the warm start is a vector of the wrong size.
-p_solve = p;
-if isfield(S, 'p')
-    % Copy only the fields the seed actually carries. A result saved before a
-    % parameter existed is still a perfectly good warm start, and the alternative
-    % -- assuming the field list -- makes every older .mat in Results/ unusable
-    % as a seed for a reason that has nothing to do with the gait in it.
-    for f = {'N_nodes', 'bez_deg', 'n_ctrl', 'qt_range'}
-        if isfield(S.p, f{1}), p_solve.(f{1}) = S.p.(f{1}); end
-    end
-end
-p_solve = ch3_upgrade_params(p_solve);
+p_solve = seed.source_p;          % already through ch3_upgrade_params
+p_solve.lib = p.lib;
 p_solve.controller = 'ff';        % the gait is DESIGNED on Z; see ch3_main
 
 E0 = ch3_col_eval(z_seed, p_solve);
@@ -133,13 +129,36 @@ dev_all   = nan(1, m);
 ok        = false(1, m);
 dropped   = {};
 
+% CHECKPOINTS. Each solve takes minutes and MATLAB -batch sessions on this
+% machine abort at random (see the repo notes), so every finished gait is saved
+% to its own file under <out_file>_parts/ and a rerun resumes from those: a
+% gait already on disk is loaded instead of re-solved, and its z still seeds
+% the next rung of the march. Delete the folder to rebuild from scratch.
+if isfield(p.lib, 'parallel') && p.lib.parallel && isempty(gcp('nocreate'))
+    parpool('local', p.lib.workers);
+end
+
+[od, on] = fileparts(out_file);
+part_dir = fullfile(od, [on '_parts']);
+if ~exist(part_dir, 'dir'), mkdir(part_dir); end
+
 for dir = 1:2
     if dir == 1, idx = i_up; else, idx = i_down; end
     z = z_seed;
     for j = idx
         fprintf('\n===== library gait %d/%d : L* = %.3f m =====\n', ...
                 find(targets == targets(j), 1), m, targets(j));
-        [z_new, o] = ch6_lib_solve(p_solve, targets(j), z, p.lib.iters);
+        part = fullfile(part_dir, sprintf('L_%04.0f.mat', 1000*targets(j)));
+        if exist(part, 'file')
+            P = load(part, 'z_new', 'o');
+            z_new = P.z_new;  o = P.o;
+            fprintf('[ch6_lib_build] loaded %s\n', part);
+        else
+            p_solve.lib.ckpt_file = [part(1:end-4) '_ckpt.mat'];
+            [z_new, o] = ch6_lib_solve(p_solve, targets(j), z, p.lib.iters);
+            save(part, 'z_new', 'o');
+            if exist(p_solve.lib.ckpt_file, 'file'), delete(p_solve.lib.ckpt_file); end
+        end
 
         if ~o.verify.ok
             dropped{end+1} = sprintf('L* = %.3f (mesh dev %.2e)', ...

@@ -1,8 +1,11 @@
-function T = ch6_table61(p, alpha_nom, lib)
+function T = ch6_table61(p, alpha_nom, lib, ckpt_dir)
 %CH6_TABLE61  The three-controller comparison of (6.27) and Table 6.1.
 %
 %   T = ch6_table61(p, alpha_nom)        controllers I and II only
 %   T = ch6_table61(p, alpha_nom, lib)   all three
+%   T = ch6_table61(p, alpha_nom, lib, ckpt_dir)
+%                                        save each (range, controller) cell to
+%                                        ckpt_dir and skip cells already there
 %
 % For each step-length range, generate p.mc.n_trials random terrains of
 % p.mc.n_stones stones each and run all three controllers of (6.27) on the SAME
@@ -41,6 +44,11 @@ function T = ch6_table61(p, alpha_nom, lib)
 %   p         : parameter struct (uses p.mc)
 %   alpha_nom : the one nominal gait, for controllers I and II
 %   lib       : gait library struct; omit to skip controller III
+%   ckpt_dir  : optional checkpoint folder. A cell is a few hundred walking
+%               steps and MATLAB sessions here can abort mid-run, so a table
+%               is only reliably finished one cell at a time. A cell file
+%               records the settings it ran under, and one that does not match
+%               the current p is an error rather than a silent reuse.
 %
 % Output
 %   T : struct
@@ -79,16 +87,36 @@ for r = 1:nr
     for c = 1:nc
         [q, gait] = configure(p, c, alpha_nom, lib, have_lib);
 
-        n_ok = 0;
-        why  = cell(1, p.mc.n_trials);
-        for tr = 1:p.mc.n_trials
-            seed = p.mc.seed + 1000*r + tr;
-            terr = ch6_terrain(p.mc.n_stones, rng_r, p.mc.stone_sz, seed);
+        stamp = struct('range', rng_r, 'controller', names{c}, 'mc', p.mc, ...
+                       'cbf', p.cbf, 'limits', p.limits);
+        cell_file = '';
+        if nargin >= 4 && ~isempty(ckpt_dir)
+            if ~exist(ckpt_dir, 'dir'), mkdir(ckpt_dir); end
+            cell_file = fullfile(ckpt_dir, sprintf('cell_r%d_c%d.mat', r, c));
+        end
 
-            s = ch6_simulate(nominal_x0(), gait, q, terr);
+        if ~isempty(cell_file) && exist(cell_file, 'file')
+            C = load(cell_file);
+            if ~isequaln(C.stamp, stamp)
+                error('ch6_table61:staleCell', ...
+                      '%s was run under different settings; delete it.', cell_file);
+            end
+            n_ok = C.n_ok;  why = C.why;
+        else
+            n_ok = 0;
+            why  = cell(1, p.mc.n_trials);
+            for tr = 1:p.mc.n_trials
+                seed = p.mc.seed + 1000*r + tr;
+                terr = ch6_terrain(p.mc.n_stones, rng_r, p.mc.stone_sz, seed);
 
-            n_ok  = n_ok + s.success;
-            why{tr} = s.reason;
+                s = ch6_simulate(nominal_x0(), gait, q, terr);
+
+                n_ok  = n_ok + s.success;
+                why{tr} = s.reason;
+            end
+            if ~isempty(cell_file)
+                save(cell_file, 'n_ok', 'why', 'stamp');
+            end
         end
 
         pct(r,c)    = 100 * n_ok / p.mc.n_trials;
@@ -150,17 +178,14 @@ end
 
 % ---------------------------------------------------------------------------
 function x0 = nominal_x0()
-%NOMINAL_X0  Every trial starts from the reference gait's fixed point.
+%NOMINAL_X0  Every trial starts from the nominal gait's fixed point.
 %
 % The same start state for every controller and every trial, so a difference
 % between columns is a difference between controllers. Cached because a table
-% runs it hundreds of times and it is a file read.
+% runs it hundreds of times and ch6_load_gait re-verifies the orbit.
 persistent X0
 if isempty(X0)
-    root = fileparts(fileparts(fileparts(mfilename('fullpath'))));
-    S = load(fullfile(root, 'Results', 'ch3_reference_gait.mat'));
-    X  = ch3_col_unpack(S.z_opt, S.p);
-    X0 = X(:,1);
+    X0 = ch6_load_gait();
 end
 x0 = X0;
 end
