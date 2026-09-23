@@ -562,7 +562,13 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="plate-note">
         One actuator rating for every controller and case: <code>556 Nm</code>, 1.25 × the heaviest
         feedforward in the design envelope, so no box carries knowledge of the perturbation it is
-        about to meet. The thesis's 60 / 80 / 150 Nm, set for a 32 kg robot, are 12&#8211;41% of what A draws on
+        about to meet. <strong>It is also 4.6× the 120&nbsp;Nm this robot is specified for</strong>
+        (<code>ch3_params</code>), which makes this section an algebraic study rather than a
+        feasibility one: run at a real 120&nbsp;Nm box, every law that bounds the applied torque dies
+        within three steps, because the reference gait's own feedforward is 1.63× the limit before any
+        controller is involved. Chapter 3 has since cut a gait's box to a verified
+        <strong>162.5&nbsp;Nm</strong> and found the floor there &#8212; relaxing friction or the normal-force
+        floor makes it worse &#8212; so the gap narrows to 1.35× but does not close. The thesis's 60 / 80 / 150 Nm, set for a 32 kg robot, are 12&#8211;41% of what A draws on
         this 74 kg model, and both constrained laws fell in every case with them. A negative
         min Fz means the ground had to pull the foot down: those steps are not realizable. The
         simulator keeps the stance foot attached, modelling neither lift-off nor slip, so such a run

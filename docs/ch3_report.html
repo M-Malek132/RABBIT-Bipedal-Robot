@@ -875,9 +875,10 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
         </table>
       </div>
       <div class="plate-note">
-        No verified gait below 195&nbsp;Nm has been found on this robot: both ladders lost verification at
-        the next rung, and the gait carries its own <code>u_max = 195</code> against the 120&nbsp;Nm in
-        <code>ch3_params</code>. Table&nbsp;3.1's limits are ATRIAS numbers &#8212; 63&nbsp;kg behind 50:1 gears,
+        Both ladders lose verification below 195&nbsp;Nm, and the gait they produce carries its own
+        <code>u_max = 195</code> against the 120&nbsp;Nm in <code>ch3_params</code>. A third ladder, run
+        <em>after</em> a gait exists &#8212; cutting the box from the gait itself, speed free &#8212; reaches a
+        verified <strong>162.5&nbsp;Nm</strong> and stops there (below). Table&nbsp;3.1's limits are ATRIAS numbers &#8212; 63&nbsp;kg behind 50:1 gears,
         so its 5&nbsp;Nm is 250&nbsp;Nm at the joint &#8212; and on a direct-drive 74&nbsp;kg RABBIT, <code>u</code>
         is joint torque.
       </div>
@@ -1074,12 +1075,43 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
     </div>
 
     <div class="col">
-      <h3>2. No verified gait sits inside Table 3.1's torque limit</h3>
+      <h3>2. This gait family bottoms out at 162.5 Nm, not at Table 3.1's 120</h3>
       <p>
-        <code>ch3_params</code> still carries <code>u_max = 120</code>&nbsp;Nm. Every ladder on today's model
-        lost verification before reaching it (§3.3), and the reference gait was solved against its own
-        195&nbsp;Nm box. Its impulse, 15.06&nbsp;Ns, also sits 0.06&nbsp;Ns over the 15&nbsp;Ns limit, whose gate
-        was off.
+        <code>ch3_params</code> still carries <code>u_max = 120</code>&nbsp;Nm, and the reference gait was
+        solved against its own 195&nbsp;Nm box. But "no verified gait below 195" no longer holds. Cutting the
+        box from the 1.2&nbsp;m/s gait with the speed left free (<code>ch3_torque_march</code>) lands four
+        rungs, the last one cleanly:
+      </p>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Box</th><th class="num">speed</th><th class="num">max|c|</th><th class="num">verify</th><th class="num">impulse</th><th>verdict</th></tr></thead>
+          <tbody>
+            <tr><td class="name">180 Nm</td><td class="num">1.2815</td><td class="num">2.8×10⁻⁶</td><td class="num">3.2×10⁻⁵</td><td class="num">18.77 Ns</td><td><span class="pill safe">landed</span></td></tr>
+            <tr><td class="name">170 Nm</td><td class="num">1.2857</td><td class="num">6.3×10⁻⁹</td><td class="num">5.1×10⁻⁵</td><td class="num">18.88 Ns</td><td><span class="pill safe">landed</span></td></tr>
+            <tr><td class="name">165 Nm</td><td class="num">1.2935</td><td class="num">2.2×10⁻⁶</td><td class="num">6.3×10⁻⁵</td><td class="num">18.87 Ns</td><td><span class="pill safe">landed</span></td></tr>
+            <tr class="hl"><td class="name">162.5 Nm</td><td class="num">1.2921</td><td class="num">7.3×10⁻¹¹</td><td class="num">7.1×10⁻⁵</td><td class="num">19.07 Ns</td><td><span class="pill safe">landed clean</span></td></tr>
+            <tr><td class="name">160 Nm</td><td class="num">&#8212;</td><td class="num">6.2×10⁻⁴, 9.2×10⁻⁴</td><td class="num">&#8212;</td><td class="num">&#8212;</td><td><span class="pill bad">refused twice</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>And 162.5 is a floor, not a stopping point.</strong> <code>ch3_torque_wall</code> asks for
+        160&nbsp;Nm five times and is refused every time, and relaxing the contact limits makes it
+        <em>worse</em>: at μ_s = 0.5 the torque row goes to 1.1×10⁻², at an Fz floor of 25&nbsp;N to
+        1.3×10⁻², because the optimizer spends the new slack on the contact (μ rises to 0.500, Fz falls to
+        43.5) rather than on torque. The barrier is the trajectory, not any single limit.
+      </p>
+      <p>
+        <strong>Speed runs backwards here.</strong> The gait got <em>faster</em> as the box tightened
+        (1.2815 → 1.2921&nbsp;m/s, shorter step time at constant step length), and pinning the speed back to
+        1.20&nbsp;m/s collapses the solve to a spurious point (max|c| 3.0, verify deviation 1.2×10⁻²). So
+        1.2&nbsp;m/s and 120&nbsp;Nm cannot be chased together along this ladder.
+      </p>
+      <p>
+        Two caveats. 162.5&nbsp;Nm is still 1.35× the declared limit, and reaching 120 needs a
+        <em>different</em> gait &#8212; another posture, step length or speed branch &#8212; not more of this
+        ladder. And these gaits carry impulses of 18.8&#8211;19.1&nbsp;Ns against a 15&nbsp;Ns limit whose gate
+        was off throughout: a gait that meets the torque box and misses the impulse cap is half realizable.
       </p>
 
       <h3>3. The default basis costs transcription accuracy</h3>
