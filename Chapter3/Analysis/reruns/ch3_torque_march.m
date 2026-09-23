@@ -69,13 +69,31 @@ logln(logf, '=== torque march | seed %s | speed %s | %s', seed_file, ...
       ternary(pin_speed, sprintf('pinned at %.4f', v0), 'free'), datestr(now));
 report(logf, p, z, 'seed', NaN);
 
-rungs = [180 170 160 150 142 135 128 120];
+% The ladder is a starting list, not a fixed plan: a rung that misses is
+% retried halfway between it and the last one that landed, down to MIN_STEP.
+% Measured on the first run, 150 missed only on max|ceq| = 5.8e-6 against a
+% 1e-6 bar while verifying at 6.5e-5 -- a near miss that a smaller step is far
+% more likely to clear than abandoning the march.
+MIN_STEP  = 2;
+u_target  = 120;
+u_done    = max([abs(E0.u(:)); abs(E0.um(:))]);   % the seed's own peak
+rungs     = [180 170 160 150 142 135 128 120];
 for u = rungs
     f = fullfile(SPD, sprintf('gait_u%03.0f.mat', u));
     if exist(f, 'file')
-        L = load(f); z = L.z; p = L.p;
-        report(logf, p, z, sprintf('u=%d (stored)', u), NaN);
-        continue;
+        L = load(f);
+        % ONLY A LANDED RUNG IS A RUNG. Rungs are saved whether or not they
+        % land, so that a long solve is never thrown away -- which means the
+        % resume path has to check. The first run left a 160 Nm file with a
+        % 2.9e-03 torque row and a 150 Nm file 5.8e-06 off on the equalities;
+        % reloading either as a starting point would march on from a gait that
+        % was never feasible.
+        if isfield(L, 'landed') && L.landed
+            z = L.z_try; p = L.p; u_done = u;
+            report(logf, p, z, sprintf('u=%d (stored)', u), NaN);
+            continue;
+        end
+        logln(logf, '  stored rung %d Nm did not land; re-solving it', u);
     end
     p.limits.u_max = u;
     t0 = tic;
@@ -85,17 +103,76 @@ for u = rungs
     logln(logf, 'u_max %3d: exitflag %d | max|c| %.2e | max|ceq| %.2e | %.0f s', ...
           u, out.exitflag, out.max_c, out.max_ceq, secs);
     V = report(logf, p, z_try, sprintf('u=%d', u), secs);
-    if out.max_c > 1e-6 || out.max_ceq > 1e-6 || ~V.ok
-        logln(logf, ['  rung %d Nm did not land (max|c| %.2e, max|ceq| %.2e, verify %d). ' ...
-                     'The march stops here; the last good gait is the rung above.'], ...
+
+    % POLISH ONLY A NEAR MISS. A second warm solve clears the residual that the
+    % evaluation limit leaves behind -- the 180 Nm rung went 5.9e-06 -> 2.8e-06
+    % that way. But polishing from a point that is properly infeasible is
+    % dangerous: at 160 Nm, with max|c| already 2.9e-03, the polish ran away to
+    % a SPURIOUS solution (peak 178.5 against its own 160 box, mu 1.327, nodes
+    % 0.4 off a true rollout) and cost 272 s. The guard below keeps the
+    % pre-polish gait either way, but there is no reason to start that fire.
+    if out.max_c > 1e-6 && out.max_c < 1e-4 && V.ok
+        logln(logf, '  polishing rung %d (max|c| %.2e)', u, out.max_c);
+        t1 = tic;
+        [z_p, out_p] = ch3_col_solve(p, z_try, struct('MaxFunctionEvaluations', 6e5, ...
+                                                      'MaxIterations', 600));
+        V_p = report(logf, p, z_p, sprintf('u=%d polished', u), toc(t1));
+        if V_p.ok && out_p.max_c < out.max_c
+            z_try = z_p; out = out_p; V = V_p;
+        end
+    end
+
+    % SAVE EVERY RUNG, LANDED OR NOT. An earlier version saved only after the
+    % verdict and lost 75 minutes of solve when the verdict went against it.
+    landed = V.ok && out.max_ceq <= 1e-6 && out.max_c <= 1e-4;
+    save(f, 'z_try', 'p', 'out', 'V', 'landed');
+
+    if ~landed
+        % BISECT RATHER THAN STOP, and rather than carry on regardless: an
+        % earlier version computed this flag and then only broke on verify, so
+        % the 160 Nm rung was carried forward with a 2.9e-03 torque row and the
+        % next rung was solved from it.
+        logln(logf, '  rung %d Nm missed (max|c| %.2e, max|ceq| %.2e, verify %d)', ...
               u, out.max_c, out.max_ceq, V.ok);
+        [z, u_done, ok] = bisect(z, p, u_done, u, MIN_STEP, logf, SPD);
+        if ~ok
+            logln(logf, ['  march stops at %.0f Nm: the step is below %d Nm and the ' ...
+                         'box still will not come down'], u_done, MIN_STEP);
+            break;
+        end
+        if u_done <= u, continue; end     % bisection got past this rung
         break;
     end
     z = z_try;
-    save(f, 'z', 'p', 'out');
+    u_done = u;
 end
 logln(logf, '=== TORQUE_MARCH_DONE %s', datestr(now));
 fprintf('TORQUE_MARCH_DONE\n');
+end
+
+% ---------------------------------------------------------------------------
+function [z, u_done, ok] = bisect(z, p, u_done, u_missed, MIN_STEP, logf, SPD)
+%BISECT  Halve the box step until a rung lands or the step gets too small.
+step = (u_done - u_missed) / 2;
+ok   = false;
+while step >= MIN_STEP
+    u_try = u_done - step;
+    logln(logf, '  bisecting: trying %.0f Nm (step %.0f)', u_try, step);
+    p.limits.u_max = u_try;
+    t0 = tic;
+    [z_try, out] = ch3_col_solve(p, z, struct('MaxFunctionEvaluations', 6e5, ...
+                                              'MaxIterations', 600));
+    V = report(logf, p, z_try, sprintf('u=%.0f', u_try), toc(t0));
+    landed = V.ok && out.max_ceq <= 1e-6 && out.max_c <= 1e-4;
+    save(fullfile(SPD, sprintf('gait_u%03.0f.mat', u_try)), 'z_try', 'p', 'out', 'V', 'landed');
+    if landed
+        z = z_try; u_done = u_try; ok = true;
+        step = min(step * 1.5, u_done - u_missed);
+        if u_done <= u_missed, return; end
+    else
+        step = step / 2;
+    end
+end
 end
 
 % ---------------------------------------------------------------------------
