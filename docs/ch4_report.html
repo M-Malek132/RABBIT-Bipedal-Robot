@@ -563,12 +563,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         One actuator rating for every controller and case: <code>556 Nm</code>, 1.25 × the heaviest
         feedforward in the design envelope, so no box carries knowledge of the perturbation it is
         about to meet. <strong>It is also 4.6× the 120&nbsp;Nm this robot is specified for</strong>
-        (<code>ch3_params</code>), which makes this section an algebraic study rather than a
-        feasibility one: run at a real 120&nbsp;Nm box, every law that bounds the applied torque dies
-        within three steps, because the reference gait's own feedforward is 1.63× the limit before any
-        controller is involved. Chapter 3 has since cut a gait's box to a verified
-        <strong>162.5&nbsp;Nm</strong> and found the floor there &#8212; relaxing friction or the normal-force
-        floor makes it worse &#8212; so the gap narrows to 1.35× but does not close. The thesis's 60 / 80 / 150 Nm, set for a 32 kg robot, are 12&#8211;41% of what A draws on
+        (<code>ch3_params</code>), which makes this section an algebraic study rather than a feasibility
+        one &#8212; see "the real budget" below for the comparison at 120&nbsp;Nm. The thesis's 60 / 80 / 150 Nm, set for a 32 kg robot, are 12&#8211;41% of what A draws on
         this 74 kg model, and both constrained laws fell in every case with them. A negative
         min Fz means the ground had to pull the foot down: those steps are not realizable. The
         simulator keeps the stance foot attached, modelling neither lift-off nor slip, so such a run
@@ -1436,6 +1432,102 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         nine runs, and a single seed that defeats every 1 kHz limit all say the same thing: at
         mass scale 1.5 and under a load redrawn every step, L₁ at 1 kHz works where it has been
         tuned to work. The sweeps are reported so that claim can be judged rather than taken.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================== budget -->
+  <section>
+    <div class="col">
+      <p class="eyebrow">The real budget &nbsp;&#183;&nbsp; 120 Nm</p>
+      <h2>Every headline result runs at 4.6× the declared actuator limit</h2>
+      <p>
+        This robot's declared torque limit is <strong>120&nbsp;Nm</strong> (Chapter 3,
+        <code>ch3_params</code>). The chapter now uses a <em>single</em> actuator rating &#8212;
+        556&nbsp;Nm for every controller, every mass scale and every load, and 731&nbsp;Nm for Case IV,
+        which sits outside the design envelope &#8212; which fixes the problem of boxes built from the
+        perturbation they are about to meet. It does not fix a second problem: 556 and 731 are
+        <strong>4.6× and 6.1×</strong> the declared limit.
+      </p>
+      <p>
+        The consequence has to be said plainly: <strong>this chapter's mass-scaling section is an
+        algebraic study, not a feasibility study.</strong> "The robust law walks where the baselines
+        fall" is a statement about a robot that is not built with its own declared actuators. What the
+        section does show is valid &#8212; the relative ordering of the three laws, the structure of
+        Δ₁ and Δ₂, the boundary layer's behaviour &#8212; but none of the step counts should be read as
+        a claim about hardware performance.
+      </p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-head"><span>The same controllers under a 120 Nm box</span><span class="tag">25 steps · posture_195 · nothing else changed</span></div>
+      <div class="tscroll">
+        <table class="cells">
+          <thead>
+            <tr><th>Controller</th><th>×1 (perfect model)</th><th>×1.5</th><th>×0.7</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name"><code>clfqp</code> (no box)</td><td class="cell">25&nbsp;· 1&nbsp;· 198</td><td class="cell">25&nbsp;· 0&nbsp;· 1372</td><td class="cell">25&nbsp;· 0&nbsp;· 524</td></tr>
+            <tr><td class="name"><code>l1</code> (box on μ₁ only)</td><td class="cell">25&nbsp;· 25&nbsp;· 197</td><td class="cell">25&nbsp;· 0&nbsp;· 396</td><td class="cell">25&nbsp;· 0&nbsp;· 335</td></tr>
+            <tr class="hl"><td class="name"><b><code>clfqp_con</code></b></td><td class="cell"><b>1&nbsp;· 0&nbsp;· 120</b></td><td class="cell">&#8212;</td><td class="cell"><b>1&nbsp;· 0&nbsp;· 120</b></td></tr>
+            <tr class="hl"><td class="name"><b><code>rclfqp_con</code></b></td><td class="cell">&#8212;</td><td class="cell">&#8212;</td><td class="cell"><b>1&nbsp;· 0&nbsp;· 120</b></td></tr>
+            <tr class="hl"><td class="name"><b><code>l1_con</code></b></td><td class="cell"><b>1&nbsp;· 0&nbsp;· 120</b></td><td class="cell">&#8212;</td><td class="cell"><b>3&nbsp;· 1&nbsp;· 120</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="plate-note">
+        Each cell reads <strong>steps · valid steps · peak torque drawn (Nm)</strong>. A dash means not
+        one step completed. The bold rows are the laws whose box binds the <em>applied</em> torque.
+        Data in <code>Results/box120/</code>.
+      </div>
+    </div>
+
+    <div class="col">
+      <p>
+        <strong>The result is uniform.</strong> Every law whose box binds the applied torque &#8212; the
+        three bold rows &#8212; dies within zero to three steps at every mass scale, <em>including ×1
+        with a perfect model</em>, where the robust law does not complete a single step and moves
+        0.014&nbsp;m in its first. No cell in those three rows holds more than one valid step.
+      </p>
+      <p>
+        <strong>And the ones that walk are outside the box.</strong> The top two rows complete all 25
+        steps, but by drawing 197&#8211;1372&nbsp;Nm &#8212; precisely because the 120&nbsp;Nm box does not
+        sit on their applied torque: <code>clfqp</code> has no box at all, and <code>l1</code> in the
+        thesis form boxes μ₁ alone, so μ₂ reaches the joints unconstrained (fix 3 of the adaptive
+        section). The one fully valid run in the whole table, <code>l1</code> at ×1 with 25 valid
+        steps, draws <strong>196.7&nbsp;Nm &#8212; 1.64× the limit it was supposed to respect</strong>.
+      </p>
+      <p>
+        <strong>How they fail is itself a diagnosis.</strong> None of these collapses is a slip or a
+        lift-off. The robot either steps <em>backwards</em> (−0.084 to −0.119&nbsp;m) or its hip sinks to
+        0.17&nbsp;m. That is the signature of a torque-starved machine: it can neither swing the leg
+        forward nor hold itself up.
+      </p>
+      <p>
+        <strong>And the cause is upstream of this chapter.</strong> The reference gait's own feedforward
+        reaches 195&nbsp;Nm, 1.63× the 120&nbsp;Nm limit, <em>before</em> any perturbation, controller or
+        adaptation enters. At 120&nbsp;Nm no law can track this gait, because tracking it costs more than
+        the budget. So this comparison <strong>does not separate the three laws</strong>; what it
+        measures is the gait.
+      </p>
+      <div class="note">
+        <h4>Chapter 3 has since tried to supply a gait that fits, and the answer is no</h4>
+        <p>
+          Cutting the box from the gait itself reaches a verified <strong>162.5&nbsp;Nm</strong> and stops
+          there: rungs at 180, 170, 165 and 162.5 are all real trajectories, and 160 refuses twice. More
+          telling, relaxing the contact limits makes the torque row <em>worse</em> &#8212; μ_s → 0.5 gives
+          1.1×10⁻², an Fz floor of 25&nbsp;N gives 1.3×10⁻² &#8212; because the optimizer spends the new
+          slack on the contact rather than on torque. The barrier is the trajectory, not any single
+          limit. So the gap to 120 narrows from 1.63× to <strong>1.35×</strong> and does not close, and
+          the table above will never be meaningful with a gait from this family; reaching 120 needs a
+          different one. Those gaits also carry impulses of 18.8&#8211;19.1&nbsp;Ns against a 15&nbsp;Ns
+          limit, so they are half realizable at best.
+        </p>
+      </div>
+      <p>
+        This sharpens the chapter's claim rather than retracting it: the 556&nbsp;Nm results still show
+        the relative ordering of the three laws, but we now know that at the robot's real actuator
+        budget none of them walks on <em>this</em> gait.
       </p>
     </div>
   </section>

@@ -1,8 +1,14 @@
-# Handoff — Chapter 3–5 report review follow-up
+# Handoff — Chapter 3–5 report review, and the Chapter 3 gait campaign
 
-Written 2026-09-17 on the laptop; **the follow-up is finished** (2026-09-18,
-commits `ccce627`, `a910b7c`, `517e5d2` and the test-stamp commit after them).
-This is now a record of what was decided, run and changed, not a to-do list.
+Two pieces of work, both finished, both recorded here rather than pending:
+
+1. **The Chapter 3–5 report review follow-up** (2026-09-17/18, commits
+   `ccce627`, `a910b7c`, `517e5d2` and the test-stamp commit after them).
+2. **The Chapter 3 gait campaign** (2026-09-18 → 09-23): what this 74 kg model
+   can walk at, and within what actuator budget. Jump to
+   "Chapter 3 gait campaign" for the headline — a verified gait at the
+   **1.2 m/s design speed**, and a torque floor of **162.5 N·m** against a
+   declared limit of 120.
 
 ## Where things stand
 
@@ -140,6 +146,79 @@ All stages done, none failed. Full numbers: `Results/reruns/ch4/summary.log`,
 - **Predictor**: thesis θ̂ overshoots the true θ **7.2×** at ×0.7 and **2.0×**
   at ×1.5 (3–5× at 0.35); plant predictor 1.29× / 1.01×. Scale 1 ratios are
   meaningless (true θ ≈ 0) and now report NaN.
+
+## Chapter 3 gait campaign (2026-09-18 → 09-23)
+
+Separate from the report review above: a campaign to find out what this 74 kg
+model can actually walk at, and within what actuator budget. All the gaits live
+in `Results/reruns/` (git-ignored); the drivers are in
+`Chapter3/Analysis/reruns/`.
+
+### Speed: the design target is reachable, 0.5 m/s is not
+
+`ch3_params` asks for **1.2 m/s** (`p.v_des`, `enforce_nec1 = true`), but every
+stored gait carries `enforce_nec1 = 0`, so the equality was never imposed and
+`posture_195` walks at **1.5628 m/s** — 30% over target, with no margin
+anywhere.
+
+`ch3_speed_ladder` imposes the equality and marches down. Verified gaits now
+exist at 1.5628, 1.50, 1.45, 1.40, 1.35, 1.30, 1.25, **1.20** and 1.15 m/s
+(`Results/reruns/speed_ladder/`, `gait_v1200.mat` is the design-speed one).
+
+- **The landing-on-the-cone problem was a speed artefact.** At 1.5628 the
+  impact impulse sits exactly on the μ = 0.4 cone (row 13 = +5.6e-9); at 1.20
+  the landing friction demand is **0.161**, slack by 5.15.
+- **The march walls at 1.15 m/s.** Every step to 1.10, down to 0.013, refuses
+  in ~15 s. Torque, stance friction and the Fz floor are all active at once;
+  no single relaxation releases it, and the closest pair (μ_s 0.6 **with** the
+  Fz floor at 10 N) only reaches 1.10. So sub-1.15 walking is bought by
+  weakening the contact model.
+- Cold-start routes to low speed all failed: `ch3_stage3_from_scratch` (N=41)
+  fails at its bare stage; N=81 with NEC1 off runs the speed away to 1.14 with
+  peak torque 2335 Nm; N=81 anchored was still oscillating at 1e-1 after three
+  hours when the session was killed. `ch3_speed_march`'s seed
+  (`ch3_gait_full_constrained`) is **stale** under the 74 kg model and that
+  campaign cannot run as written.
+
+### Torque: the floor is 162.5 N·m, not the declared 120
+
+`ch3_torque_march` cuts the box from the 1.2 m/s gait with the speed free.
+Landed rungs, all verified trajectories:
+
+| box | speed | max\|c\| | verify | impulse |
+|---|---|---|---|---|
+| 180 | 1.2815 | 2.8e-6 | 3.2e-5 | 18.77 Ns |
+| 170 | 1.2857 | 6.3e-9 | 5.1e-5 | 18.88 Ns |
+| 165 | 1.2935 | 2.2e-6 | 6.3e-5 | 18.87 Ns |
+| **162.5** | **1.2921** | **7.3e-11** | **7.1e-5** | 19.07 Ns |
+| 160 | — | 6.2e-4, 9.2e-4 | — | refused twice |
+
+- **162.5 is a floor, not a stopping point** (`ch3_torque_wall`): five attempts
+  at 160 all refuse, and relaxing the contact limits makes the torque row
+  **worse** (μ_s → 0.5 gives 1.1e-2, Fz floor → 25 N gives 1.3e-2) because the
+  optimizer spends the new slack on the contact, not on torque. The barrier is
+  the trajectory.
+- **Speed runs backwards on this branch.** The gait got *faster* as the box
+  tightened (1.2815 → 1.2921 m/s). Pinning the speed back to 1.20 collapses the
+  solve to a spurious point (max\|c\| 3.0). **1.2 m/s and 120 N·m cannot be
+  pursued together by continuation.**
+- **Half realizable only.** These gaits carry impulses of 18.8–19.1 N·s against
+  a declared 15, with that gate off throughout. A second march would be needed.
+
+### What this changed in the reports
+
+Committed in `9132285` and `8d0c6b9`. The claim "no verified gait below 195 N·m
+has been found" appeared three times in Chapter 3 and is now wrong; all three
+are rewritten (`sec:torquefloor` carries the rung table and the wall probe).
+Chapter 4's `sec:box120` said the remaining work moved to Chapter 3 — that work
+is done and the answer is negative, so the gap to 120 narrows from 1.63× to
+1.35× and does not close.
+
+**Still open:** `docs/ch4_report.html` never received `sec:budget` or
+`sec:box120` at all — the 120 N·m material exists only in the Persian .tex and
+PDF. The HTML has a one-paragraph disclosure added to its box-rule note, but
+the two sections have not been ported. The Persian PDFs also need rebuilding
+after the latest .tex edits.
 
 ## Conventions that bite
 
