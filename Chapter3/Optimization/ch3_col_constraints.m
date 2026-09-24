@@ -36,7 +36,7 @@ function [c, ceq] = ch3_col_constraints(z, p)
 %   NEC1 -- average walking rate                                    (1)
 %       L_step / T = v_des
 %
-% INEQUALITIES (c), always length 18 regardless of what is enabled:
+% INEQUALITIES (c), always length 19 regardless of what is enabled:
 %
 %       row  constraint                                  gate           source
 %      ----  ------------------------------------------  -------------  ------
@@ -58,6 +58,7 @@ function [c, ceq] = ch3_col_constraints(z, p)
 %       16   theta strictly monotonic                    phase_mono     HH6
 %       17   decoupling matrix invertible on Z           decoupling     HH2
 %       18   swing-foot height ceiling                   clearance_max  style
+%       19   step-length CEILING                         step_len_max   style
 %
 %   GATED CONSTRAINTS ARE HELD AT -1, NOT REMOVED.  A disabled inequality is
 %   trivially satisfied but still present, so c has a constant length and
@@ -158,7 +159,7 @@ end
 ceq = [ceq_start; ceq_dyn; ceq_end; ceq_per; ceq_rate];
 
 %% ============================= INEQUALITIES =============================
-c = -ones(18, 1);
+c = -ones(19, 1);
 
 % 1. swing-foot clearance at mid-step (NIC3): height >= clearance
 k_mid = max(2, min(N-1, round((N+1)/2)));
@@ -363,6 +364,28 @@ end
 %     nodes bracketing it.
 if p.limits.enable.clearance_max
     c(18) = max([E.sw_h, E.sw_hm]) - p.limits.clearance_max;
+end
+
+% 19. STEP-LENGTH CEILING.  The mirror of row 3, and the reason it exists: the
+% objective is torque-squared PER UNIT DISTANCE (ch3_col_cost), so a longer
+% stride is always cheaper and the optimizer pushes the stride out to whatever
+% the geometry allows -- every gait solved on this model sits at L = 0.438 m
+% whatever else is asked of it. That is fine until a SHORT stride is the thing
+% wanted: a slow gait on a long stride runs out of contact, with Fz sagging to
+% its floor and the friction demand pinned at mu_s, which is what walls the
+% speed march at 1.15 m/s.
+%
+% Asking for it indirectly does not work. With NEC1 pinning the speed, L = v*T,
+% so capping T caps the stride -- but T is a BOUND on the decision vector, and
+% fmincon clamps a warm start into a violated bound before the first iteration.
+% Measured twice: a cap 0.065 s below the seed's T detonated the defects to
+% max|c| 12.2 with the nodes 23 off a true rollout, and even a 0.01 s cap left
+% them 0.19 off. A constraint row is warm-start-safe where a bound is not,
+% because an infeasible start is something SQP is built to walk out of.
+%
+% OFF BY DEFAULT (ch3_params), so no existing solve changes behaviour.
+if isfield(p.limits.enable, 'step_len_max') && p.limits.enable.step_len_max
+    c(19) = E.L_step - p.limits.step_len_max;
 end
 
 end

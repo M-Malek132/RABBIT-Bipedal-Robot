@@ -164,11 +164,11 @@ end
 p0 = ch3_params();
 z_seed = ch3_col_seed(p0);
 c0_def = ch3_col_constraints(z_seed, p0);
-pass = report('c has 18 rows', abs(numel(c0_def) - 18), 0, pass);
+pass = report('c has 19 rows', abs(numel(c0_def) - 19), 0, pass);
 
 gates = {'swing_clear', [9 10]; 'liftoff', 11; 'impact', [12 13]; ...
          'hzd', [14 15]; 'phase_mono', 16; 'decoupling', 17; ...
-         'clearance_max', 18};
+         'clearance_max', 18; 'step_len_max', 19};
 
 % THE BASELINE IS BUILT HERE, NOT INHERITED FROM THE DEFAULTS.
 % This block asserts that a DISABLED row is held at -1, and that enabling one
@@ -190,7 +190,7 @@ for i = 1:size(gates,1)
     pg = p_off;
     pg.limits.enable.(gates{i,1}) = true;
     cg = ch3_col_constraints(z_seed, pg);
-    others = setdiff(1:18, rows);
+    others = setdiff(1:19, rows);
     ok_gate = ok_gate && norm(cg(others) - c0(others), inf) < 1e-12;
 end
 fprintf('  [%s] %-30s each gate moves only its own rows\n', tf(ok_gate), 'gating isolation');

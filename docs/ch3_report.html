@@ -1114,7 +1114,41 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
         was off throughout: a gait that meets the torque box and misses the impulse cap is half realizable.
       </p>
 
-      <h3>3. The default basis costs transcription accuracy</h3>
+      <h3>3. Step length is not a design variable in this transcription</h3>
+      <p>
+        If slow walking on a long stride is what exhausts the contact, the natural move is to
+        <em>shorten</em> the stride: less leg extension at the end of stance, so Fz stays higher and less
+        friction is needed. That route is closed here.
+      </p>
+      <p>
+        Testing it added row 19 to <code>ch3_col_constraints</code>
+        (<code>L_step ≤ p.limits.step_len_max</code>, gated and off by default, so no earlier solve
+        changes). The result was uniform: <strong>the stride will not come in by even one
+        millimetre.</strong> In every run the violation stays exactly constant, the equalities hold, the
+        stride moves about 10⁻⁵&nbsp;m and the solver's step size then collapses to 10⁻⁸. What was tried:
+      </p>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Varied</th><th class="wl">What was tried</th><th class="wl">Result</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Seed gait</td><td class="wl">the 1.2 m/s gait (μ, Fz and torque all exactly active) and <code>posture_195</code> (friction slack of 0.155)</td><td class="wl">identical stall &#8212; an "active corner" does not explain it</td></tr>
+            <tr><td class="name">Rung size</td><td class="wl">ceilings at 0.40 and 0.43 m, and cuts of 1 mm and 0.1 mm</td><td class="wl">a smaller violation did not help</td></tr>
+            <tr><td class="name">Objective</td><td class="wl">torque² per distance, and torque² alone via <code>p.cost_normalize</code></td><td class="wl">the objective was not the obstacle</td></tr>
+            <tr><td class="name">Objective scale</td><td class="wl">×10⁻⁴ via <code>p.cost_scale</code>, so feasibility dominates the merit function</td><td class="wl">stride moved 1.3×10⁻⁵ m &#8212; identical</td></tr>
+            <tr><td class="name">Problem scaling</td><td class="wl"><code>ScaleProblem</code> off</td><td class="wl">diverges to a spurious solution, 36 off a true rollout</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        So in this transcription the step length is an <em>output</em> of the dynamics, the periodicity
+        condition and the virtual constraints &#8212; not something that can be traded. That is a statement
+        about <em>this</em> formulation and this solver, not a proof that no short-stride gait exists: a
+        different parametrisation &#8212; a shorter phase sweep, another posture branch, or a cold solve
+        built around a short stride from the start &#8212; might well find one. What this rules out is
+        reaching it by continuation from the gaits that exist.
+      </p>
+
+      <h3>4. The default basis costs transcription accuracy</h3>
       <p>
         The degree-3 B-spline default leaves the maximum defect three to four orders of magnitude above
         the Bézier basis at useful meshes, and the order check fails because of it.

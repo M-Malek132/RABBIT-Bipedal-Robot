@@ -55,6 +55,21 @@ p.limits.mu_s        = 0.4;     % |Fx| <= mu_s * Fz     NIC2        [-]
 p.limits.Fz_min      = 50;      % Fz >= Fz_min          NIC1        [N]
 p.limits.clearance   = 0.05;    % swing-foot height at mid-step     [m]
 p.limits.clearance_max = 0.15;  % swing-foot height CEILING, whole step [m]
+% CEILING on step length, gated OFF (p.limits.enable.step_len_max) so nothing
+% solved so far changes behaviour. Turn it on to ask for a SHORT stride, which
+% the objective will not give on its own: torque-squared per distance makes a
+% longer stride cheaper, so every gait solved on this model sits at
+% L = 0.438 m. A short stride is what a slow gait needs -- on a long one the
+% contact runs out, Fz sags to its floor and the friction demand pins at mu_s,
+% which is what walls the speed march at 1.15 m/s (row 19,
+% ch3_col_constraints).
+p.limits.step_len_max  = 0.30;  % L_step <= this, when enabled       [m]
+% Objective: torque-squared per unit DISTANCE (true) or per STEP (false). The
+% division by step length is what keeps the stride from collapsing, but it also
+% opposes the ceiling above -- with both stride rows on, the constraints box the
+% stride and the normalization only gets in the way. Leave TRUE unless marching
+% the stride down, and never turn it off with the ceiling off.
+p.cost_normalize = true;
 
 %% Section 6.3.4 constraint set (NIC / NEC)
 p.limits.sw_clear_min   = 1e-3; % strict swing-foot clearance, interior  [m]
@@ -79,7 +94,8 @@ p.limits.enable = struct('torque',  true, ...
                          'impact',      true, ...  % NEC3
                          'hzd',         true, ...  % NEC4 + NEC5
                          'phase_mono',  true, ...  % HH6
-                         'decoupling',  true);     % HH2
+                         'decoupling',  true, ...  % HH2
+                         'step_len_max', false);   % OFF: see step_len_max below
 
 %% hybrid zero dynamics (NEC4/5)
 p.hzd_grid       = 161;         % reporting quadrature grid

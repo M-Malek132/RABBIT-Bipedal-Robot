@@ -205,6 +205,47 @@ Landed rungs, all verified trajectories:
 - **Half realizable only.** These gaits carry impulses of 18.8–19.1 N·s against
   a declared 15, with that gate off throughout. A second march would be needed.
 
+### Stride: not a design variable in this transcription (a negative result)
+
+If slow walking on a long stride is what exhausts the contact, shorten the
+stride. That route is closed, and it cost about seven hours to establish, so it
+is written down rather than left to be rediscovered.
+
+Row 19 was added to `ch3_col_constraints` for the test
+(`L_step <= p.limits.step_len_max`, gated, **off by default**), plus
+`p.cost_normalize` and `p.cost_scale` in `ch3_col_cost` (both default to the
+old behaviour). `ch3_test_all` is green with them: 82 pass, 0 fail, 1 xfail.
+
+**The stride will not come in by even one millimetre.** Every run: the
+violation stays exactly constant, the equalities hold, the stride moves ~1e-5 m
+and the step size collapses to 1e-8 with first-order optimality ~1e6.
+
+| varied | tried | result |
+|---|---|---|
+| seed gait | the 1.2 m/s gait (μ, Fz, torque all active) and `posture_195` (friction slack 0.155) | identical stall — "active corner" does not explain it |
+| rung size | ceilings 0.40 and 0.43 m; cuts of 1 mm and 0.1 mm | smaller violation did not help |
+| objective | per-distance, and torque² alone (`cost_normalize`) | not the obstacle |
+| objective scale | ×1e-4 (`cost_scale`), so feasibility dominates the merit | moved 1.3e-5 m — identical |
+| problem scaling | `ScaleProblem` off | diverges, spurious, 36 off a rollout |
+
+So step length is an **output** of the dynamics, periodicity and virtual
+constraints here — not something to trade. This is a claim about this
+formulation and this solver, not a proof that no short-stride gait exists; a
+different parametrisation (shorter phase sweep, another posture branch, a cold
+solve built around a short stride) might find one. It is not reachable by
+continuation from the gaits that exist.
+
+**Four hypotheses were proposed and all four were wrong**: that slow walking
+costs torque (falsified — 57 N·m of headroom went unused); that the active
+contact corner blocked the stride (falsified by the slack-friction seed); that
+the per-distance objective opposed it (falsified by `cost_normalize`); and that
+the merit-function balance starved it (falsified by `cost_scale`). Treat any
+fifth mechanism with suspicion unless it is tested first.
+
+**Consequence for walking slower:** 1.15 m/s is the floor for this model at
+μ = 0.4 with a 50 N normal-force floor. Below it needs a weaker contact model
+(μ = 0.6 with a 10 N floor reached 1.10) or a genuinely different gait.
+
 ### What this changed in the reports
 
 Committed in `9132285` and `8d0c6b9`. The claim "no verified gait below 195 N·m
@@ -214,11 +255,13 @@ Chapter 4's `sec:box120` said the remaining work moved to Chapter 3 — that wor
 is done and the answer is negative, so the gap to 120 narrows from 1.63× to
 1.35× and does not close.
 
-**Still open:** `docs/ch4_report.html` never received `sec:budget` or
-`sec:box120` at all — the 120 N·m material exists only in the Persian .tex and
-PDF. The HTML has a one-paragraph disclosure added to its box-rule note, but
-the two sections have not been ported. The Persian PDFs also need rebuilding
-after the latest .tex edits.
+`sec:stridefixed` in Chapter 3 and the matching HTML section carry the negative
+result above. `sec:budget` and `sec:box120` have now been ported into
+`docs/ch4_report.html`, which previously had none of the 120 N·m material.
+
+**Still open:** the Persian PDFs need rebuilding after the latest .tex edits
+(`latexmk -f -xelatex` in `docs/`; exit 12 is normal). The Chapter 4 claims
+table still carries no budget caveat in its rows, in either language.
 
 ## Conventions that bite
 
