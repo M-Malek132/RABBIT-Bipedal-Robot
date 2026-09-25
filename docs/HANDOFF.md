@@ -10,6 +10,11 @@ Two pieces of work, both finished, both recorded here rather than pending:
    **1.2 m/s design speed**, and a torque floor of **162.5 N·m** against a
    declared limit of 120.
 
+Then a third, **partly pending**: the follow-ups this file listed as open
+(2026-09-25). The report edits are done; four runs are written and waiting.
+Jump to **"Follow-ups of 2026-09-25"** for what is done, the commands, and what
+each run's result has to change.
+
 ## Where things stand
 
 A supervisor-style review of the Chapter 3, 4 and 5 reports (the Persian
@@ -27,17 +32,25 @@ A supervisor-style review of the Chapter 3, 4 and 5 reports (the Persian
 | 5 | Chapter 4 L1 figure panels labelled "Case II/III" in the reverse of the robust table's numbering | **Done** — `ch4_plot_uncertainty` numbers panels by mass scale; figures redrawn |
 | 5 | Chapter 5 x0 pole-admissibility margins not reported | **Done** — margins added to `ch5_report_fa.tex` and `ch5_report.html` |
 
-All seven review items are closed. What is left is ordinary follow-up, not
-review debt:
+All seven review items are closed. What was left was ordinary follow-up, not
+review debt; each now has a driver (see "Follow-ups of 2026-09-25"):
 
 - The Chapter 5 runs start at rest, so the pole-admissibility condition is
-  satisfied with full margin and **the limitation is never exercised**. A run
-  from a moving `x0` would test it; none exists.
-- The `l1` thesis-form row of `tab:l1` still comes from the old box rule
-  (`Results/ch4_l1_2026-09-13_18-26-49/`); it is labelled as such.
-- `docs/ch4_report.html` figures are re-embedded base64 copies of
-  `docs/figures/*.png`; there is no script for this, so they must be
-  re-embedded by hand when the figures change.
+  satisfied with full margin and **the limitation is never exercised**.
+  `ch5_moving_x0` runs the same four configurations from a moving `x0`
+  (**pending**). Its closed form already corrected the reports: the first
+  rung's 3.78/3.60 m/s was being read as the tolerance, and the full chain
+  allows only 0.894/0.852 m/s for a rigid start.
+- The `l1` thesis-form row of `tab:l1` comes from
+  `Results/ch4_l1_2026-09-13_18-26-49/`, before validity scoring, so it is the
+  only row with no valid-step count. Its box is not the problem (the thesis
+  form gets `p.l1.u_max` under either rule). `ch4_eps020_diagnostics('thesisrow')`
+  reruns it with validity (**pending**).
+- ~~`docs/ch4_report.html` figures are re-embedded by hand~~ — **done**: each
+  `<img>` names its file (`data-fig="figures/…png"`) and
+  `python3 docs/embed_figures.py docs/ch4_report.html` rebuilds them
+  (`--check` reports stale copies without writing). The ch3 and ch5 HTML
+  images match no file in `docs/figures/`, so they are not tagged.
 
 ## Decisions already made (do not re-ask)
 
@@ -85,8 +98,8 @@ the folder copied across.
    `_20-36-27` load), `Results/reruns/ch3/table.log`,
    `Results/reruns/ch4/progress.log` and `summary.log`.
 4. Figures: `ch4_doc_figures` reads the four stamps pinned at its head — repin
-   them when the results change. Then re-embed them in `docs/ch4_report.html`
-   by hand (see the loose ends above).
+   them when the results change. Then `python3 docs/embed_figures.py
+   docs/ch4_report.html` re-embeds them in the English report.
 5. Test suites: `ch3_test_all` (83 checks, 1 known failure, 5.3 s) and
    `ch4_test_all` (54 checks, 0 failures, 5.1 s), both on R2023b, 2026-09-18.
    The collocation order test is a *known, intentional* failure; anything else
@@ -203,7 +216,8 @@ Landed rungs, all verified trajectories:
   solve to a spurious point (max\|c\| 3.0). **1.2 m/s and 120 N·m cannot be
   pursued together by continuation.**
 - **Half realizable only.** These gaits carry impulses of 18.8–19.1 N·s against
-  a declared 15, with that gate off throughout. A second march would be needed.
+  a declared 15, with that gate off throughout. The second march is
+  `ch3_impulse_march` (**pending**; see the follow-ups).
 
 ### Stride: not a design variable in this transcription (a negative result)
 
@@ -259,9 +273,74 @@ is done and the answer is negative, so the gap to 120 narrows from 1.63× to
 result above. `sec:budget` and `sec:box120` have now been ported into
 `docs/ch4_report.html`, which previously had none of the 120 N·m material.
 
-**Still open:** the Persian PDFs need rebuilding after the latest .tex edits
-(`latexmk -f -xelatex` in `docs/`; exit 12 is normal). The Chapter 4 claims
-table still carries no budget caveat in its rows, in either language.
+Both items this paragraph listed as open are closed (2026-09-25): the PDFs
+were rebuilt, and `tab:claims` now scores every claim at 120 N·m as well (see
+the follow-ups).
+
+## Follow-ups of 2026-09-25
+
+### Done — report edits, both languages
+
+- **Budget caveat in `tab:claims`** (`ch4_report_fa.tex`, `ch4_report.html`).
+  A fourth column scores every claim at the declared 120 N·m, from
+  `Results/box120/box120.log`. Remarks 4.6 and 4.7 and §4.2.4 fail there. "L₁
+  performs like the CLF-QP" holds only in that both boxed laws fall in step 2,
+  and Case IV and the load were never run at 120 N·m ("not run"). The caption
+  and the HTML plate note say the other two columns are at 556/731 N·m.
+- **Ch4 conclusion.** The Persian one opens with the 120 N·m reading, and no
+  longer calls "a gait optimized under a 120 N·m box" the remaining work:
+  Chapter 3 tried, and stopped at 162.5. The English "limitations" list gets
+  the budget item it lacked.
+- **Ch5 tolerance** (`ch5_report_fa.tex` admissibility paragraph,
+  `ch5_report.html` table and note). The reports read the first rung,
+  −ḣ(0) ≤ p₁h(0) (3.78 / 3.60 m/s), as the tolerable closing speed. It is
+  only a ceiling. For carts starting together at speed s, every higher
+  derivative of h is zero, so y_i ≥ 0 ⇔ s ≤ h(0)/Σ_{j≤i} 1/p_j, and the five
+  exactly checkable rungs allow only **0.894 / 0.852 m/s**. The pendulum's
+  15.0 / 12.5 are gone: its x₀ is the top of the end effector's circle, so
+  ḣ(0) ≡ 0 for any rotation.
+- **HTML figures**: `docs/embed_figures.py`, and `data-fig` on the eight ch4
+  images (see the loose ends above).
+
+### Pending runs, and what each result changes
+
+Cheapest first; one MATLAB session at a time. This Mac does **not** hold the
+Chapter 3 campaign or most of the 09-17 reruns: `Results/reruns/speed_ladder/`,
+`torque_march/`, `stride_march/` and `ch4_eps020/` are absent, as are the
+`20-33-53` (l1) and `20-36-27` (load) results. They live on the machine that
+produced them.
+
+1. **`ch4_eps020_diagnostics('thesisrow')`**, then `('summary')`. Three
+   25-step runs, a few minutes, any machine. Writes
+   `Results/reruns/ch4_eps020/thesisrow_s*.mat`, one line each in
+   `progress.log`, and THESISROW lines in `summary.log`. **Then**: rewrite
+   `tab:l1`'s italic row with the valid count (`\rc` → `\rcv` in the .tex;
+   "C, as §4.2 writes it" in the HTML), and drop "old box rule" from the
+   caption and the plate note. What stays true: the thesis form's box is
+   `p.l1.u_max` = 243.8 N·m, on μ₁ only, at every scale.
+2. **`ch5_moving_x0()`**. About 40 closed-loop runs, perhaps half an hour,
+   any machine. Log: `Results/reruns/ch5_moving_x0/moving_x0.log`, ending
+   `CH5_MOVING_X0_DONE`. Read first: the spring-mass line "bisection agrees
+   to …" should be about 1e-12. If it is not, `ch5_ecbf_admissible` and the
+   closed form disagree, and that is the finding. **Then**, in both Ch5
+   admissibility paragraphs, add for each configuration: s_adm, the multiple
+   of it at which h first goes negative (if any), and whether poles scaled
+   by c keep h ≥ 0. The pendulum's measured s_adm replaces "can break only
+   through the centripetal terms".
+3. **`ch3_impulse_march()`**. Needs
+   `Results/reruns/torque_march/gait_u162.mat`, so run it on the campaign
+   machine or copy that folder here first; without it the script stops with
+   a clear error. Hours: five 1 N·s rungs from 19 to 15, each up to about an
+   hour, plus bisection. Log: `Results/reruns/impulse_march/impulse_march.log`,
+   ending in a `VERDICT` line and `IMPULSE_MARCH_DONE`. **Then**: Ch3
+   `sec:torquefloor` and Ch4 `sec:box120` (both languages) say the gaits are
+   "half realizable at best". Replace that with the verdict: either a fully
+   realizable 162.5 N·m gait, or the impulse floor at that box.
+
+**PDFs.** The 09-25 builds were run with `xelatex` directly (the
+`.fdb_latexmk` files date from 09-20), and the ch3 and ch4 logs end with
+"Label(s) may have changed. Rerun", so their cross-references may be stale.
+Rebuild all three with latexmk after the edits above.
 
 ## Conventions that bite
 

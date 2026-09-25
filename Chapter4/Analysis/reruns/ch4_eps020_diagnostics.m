@@ -22,6 +22,10 @@ function ch4_eps020_diagnostics(stage)
 %                0.7 and 1.5 (and 1 as reference): max ||theta_hat|| / max
 %                ||theta_true||, and the median of the pointwise ratio. The
 %                plant predictor (the default) alongside for contrast.
+%   'thesisrow'  tab:l1's italic row, l1_con as Section 4.2 writes it, rerun
+%                with the valid-step count the other rows carry (the row came
+%                from ch4_l1_2026-09-13_18-26-49, before validity scoring).
+%                Scales 1, 0.7, 1.5, 25 steps.
 %   'summary'    Results/reruns/ch4_eps020/summary.log from the saved runs.
 %
 % Every run is saved on its own and skipped when present, so a crashed session
@@ -30,7 +34,7 @@ function ch4_eps020_diagnostics(stage)
 % See also CH4_RERUN_ALL, CH4_LONG_RERUNS, CH4_RUN_ENTRY.
 
 if nargin < 1 || isempty(stage)
-    for s = {'kappa', 'growth', 'predictor', 'summary'}
+    for s = {'kappa', 'growth', 'predictor', 'thesisrow', 'summary'}
         ch4_eps020_diagnostics(s{1});
     end
     return;
@@ -52,10 +56,11 @@ switch stage
     case 'kappa',     stage_kappa(SPD, logf, x0, alpha, p);
     case 'growth',    stage_growth(SPD, logf, x0, alpha, p);
     case 'predictor', stage_predictor(SPD, logf, x0, alpha, p);
+    case 'thesisrow', stage_thesisrow(SPD, logf, x0, alpha, p);
     case 'summary',   stage_summary(SPD);
     otherwise
         error('ch4_eps020_diagnostics:stage', ...
-              'Unknown stage "%s" (kappa|growth|predictor|summary).', stage);
+              'Unknown stage "%s" (kappa|growth|predictor|thesisrow|summary).', stage);
 end
 logline(logf, 'STAGE %s DONE', stage);
 fprintf('STAGE_DONE %s\n', stage);
@@ -123,6 +128,33 @@ for pred = {'thesis', 'plant'}
                 pred{1}, s, R.n, N, R.valid, R.th_hat_max, R.th_true_max, ...
                 R.th_ratio, R.th_ratio_med, R.reason);
     end
+end
+end
+
+% ---------------------------------------------------------------------------
+function stage_thesisrow(SPD, logf, x0, alpha, p)
+% The box needs no change: the thesis form bounds mu1 alone, and
+% ch4_compare_controllers gives that form p.l1.u_max at every scale under
+% either box rule (243.8 Nm, raised by ch4_load_gait). What makes it the thesis
+% form is every fix switched off: the thesis predictor with its own sampled-data
+% advance (fixes 1-2), the box on mu1 only (fix 3), no normalization (fix 4),
+% and Gamma = 1e4 rather than 1e5.
+N = 25;
+for s = [1 0.7 1.5]
+    f = sprintf('%sthesisrow_s%03.0f.mat', SPD, 100*s);
+    if exist(f, 'file'), continue; end
+    pc = ch4_run_params(p, 'l1_con', s, []);
+    pc.l1.predictor         = 'thesis';
+    pc.l1.Gamma             = 1e4;
+    pc.l1.Gamma_alpha       = [];
+    pc.l1.constrain_applied = false;
+    pc.l1.normalized_rate   = 0;
+    R = run_one(x0, alpha, pc, N, true);
+    info = struct('stage', 'thesisrow', 'scale', s, 'N', N, 'box', pc.l1.u_max); %#ok<NASGU>
+    save(f, 'info', 'R');
+    logline(logf, ['thesisrow l1_con scale %.2f: %d/%d valid %d | max|eta| %.3f | ' ...
+                   'minFz %.0f | peak|u| %.0f (box %.1f on mu1) | %s'], ...
+            s, R.n, N, R.valid, R.max_eta, R.Fz_min, R.peak_u, pc.l1.u_max, R.reason);
 end
 end
 
@@ -199,6 +231,9 @@ for f = F(:).'
             fprintf(fid, 'PRED %-6s scale %.2f | %2d/%d valid %2d | max|th_hat| %.0f max|th| %.0f ratio %.2f med %.2f | max|eta| %.3f | %s\n', ...
                     I.predictor, I.scale, R.n, I.N, R.valid, R.th_hat_max, R.th_true_max, ...
                     R.th_ratio, R.th_ratio_med, R.max_eta, R.reason);
+        case 'thesisrow'
+            fprintf(fid, 'THESISROW l1_con scale %.2f | %2d/%d valid %2d | max|eta| %.3f | minFz %.0f | peak|u| %.0f | %s\n', ...
+                    I.scale, R.n, I.N, R.valid, R.max_eta, R.Fz_min, R.peak_u, R.reason);
     end
 end
 fprintf(fid, 'DONE\n');

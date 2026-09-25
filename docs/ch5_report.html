@@ -741,12 +741,12 @@ footer{
         <div class="plate-head"><span>The margin at each run's own x&#8320;</span><span class="tag">ch5_ecbf_admissible</span></div>
         <div class="tscroll">
           <table>
-            <thead><tr><th>Run</th><th class="num">r_b</th><th class="num">h(x&#8320;)</th><th class="num">p&#8321;</th><th class="num">required</th><th class="num">margin</th><th class="num">tolerable −ḣ(0)</th></tr></thead>
+            <thead><tr><th>Run</th><th class="num">r_b</th><th class="num">h(x&#8320;)</th><th class="num">p&#8321;</th><th class="num">required</th><th class="num">margin</th><th class="num">rung 1: −ḣ(0) ≤ p&#8321;h(0)</th><th class="num">all rungs, rigid start</th></tr></thead>
             <tbody>
-              <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.15</td><td class="num">6</td><td class="num">3.15</td><td class="num">1.20</td><td class="num">0</td><td class="num">1.20</td><td class="num">3.78 m/s</td></tr>
-              <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.00</td><td class="num">6</td><td class="num">3.00</td><td class="num">1.20</td><td class="num">0</td><td class="num">1.20</td><td class="num">3.60 m/s</td></tr>
-              <tr><td class="name">pendulum, p₂ᵐⁱⁿ = −1.0</td><td class="num">4</td><td class="num">3.00</td><td class="num">5.00</td><td class="num">0</td><td class="num">5.00</td><td class="num">15.0</td></tr>
-              <tr><td class="name">pendulum, p₂ᵐⁱⁿ = −0.5</td><td class="num">4</td><td class="num">2.50</td><td class="num">5.00</td><td class="num">0</td><td class="num">5.00</td><td class="num">12.5</td></tr>
+              <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.15</td><td class="num">6</td><td class="num">3.15</td><td class="num">1.20</td><td class="num">0</td><td class="num">1.20</td><td class="num">3.78 m/s</td><td class="num">0.894 m/s</td></tr>
+              <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.00</td><td class="num">6</td><td class="num">3.00</td><td class="num">1.20</td><td class="num">0</td><td class="num">1.20</td><td class="num">3.60 m/s</td><td class="num">0.852 m/s</td></tr>
+              <tr><td class="name">pendulum, p₂ᵐⁱⁿ = −1.0</td><td class="num">4</td><td class="num">3.00</td><td class="num">5.00</td><td class="num">0</td><td class="num">5.00</td><td class="num">ḣ(0) ≡ 0</td><td class="num">&#8212;</td></tr>
+              <tr><td class="name">pendulum, p₂ᵐⁱⁿ = −0.5</td><td class="num">4</td><td class="num">2.50</td><td class="num">5.00</td><td class="num">0</td><td class="num">5.00</td><td class="num">ḣ(0) ≡ 0</td><td class="num">&#8212;</td></tr>
             </tbody>
           </table>
         </div>
@@ -755,10 +755,16 @@ footer{
           pole's margin is the pole itself. Every <code>y_i(x&#8320;)</code> is non-negative
           (3.15&#8230;33.9 for the spring-mass, 3&#8230;4950 for the pendulum), so <code>x&#8320;</code>
           lies in every set of the chain and Theorem 5.1 applies without qualification. The honest
-          reading: <strong>these runs do not exercise the limitation.</strong> With the same poles the
-          condition tolerates a barrier already closing at up to <code>p&#8321;·h(0)</code> &#8212;
-          3.78 and 3.60 m/s here, 15.0 and 12.5 for the pendulum &#8212; and beyond that the same poles
-          become inadmissible.
+          reading: <strong>these runs do not exercise the limitation.</strong> The first rung caps a
+          barrier already closing at <code>p&#8321;·h(0)</code> &#8212; 3.78 and 3.60 m/s here &#8212; but
+          that is only a ceiling, and the higher rungs close far sooner. If all three carts start
+          together at speed <code>s</code>, no spring is stretched, every higher derivative of
+          <code>h</code> is zero at <code>x&#8320;</code>, and the chain has a closed form:
+          <code>y_i(x&#8320;) &#8805; 0</code> exactly when <code>s &#8804; h(0) / &#931;_{j&#8804;i} 1/p_j</code>.
+          The five exactly checkable rungs then admit only <strong>0.894 and 0.852 m/s</strong>, about a
+          quarter of the first rung's ceiling. The pendulum starts at the top of the end effector's
+          circle, so <code>ḣ(0) = 0</code> for any rotation and the first rung never binds; there
+          the chain can break only through the centripetal terms in the higher rungs.
         </div>
       </div>
 
