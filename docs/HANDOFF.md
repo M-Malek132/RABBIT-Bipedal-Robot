@@ -10,10 +10,11 @@ Two pieces of work, both finished, both recorded here rather than pending:
    **1.2 m/s design speed**, and a torque floor of **162.5 N·m** against a
    declared limit of 120.
 
-Then a third, **partly pending**: the follow-ups this file listed as open
-(2026-09-25). The report edits are done; four runs are written and waiting.
-Jump to **"Follow-ups of 2026-09-25"** for what is done, the commands, and what
-each run's result has to change.
+Then a third, **one run pending**: the follow-ups this file listed as open
+(2026-09-25). The report edits are done, and the thesis-row and moving-x₀ runs
+are done and written up. `ch3_impulse_march`'s first run was inconclusive (its
+verdict line is wrong; see item 3); the driver is fixed and a rerun is pending.
+Jump to **"Follow-ups of 2026-09-25"**.
 
 ## Where things stand
 
@@ -35,17 +36,12 @@ A supervisor-style review of the Chapter 3, 4 and 5 reports (the Persian
 All seven review items are closed. What was left was ordinary follow-up, not
 review debt; each now has a driver (see "Follow-ups of 2026-09-25"):
 
-- The Chapter 5 runs start at rest, so the pole-admissibility condition is
-  satisfied with full margin and **the limitation is never exercised**.
-  `ch5_moving_x0` runs the same four configurations from a moving `x0`
-  (**pending**). Its closed form already corrected the reports: the first
-  rung's 3.78/3.60 m/s was being read as the tolerance, and the full chain
-  allows only 0.894/0.852 m/s for a rigid start.
-- The `l1` thesis-form row of `tab:l1` comes from
-  `Results/ch4_l1_2026-09-13_18-26-49/`, before validity scoring, so it is the
-  only row with no valid-step count. Its box is not the problem (the thesis
-  form gets `p.l1.u_max` under either rule). `ch4_eps020_diagnostics('thesisrow')`
-  reruns it with validity (**pending**).
+- ~~The Chapter 5 runs start at rest, so the limitation is never exercised~~ —
+  **done**: `ch5_moving_x0` ran all four configurations from a moving `x0`;
+  results in Ch5 `sec:moving` / caveat 4 (summary below).
+- ~~The `l1` thesis-form row of `tab:l1` comes from the old run~~ — **done**:
+  `ch4_eps020_diagnostics('thesisrow')` reproduces it to the digit and adds the
+  valid counts (25 / 0 / 0 at ×1 / ×0.7 / ×1.5); both reports updated.
 - ~~`docs/ch4_report.html` figures are re-embedded by hand~~ — **done**: each
   `<img>` names its file (`data-fig="figures/…png"`) and
   `python3 docs/embed_figures.py docs/ch4_report.html` rebuilds them
@@ -302,9 +298,37 @@ the follow-ups).
 - **HTML figures**: `docs/embed_figures.py`, and `data-fig` on the eight ch4
   images (see the loose ends above).
 
+### Runs done, 2026-09-25 evening, and what they changed
+
+- **Thesis row** (`Results/reruns/ch4_eps020/summary.log`): `l1_con` in the
+  thesis form reproduces the 2026-09-13 row exactly (max‖η‖ 0.381 / 14.474 /
+  18.704, min Fz 49 / −1403 / −978 N, falls in step 14 at ×1.5) and is valid
+  25 / 0 / 0 at ×1 / ×0.7 / ×1.5. The applied torque reaches 199 / 361 / 538 N·m
+  against its 243.8 N·m box on μ₁. `tab:l1` (.tex, via a four-field `\fallc`) and
+  the HTML row, tag and note are updated; "old box rule" is gone.
+- **Moving x₀** (`Results/reruns/ch5_moving_x0/moving_x0.log`). Spring-mass:
+  the bisection matches the closed form to 1e-16, and rung 5 binds (s_adm
+  0.894 / 0.852 m/s). h stays ≥ 0 through 1.5× s_adm and goes negative at 2×
+  (−0.162 / −0.159) and 3×, so the corollary is conservative by 1.5–2×. Poles
+  scaled by 1.05c keep h ≥ 0 at 1.1, 1.5 and 3×, but at 3× the peak force goes
+  from 84 / 80 N to 413 010 / 71 066 N. Pendulum: s_1 does not exist, rung 3
+  binds (s_adm 3.73 / 3.41 rad/s, s_top 3.06 / 2.78). Only 1.87 rad/s at −1.0 m
+  completes; 17 other runs, admissible and pole-scaled ones included, go
+  non-finite within 0.13–1.17 s with the QP infeasible. **Cause (above s_top):**
+  the barrier row's coefficient (k/J_m)∇p_yᵀD⁻¹ is exactly zero at the upright
+  start (∇p_y = 0), so h does not have relative degree 4 at x₀. Harmless from
+  rest (row slack, y₄ = 4950); fatal once y₄(x₀) < 0. The 1.70 rad/s run at −0.5 m
+  fails at 1.17 s for a reason not located. The folded-arm zero of the same
+  coefficient (θ₁ = 0, θ₂ = ±π; nominal runs fold to −3.10) is a candidate,
+  unconfirmed: `one_run` saves no trajectory. Written into Ch5 `sec:moving`
+  (Persian) and caveat 4 (English), with the "inherits the full relative degree"
+  and "Theorem 5.1 holds without exception" sentences qualified and the
+  limitation in both conclusions updated.
+
 ### Pending runs, and what each result changes
 
-Cheapest first; one MATLAB session at a time. This Mac does **not** hold the
+Items 1 and 2 below are done (see above); item 3 is running on the user's PC.
+One MATLAB session at a time. This Mac does **not** hold the
 Chapter 3 campaign or most of the 09-17 reruns: `Results/reruns/speed_ladder/`,
 `torque_march/`, `stride_march/` and `ch4_eps020/` are absent, as are the
 `20-33-53` (l1) and `20-36-27` (load) results. They live on the machine that
@@ -330,17 +354,35 @@ produced them.
 3. **`ch3_impulse_march()`**. Needs
    `Results/reruns/torque_march/gait_u162.mat`, so run it on the campaign
    machine or copy that folder here first; without it the script stops with
-   a clear error. Hours: five 1 N·s rungs from 19 to 15, each up to about an
-   hour, plus bisection. Log: `Results/reruns/impulse_march/impulse_march.log`,
+   a clear error. Log: `Results/reruns/impulse_march/impulse_march.log`,
    ending in a `VERDICT` line and `IMPULSE_MARCH_DONE`. **Then**: Ch3
    `sec:torquefloor` and Ch4 `sec:box120` (both languages) say the gaits are
    "half realizable at best". Replace that with the verdict: either a fully
-   realizable 162.5 N·m gait, or the impulse floor at that box.
+   realizable 162.5 N·m gait, or where the march stalls (a continuation
+   result, not a floor).
 
-**PDFs.** The 09-25 builds were run with `xelatex` directly (the
-`.fdb_latexmk` files date from 09-20), and the ch3 and ch4 logs end with
-"Label(s) may have changed. Rerun", so their cross-references may be stale.
-Rebuild all three with latexmk after the edits above.
+   **First run (2026-09-25, user's PC): inconclusive, and its VERDICT line is
+   wrong.** The first rung, 19.00 N·s (a 0.4% cut from the 19.07 seed), ended
+   "converged to an infeasible point": exitflag −2, max c 1.05e-2, 1430 s. The
+   violation was in neither the torque nor the impulse row; mu printed 0.400
+   and min Fz 50.0. But fmincon's own log shows it meeting every limit on the
+   way (feasibility 2.2e-8 at iteration 19, 2.0e-7 at 25, 1.1e-6 at 85), with
+   first-order optimality at 1e8–1e9: the seed sits on a corner, and SQP chased
+   the torque cost off the feasible set. The march then quit without bisecting,
+   because (19.07 − 19.00)/2 is below the old 0.25 N·s MIN_STEP, and wrote "the
+   impulse comes down only to 19.07 Ns". That line is not a finding.
+   The driver now keeps the best iterate that meets every limit in true
+   units, stops once 30 iterations bring no better one, and uses it if the
+   final iterate misses (still mesh-verified). It also cuts 1 N·s rungs
+   (18 → 15), bisects to 0.1 N·s, logs the worst constraint row, and words a
+   stall as a continuation result. **Rerun pending.** If it stalls, the same
+   march from the 180 N·m rung (`gait_u180.mat`, tag `u180`) would show
+   whether the torque corner is what blocks it.
+
+**PDFs.** All three were rebuilt with latexmk and committed (`e22a457`). Since
+then `ch4_report_fa.tex` (thesis row) and `ch5_report_fa.tex` (`sec:moving`)
+have changed again, so those two need one more latexmk build, and the impulse
+march's write-up will need a third (ch3 and ch4).
 
 ## Conventions that bite
 

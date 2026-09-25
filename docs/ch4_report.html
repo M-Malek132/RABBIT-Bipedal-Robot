@@ -920,7 +920,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
     </div>
 
     <div class="plate">
-      <div class="plate-head"><span>§4.2.4 &#8212; L₁ against its reference model</span><span class="tag">25 steps · cells: steps · max‖η‖ · true min Fz</span></div>
+      <div class="plate-head"><span>§4.2.4 &#8212; L₁ against its reference model</span><span class="tag">25 steps · cells: steps · valid · max‖η‖ · true min Fz</span></div>
       <div class="tscroll">
         <table class="cells">
           <thead>
@@ -930,13 +930,16 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
             <tr><td class="name">A &nbsp;<code>clfqp</code></td><td class="cell">25&nbsp;· 1&nbsp;· 0.25&nbsp;· 26&nbsp;N</td><td class="cell">25&nbsp;· <b>0</b>&nbsp;· 14.5&nbsp;· <b>−1734&nbsp;N</b></td><td class="cell">25&nbsp;· <b>0</b>&nbsp;· 16.5&nbsp;· <b>−179&nbsp;N</b></td></tr>
             <tr><td class="name">B &nbsp;<code>l1</code></td><td class="cell ok">25&nbsp;· 25&nbsp;· 0.14&nbsp;· 50&nbsp;N</td><td class="cell">25&nbsp;· <b>0</b>&nbsp;· 4.34&nbsp;· <b>−220&nbsp;N</b></td><td class="cell">25&nbsp;· <b>0</b>&nbsp;· 2.37&nbsp;· <b>−227&nbsp;N</b></td></tr>
             <tr class="hl"><td class="name">C &nbsp;<code>l1_con</code></td><td class="cell ok">25&nbsp;· 25&nbsp;· 0.15&nbsp;· 50&nbsp;N</td><td class="cell">25&nbsp;· <b>0</b>&nbsp;· 5.89&nbsp;· 23&nbsp;N</td><td class="cell ok">25&nbsp;· 25&nbsp;· 6.10&nbsp;· 91&nbsp;N</td></tr>
-            <tr class="thesis"><td class="name">C, as §4.2 writes it</td><td class="cell">25&nbsp;· 0.38&nbsp;· 49&nbsp;N</td><td class="cell">25&nbsp;· 14.5&nbsp;· −1403&nbsp;N</td><td class="cell">falls&nbsp;in&nbsp;step&nbsp;14&nbsp;· 18.7&nbsp;· −978&nbsp;N</td></tr>
+            <tr class="thesis"><td class="name">C, as §4.2 writes it</td><td class="cell">25&nbsp;· 25&nbsp;· 0.38&nbsp;· 49&nbsp;N</td><td class="cell">25&nbsp;· <b>0</b>&nbsp;· 14.5&nbsp;· <b>−1403&nbsp;N</b></td><td class="cell">falls&nbsp;in&nbsp;step&nbsp;14&nbsp;· <b>0</b>&nbsp;· 18.7&nbsp;· <b>−978&nbsp;N</b></td></tr>
           </tbody>
         </table>
       </div>
       <div class="plate-note">
-        The italic row is §4.2 as written &#8212; thesis predictor, Γ = 1e4, box on <code>μ₁</code>
-        alone &#8212; from <code>ch4_l1_2026-09-13_18-26-49</code>. Normalization moves the table
+        The italic row is §4.2 as written &#8212; thesis predictor, Γ = 1e4, no normalization, and a
+        243.8&nbsp;Nm box on <code>μ₁</code> alone at every scale, which the applied torque overshoots to
+        361 and 538&nbsp;Nm at ×0.7 and ×1.5. Rerun with validity scoring
+        (<code>ch4_eps020_diagnostics('thesisrow')</code>), it reproduces the 2026-09-13 run to the
+        digit and adds the valid counts: all 25 at ×1, none at either perturbed scale. Normalization moves the table
         only slightly: with the first three fixes alone, B read 4.81 · −362 N at ×0.7 and 2.17
         at ×1.5, and C 4.58 and 4.51. At ×1 it never engages.
       </div>

@@ -754,7 +754,8 @@ footer{
           All four starts are at rest, so <code>ḣ(0) = 0</code>, every lower bound is zero and each
           pole's margin is the pole itself. Every <code>y_i(x&#8320;)</code> is non-negative
           (3.15&#8230;33.9 for the spring-mass, 3&#8230;4950 for the pendulum), so <code>x&#8320;</code>
-          lies in every set of the chain and Theorem 5.1 applies without qualification. The honest
+          lies in every set of the chain, which is all Theorem 5.1 asks of <code>x&#8320;</code> (its
+          relative-degree premise is another matter on the pendulum; see caveat 4). The honest
           reading: <strong>these runs do not exercise the limitation.</strong> The first rung caps a
           barrier already closing at <code>p&#8321;·h(0)</code> &#8212; 3.78 and 3.60 m/s here &#8212; but
           that is only a ceiling, and the higher rungs close far sooner. If all three carts start
@@ -764,7 +765,8 @@ footer{
           The five exactly checkable rungs then admit only <strong>0.894 and 0.852 m/s</strong>, about a
           quarter of the first rung's ceiling. The pendulum starts at the top of the end effector's
           circle, so <code>ḣ(0) = 0</code> for any rotation and the first rung never binds; there
-          the chain can break only through the centripetal terms in the higher rungs.
+          the chain can break only through the centripetal terms in the higher rungs. Caveat 4
+          runs both plants from a moving start.
         </div>
       </div>
 
@@ -807,7 +809,9 @@ s.t.  V&#775;(&#951;,&#956;) + &#955;V(&#951;)  &#8804;  &#948;            <span
         Between them the two plants cover what the construction claims: one linear and one
         nonlinear, one single-input and one multi-input, at two different relative degrees.
         In both, <strong>the constrained quantity is the controlled quantity</strong>, so the
-        safety constraint inherits the full relative degree of the plant. There is no cheap
+        safety constraint inherits the full relative degree of the plant &#8212; on the pendulum,
+        everywhere except where <code>&#8711;p_y = 0</code>, i.e. with the arm vertical, which includes the
+        start pose (caveat 4). There is no cheap
         reformulation in which the barrier is relative degree 1 &#8212; which is exactly the
         situation Section 5.1 cannot address.
       </p>
@@ -1082,7 +1086,7 @@ s.t.  V&#775;(&#951;,&#956;) + &#955;V(&#951;)  &#8804;  &#948;            <span
   <section>
     <div class="col">
       <p class="eyebrow">Caveats &nbsp;&#183;&nbsp; measured, not assumed</p>
-      <h2>Three things worth being explicit about</h2>
+      <h2>Four things worth being explicit about</h2>
 
       <h3>1. The trajectory is not reproducible; the safety property is</h3>
       <p>
@@ -1178,6 +1182,74 @@ s.t.  V&#775;(&#951;,&#956;) + &#955;V(&#951;)  &#8804;  &#948;            <span
         </p>
       </div>
     </div>
+
+    <div class="col">
+      <h3>4. From a moving start: the limitation, measured</h3>
+      <p>
+        Every run in the results tables starts at rest, so each meets the pole-admissibility
+        condition with full margin (the margin table above). <code>ch5_moving_x0</code> starts the
+        same four configurations moving toward the boundary &#8212; all three carts together at speed
+        <code>s</code>; link 1 and its motor together at angular speed <code>s</code>, from the same
+        upright pose &#8212; finds by bisection the speed at which the chain breaks, and runs the
+        closed loop at multiples of it.
+      </p>
+    </div>
+
+    <div class="plate">
+      <div class="plate-head"><span>Starting from a moving x&#8320;</span><span class="tag">ch5_moving_x0 &#183; multiples of s_adm: 0.5, 0.9, 1.1, 1.5, 2, 3</span></div>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Run</th><th class="num">s_adm</th><th class="num">s_top</th><th class="num">safe through</th><th class="num">first failure</th><th>poles &#215; c</th></tr></thead>
+          <tbody>
+            <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.15</td><td class="num">0.894 m/s</td><td class="num">0.773</td><td class="num">&#215;1.5</td><td class="num">&#215;2: h_min &#8722;0.162</td><td><span class="pill safe">safe</span></td></tr>
+            <tr><td class="name">spring-mass, x₃ᵐᵃˣ = 3.00</td><td class="num">0.852 m/s</td><td class="num">0.736</td><td class="num">&#215;1.5</td><td class="num">&#215;2: h_min &#8722;0.159</td><td><span class="pill safe">safe</span></td></tr>
+            <tr><td class="name">pendulum, p₂ᵐⁱⁿ = &#8722;1.0</td><td class="num">3.73 rad/s</td><td class="num">3.06</td><td class="num">&#215;0.5</td><td class="num">&#215;0.9: diverges</td><td><span class="pill bad">diverges</span></td></tr>
+            <tr><td class="name">pendulum, p₂ᵐⁱⁿ = &#8722;0.5</td><td class="num">3.41 rad/s</td><td class="num">2.78</td><td class="num">&#8212;</td><td class="num">&#215;0.5: diverges</td><td><span class="pill bad">diverges</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="plate-note">
+        <code>s_adm</code> is the speed at which the exactly checkable rungs of the chain break;
+        <code>s_top</code> is where <code>y_rb</code> also goes negative with no control, so the QP must
+        act from the first sample. &#8220;Safe through&#8221; is the largest multiple of <code>s_adm</code> with
+        <code>h &#8805; 0</code>. The last column reruns the inadmissible multiples (1.1, 1.5 and 3) with every
+        pole scaled by 1.05&#215; the smallest factor that readmits <code>x&#8320;</code>. Log:
+        <code>Results/reruns/ch5_moving_x0/moving_x0.log</code>.
+      </div>
+    </div>
+
+    <div class="col">
+      <p>
+        <strong>On the spring-mass, the bound is conservative, and faster poles pay for it.</strong>
+        The bisection lands on the closed form (to 1e&#8722;16), with the fifth rung binding. But
+        <code>h</code> stays non-negative through 1.5&#215; <code>s_adm</code> (1.34 and 1.28 m/s) and goes
+        negative only at 2&#215; (1.79 and 1.70 m/s: &#8722;0.162 and &#8722;0.159) and 3&#215; (&#8722;1.48 and
+        &#8722;1.41). The condition is sufficient, not necessary, and on this plant conservative by a
+        factor between 1.5 and 2 in speed. Faster poles keep <code>h &#8805; 0</code> at all three speeds
+        where they were tried, at a price: at 3&#215; the peak force goes from 84 and 80 N to
+        <strong>413&#8201;010 and 71&#8201;066 N</strong>, because at relative degree 6 the barrier gains
+        grow with up to the sixth power of the pole scale.
+      </p>
+      <p>
+        <strong>On the pendulum, the controller breaks before the corollary matters.</strong> Only
+        the slowest moving start, 1.87 rad/s at &#8722;1.0 m, completes (<code>h_min</code> +0.52). Every
+        other run &#8212; from 0.9&#215; <code>s_adm</code> at &#8722;1.0 m and from 0.5&#215; (1.70 rad/s) at
+        &#8722;0.5 m, admissible or not, and every run with faster poles &#8212; reaches a non-finite state
+        within 0.13&#8211;1.17 s, with the QP infeasible and torques above 10&#185;&#185; Nm; 15 of those 17
+        cross the boundary first. Above <code>s_top</code> the cause is structural. The barrier row's
+        control coefficient, <code>L_g L_f&#179; h = (k/J_m) &#8711;p_y&#7488; D&#8315;&#185;</code>, is zero wherever
+        <code>&#8711;p_y = 0</code>: whenever the arm is vertical, which the start pose is. So the
+        constraint does not have relative degree 4 at <code>x&#8320;</code>, and Theorem 5.1's premise
+        fails right there. From rest that is harmless, because the row is slack at <code>t = 0</code>
+        (<code>y&#8324;</code> = 4950 and 4120). Above <code>s_top</code>, <code>y&#8324;(x&#8320;)</code> is negative and
+        the control does not appear in it, so the QP is infeasible from the first sample. The
+        1.70 rad/s run at &#8722;0.5 m is admissible, with the row slack at <code>t = 0</code>, and fails
+        later, at 1.17 s. The fully folded arm with link 1 pointing down (<code>&#952;&#8321; = 0</code>,
+        <code>&#952;&#8322; = &#177;&#960;</code>) is another zero of the same coefficient, and the nominal ECBF runs
+        themselves fold to <code>&#952;&#8322; = &#8722;3.10</code> rad &#8212; a likely candidate, but this study does
+        not locate the cause.
+      </p>
+    </div>
   </section>
 
   <!-- =========================================================== verification -->
@@ -1257,7 +1329,11 @@ s.t.  V&#775;(&#951;,&#956;) + &#955;V(&#951;)  &#8804;  &#948;            <span
           automatically valid for another. On a walking robot, where <code>x&#8320;</code> is
           whatever the previous step's impact map produced, this is a live constraint rather
           than a formality. <code>ch5_ecbf_admissible</code> is the gate; the chapter itself
-          flags the dependence as a real limitation of the method.
+          flags the dependence as a real limitation of the method. Measured from a moving start
+          (caveat 4): on the spring-mass the bound is conservative by a factor of 1.5&#8211;2, and
+          faster poles make up for it at a cost in force; on the pendulum, a moving start first
+          runs into the pose where the barrier loses its relative degree &#8212; a lesson for any
+          barrier on the height of a point in Chapter 6.
         </li>
         <li>
           <strong>The whole construction is model-based.</strong> Every term in the row &#8212;
