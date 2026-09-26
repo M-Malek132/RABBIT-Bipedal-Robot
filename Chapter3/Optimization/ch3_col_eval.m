@@ -51,13 +51,23 @@ function E = ch3_col_eval(z, p)
 % z (the first evaluation of every rung is at the previous rung's answer)
 % would be handed the previous rung's dynamics.
 %
+% ONLY THE NUMBERS ARE CACHED; E.p IS ALWAYS THIS CALLER'S. The key leaves out
+% every field the numbers never read -- the limits, the gates, v_des -- so a hit
+% returns the cached numbers with E.p replaced by the p of the call being
+% served. Handing back the cached E.p instead gave every caller that does
+% p = E.p (ch3_col_constraints, ch3_report) the limits of whichever call filled
+% the cache. Measured 2026-09-26: ch3_validate_gait checked posture_195 against
+% the declared 120 Nm right after its own 195 Nm box and got the 195 Nm torque
+% row back (+7.0e-6 instead of +75).
+%
 % See also CH3_COL_COST, CH3_COL_CONSTRAINTS, CH3_COL_DYNAMICS.
 
 persistent key val
 p  = ch3_col_effective_params(z, p);
 kp = cache_key(p);
 if ~isempty(key) && numel(key.z) == numel(z) && isequal(key.z, z) && isequaln(key.p, kp)
-    E = val;
+    E   = val;
+    E.p = p;
     return;
 end
 

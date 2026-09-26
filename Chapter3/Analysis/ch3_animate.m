@@ -12,6 +12,9 @@ function ch3_animate(x0, alpha, p, n_steps, gifpath)
 % built on too coarse a mesh, this is where it visibly falls over. Worth
 % watching for that reason alone.
 %
+% Frames are 10 ms of simulated time apart and the GIF plays 25 of them a
+% second, so it runs at a quarter of real speed.
+%
 % Requires a normal (JVM-enabled) MATLAB session.
 %
 % See also CH3_SIMULATE, CH3_PLOT_GAIT, CH3_BODY_POINTS.
@@ -25,20 +28,39 @@ if sim.n_ok == 0
 end
 fprintf('ch3_animate: %d/%d steps (%s)\n', sim.n_ok, n_steps, sim.reason);
 
-X = sim.x;
-nt = size(X, 2);
-stride = max(1, round(nt / 200));      % ~200 frames regardless of solver grid
-frames = 1:stride:nt;
+% FRAMES ON A UNIFORM CLOCK, interpolated within each step. Every k-th solver
+% point, as this used to take, slows the walk down at each touchdown, where
+% ode45 crowds its points. No frame is interpolated ACROSS an impact: the reset
+% relabels the legs, so the states either side of it are not in the same
+% coordinates.
+DT_FRAME = 0.01;                                   % [s] of simulated time
+t_off = cumsum([0, arrayfun(@(s) s.T, sim.steps)]);
+t_fr  = 0:DT_FRAME:t_off(end);
+X = zeros(numel(x0), numel(t_fr));
+for i = 1:numel(t_fr)
+    k = find(t_fr(i) >= t_off(1:end-1), 1, 'last');
+    s = sim.steps(k);
+    X(:,i) = interp1(s.t(:), s.x.', min(t_fr(i) - t_off(k), s.T)).';
+end
+
+% THE AXES FIT THE ROBOT. A fixed 1.6 m top cut off the top of the torso on
+% every gait of the 74 kg model: a 0.92-0.97 m hip plus the 0.75 m torso
+% reaches 1.72 m.
+top = 0;
+for i = 1:numel(t_fr)
+    b = ch3_body_points(X(1:p.nq, i));
+    top = max(top, b.torso_top(2));
+end
 
 xs = X(1,:);
 fig = figure('Color','w','Position',[100 100 900 420]);
 ax  = axes(fig); hold(ax,'on'); grid(ax,'on'); axis(ax,'equal');
 xlim(ax, [min(xs)-1.0, max(xs)+1.0]);
-ylim(ax, [-0.15, 1.6]);
+ylim(ax, [-0.15, max(1.6, top + 0.1)]);
 xlabel(ax,'x [m]'); ylabel(ax,'z [m]');
 
 first = true;
-for k = frames
+for k = 1:numel(t_fr)
     cla(ax);
     plot(ax, xlim(ax), [0 0], 'k-', 'LineWidth', 2);
 
@@ -53,7 +75,7 @@ for k = frames
     plot(ax, b.hip(1), b.hip(2), 'ko', 'MarkerFaceColor','k', 'MarkerSize', 6);
 
     title(ax, sprintf('t = %.2f s   |   %s   |   %d steps', ...
-                      sim.t(k), p.controller, sim.n_ok));
+                      t_fr(k), p.controller, sim.n_ok));
     drawnow limitrate;
 
     if ~isempty(gifpath)

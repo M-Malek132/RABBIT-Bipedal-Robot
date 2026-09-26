@@ -17,6 +17,8 @@ function ch3_test_collocation()
 %      parameters read them back.
 %   7. One cost + constraint evaluation is timed, so the cost of a full
 %      gradient is known before launching a solve.
+%   8. The evaluation cache keeps each caller's limits: the same z under two
+%      torque boxes gives two torque rows.
 
 fprintf('\n=== ch3_test_collocation ===\n');
 p = ch3_params();
@@ -144,6 +146,17 @@ t0 = tic; for k = 1:3, ch3_col_cost(z0 + 1e-9*k, p); end; t_eval = toc(t0)/3;
 n_grad = 2 * n_var;
 fprintf('        one cost+constraint eval = %.3f s -> one central-difference\n', t_eval);
 fprintf('        gradient (%d vars) ~ %.0f s\n', n_var, n_grad * t_eval);
+
+%% 8. the evaluation cache keeps each caller's limits
+% ch3_col_eval caches on z and the fields its numbers read; the limits are not
+% among them. The second call below is served from the cache, and a hit that
+% handed back the FIRST caller's p judged it against the first box
+% (2026-09-26, ch3_col_eval header).
+pa = p;  pa.limits.enable.torque = true;
+pb = pa; pb.limits.u_max = pa.limits.u_max + 50;
+ca = ch3_col_constraints(z0, pa);
+cb = ch3_col_constraints(z0, pb);
+pass = report('cache keeps the caller''s box', abs((ca(4) - cb(4)) - 50), 1e-9, pass);
 
 fprintf('--- ch3_test_collocation: %s ---\n\n', tf(pass));
 end
