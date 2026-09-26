@@ -1110,8 +1110,35 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
       <p>
         Two caveats. 162.5&nbsp;Nm is still 1.35× the declared limit, and reaching 120 needs a
         <em>different</em> gait &#8212; another posture, step length or speed branch &#8212; not more of this
-        ladder. And these gaits carry impulses of 18.8&#8211;19.1&nbsp;Ns against a 15&nbsp;Ns limit whose gate
-        was off throughout: a gait that meets the torque box and misses the impulse cap is half realizable.
+        ladder. And these gaits carried impulses of 18.8&#8211;19.1&nbsp;Ns against a 15&nbsp;Ns limit, because
+        that gate was off throughout.
+      </p>
+      <p>
+        <strong>The second caveat is now closed.</strong> <code>ch3_impulse_march</code> takes the
+        162.5&nbsp;Nm gait, holds its box, turns the impulse gate on and walks the ceiling down in 1&nbsp;Ns
+        rungs with the speed free. All four rungs land, the last one cleanly: a gait at a 162.5&nbsp;Nm box
+        and a 15.00&nbsp;Ns impulse that meets every limit the solve enforces (max c &#8722;2.1×10⁻⁹) and is a
+        real trajectory (verify deviation 1.2×10⁻⁴ against a 10⁻³ threshold). The price is speed again:
+        1.2921 → 1.3932&nbsp;m/s, 16% above the design speed, with the step time shortening
+        (0.3395 → 0.3144&nbsp;s) at constant step length (0.438&nbsp;m). As the impulse falls the contact
+        leaves its corner: the 50&nbsp;N normal-force floor is inactive from 16&nbsp;Ns on, and at 15&nbsp;Ns the
+        active rows are torque and impulse.
+      </p>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>Impulse cap</th><th class="num">speed</th><th class="num">min Fz</th><th class="num">max c</th><th class="num">verify</th><th>verdict</th></tr></thead>
+          <tbody>
+            <tr><td class="name">19.07 Ns (seed)</td><td class="num">1.2921</td><td class="num">50.0 N</td><td class="num">7.3×10⁻¹¹</td><td class="num">7.1×10⁻⁵</td><td>&#8212;</td></tr>
+            <tr><td class="name">18 Ns</td><td class="num">1.3162</td><td class="num">50.0 N</td><td class="num">1.4×10⁻¹⁰</td><td class="num">9.6×10⁻⁵</td><td><span class="pill safe">landed</span></td></tr>
+            <tr><td class="name">17 Ns</td><td class="num">1.3460</td><td class="num">50.0 N</td><td class="num">6.3×10⁻⁶</td><td class="num">1.3×10⁻⁴</td><td><span class="pill warn">iterate kept</span></td></tr>
+            <tr><td class="name">16 Ns</td><td class="num">1.3707</td><td class="num">67.1 N</td><td class="num">&lt; 0</td><td class="num">1.4×10⁻⁴</td><td><span class="pill safe">landed</span></td></tr>
+            <tr class="hl"><td class="name">15 Ns</td><td class="num">1.3932</td><td class="num">72.3 N</td><td class="num">&lt; 0</td><td class="num">1.2×10⁻⁴</td><td><span class="pill safe">landed clean</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        At 17&nbsp;Ns the solve's final iterate missed, so an earlier iterate that met every limit to
+        6.3×10⁻⁶ on the friction row was kept and verified. The rungs after it meet every limit on their own.
       </p>
 
       <h3>3. Step length is not a design variable in this transcription</h3>

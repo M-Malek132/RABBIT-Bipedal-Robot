@@ -8,13 +8,13 @@ Two pieces of work, both finished, both recorded here rather than pending:
    can walk at, and within what actuator budget. Jump to
    "Chapter 3 gait campaign" for the headline — a verified gait at the
    **1.2 m/s design speed**, and a torque floor of **162.5 N·m** against a
-   declared limit of 120.
+   declared limit of 120 — at which box a gait also meets the **15 N·s**
+   impulse limit (2026-09-26).
 
-Then a third, **one run pending**: the follow-ups this file listed as open
-(2026-09-25). The report edits are done, and the thesis-row and moving-x₀ runs
-are done and written up. `ch3_impulse_march`'s first run was inconclusive (its
-verdict line is wrong; see item 3); the driver is fixed and a rerun is pending.
-Jump to **"Follow-ups of 2026-09-25"**.
+Then a third, **finished** (2026-09-25/26): the follow-ups this file listed as
+open. Report edits, the thesis-row rerun, the moving-x₀ study and the impulse
+march are all done and written into the reports. Jump to **"Follow-ups of
+2026-09-25"**.
 
 ## Where things stand
 
@@ -211,9 +211,14 @@ Landed rungs, all verified trajectories:
   tightened (1.2815 → 1.2921 m/s). Pinning the speed back to 1.20 collapses the
   solve to a spurious point (max\|c\| 3.0). **1.2 m/s and 120 N·m cannot be
   pursued together by continuation.**
-- **Half realizable only.** These gaits carry impulses of 18.8–19.1 N·s against
-  a declared 15, with that gate off throughout. The second march is
-  `ch3_impulse_march` (**pending**; see the follow-ups).
+- **~~Half realizable only~~ — closed 2026-09-26.** These gaits carried
+  18.8–19.1 N·s against a declared 15, with that gate off. `ch3_impulse_march`
+  (box held at 162.5, speed free, 1 N·s rungs) landed 18, 17, 16 and **15 N·s**.
+  The last is clean: max c −2.1e-9, verify 1.2e-4 against a 1e-3 tolerance, at
+  **1.3932 m/s**, T 0.3144 s, L 0.438 m, min Fz 72.3, μ 0.3995, torque and
+  impulse active. File: `Results/reruns/impulse_march/u162_I1500.mat`, on the
+  user's PC. Speed ran up again (1.2921 → 1.3932), and the Fz floor went
+  inactive from 16 N·s.
 
 ### Stride: not a design variable in this transcription (a negative result)
 
@@ -325,10 +330,10 @@ the follow-ups).
   and "Theorem 5.1 holds without exception" sentences qualified and the
   limitation in both conclusions updated.
 
-### Pending runs, and what each result changes
+### The three runs: how they were specified, and item 3's results
 
-Items 1 and 2 below are done (see above); item 3 is running on the user's PC.
-One MATLAB session at a time. This Mac does **not** hold the
+All three items below are done (item 3's results are at its end). One MATLAB
+session at a time. This Mac does **not** hold the
 Chapter 3 campaign or most of the 09-17 reruns: `Results/reruns/speed_ladder/`,
 `torque_march/`, `stride_march/` and `ch4_eps020/` are absent, as are the
 `20-33-53` (l1) and `20-36-27` (load) results. They live on the machine that
@@ -375,14 +380,25 @@ produced them.
    units, stops once 30 iterations bring no better one, and uses it if the
    final iterate misses (still mesh-verified). It also cuts 1 N·s rungs
    (18 → 15), bisects to 0.1 N·s, logs the worst constraint row, and words a
-   stall as a continuation result. **Rerun pending.** If it stalls, the same
-   march from the 180 N·m rung (`gait_u180.mat`, tag `u180`) would show
-   whether the torque corner is what blocks it.
+   stall as a continuation result.
 
-**PDFs.** All three were rebuilt with latexmk and committed (`e22a457`). Since
-then `ch4_report_fa.tex` (thesis row) and `ch5_report_fa.tex` (`sec:moving`)
-have changed again, so those two need one more latexmk build, and the impulse
-march's write-up will need a third (ch3 and ch4).
+   **Rerun (2026-09-25 23:17 → 09-26 01:47): done — a gait meets both.**
+   | cap | outcome | v m/s | min Fz | max c | verify |
+   |---|---|---|---|---|---|
+   | 18 | converged (exitflag 2) | 1.3162 | 50.0 | 1.4e-10 | 9.6e-5 |
+   | 17 | final missed; iterate 104 kept | 1.3460 | 50.0 | 6.3e-6 (friction) | 1.3e-4 |
+   | 16 | converged | 1.3707 | 67.1 | −2.3e-13 | 1.4e-4 |
+   | **15** | converged, clean | **1.3932** | 72.3 | −2.1e-9 | 1.2e-4 |
+
+   The 17 N·s rung is only a waypoint: `ch3_col_check_limits` flags its
+   6.3e-6 friction excess, while the march's landing test (max c ≤ 1e-4) let
+   it through. The 16 and 15 N·s gaits meet every limit on their own. Written
+   into Ch3 `sec:torquefloor` (new `tab:impulsemarch`, both languages), the
+   Persian Ch3 conclusion, and Ch4 `sec:box120` (both languages).
+
+**PDFs.** Rebuilt and committed twice (`e22a457`, `d14953a`). The impulse
+write-up changed `ch3_report_fa.tex` and `ch4_report_fa.tex` again, so those
+two need one more latexmk build.
 
 ## Conventions that bite
 
