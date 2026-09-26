@@ -11,10 +11,146 @@ Two pieces of work, both finished, both recorded here rather than pending:
    declared limit of 120 — at which box a gait also meets the **15 N·s**
    impulse limit (2026-09-26).
 
+<<<<<<< Updated upstream
 Then a third, **finished** (2026-09-25/26): the follow-ups this file listed as
 open. Report edits, the thesis-row rerun, the moving-x₀ study and the impulse
 march are all done and written into the reports. Jump to **"Follow-ups of
 2026-09-25"**.
+=======
+Then a third: the follow-ups this file listed as open (2026-09-25). All done,
+including the `ch3_impulse_march` rerun (2026-09-26 01:47, user's PC): at the
+162.5 N·m box the impulse comes down to **15.00 N·s** in a verified gait
+(`Results/reruns/impulse_march/u162_I1500.mat`, 1.393 m/s, verify 1.2e-4). Its
+swing apex is 0.32 m (gate off) and its stability is unmeasured. Written into
+Ch3 `sec:torquefloor` (new `tab:impulse`) and Ch4 `sec:box120`, both languages.
+
+And a fourth, **written, uncommitted, not yet run**: the second expert review
+(2026-09-26). Jump to **"Review of 2026-09-26"** — it lists every change, the
+runs the user has to make, and which report section each run's output fills in.
+
+## Review of 2026-09-26 — applied; runs pending
+
+Nothing below has been executed in MATLAB. Every new or edited `.m` file is
+untested until the three suites run; do that first. The reports say
+"هنوز اجرا نشده" / "not yet run" wherever a number is still owed, and make no
+claim about the result.
+
+### Code
+
+**Chapter 3**
+- *Model continuation (review 4.4.2).* `Dynamics/M_m30.m`, `V_m30.m`, `G_m30.m`:
+  the 30 kg model, restored verbatim from git `854f00b~1` and renamed.
+  `Chapter3/Model/ch3_mvg.m` returns `M, V, G` for `p.model_blend` (`[]` or 1:
+  today's files bit for bit; λ ∈ [0,1): `(1−λ)·old + λ·new`, exact because the
+  dynamics are linear in the inertial parameters). `ch3_control_affine`,
+  `ch3_impact`, `ch3_zd_point` call it. Driver:
+  `Analysis/reruns/ch3_model_homotopy` (λ 0→1 at a fixed 120 N·m box from
+  `ch3_gait_full_constrained`, then box off to read the torque needed).
+- *Model signature (4.4.5).* `ch3_model_signature` (values of M, V, G and foot
+  kinematics at three fixed states; compared by value, rel. tol 1e-9),
+  `ch3_model_check` (match | mismatch | unrecorded). `ch3_col_solve` stores
+  `out.model_sig` and `out.p.model_sig`; `ch3_main` saves it; `ch3_report`
+  prints the verdict; `ch4_load_gait` warns on mismatch (`meta.model`).
+  Migration: `Analysis/reruns/ch3_stamp_gaits` stamps only gaits that
+  re-verify on today's model.
+- *Free phase endpoints (4.4.1).* `p.free_theta`, `p.theta_bounds`
+  (`ch3_params`); z = `[X(:); T; alpha(:); theta_pm]` when on
+  (`ch3_col_pack`/`unpack`), `ch3_col_effective_params`,
+  `ch3_col_theta_augment`; eval, constraints, bounds, solve, verify, remesh,
+  budget and report follow. Stride identity
+  `L = h_imp (tan θ+ − tan θ−)` holds to ~1e-7 on every stored gait; the hip
+  band floors L at 0.4052 m. Drivers: `ch3_stride_licq` (LICQ rank and an
+  elastic LP at the stalled iterate), `ch3_stride_free_theta`.
+- *Sampling vs rate (4.4.3):* `Analysis/reruns/ch3_dt_sweep` (tab:ctrl at
+  1/0.5/0.2/0.1 ms and continuous, ε 0.5 and 0.2, logs ‖η⁻‖, ‖η⁺‖).
+- *ε bound (4.4.4):* `Analysis/ch3_eps_bound` (ρ_V(ε) = γ²(ε)·e^(−c3T/ε) from the
+  impact Jacobian at the fixed point).
+- *Stop at first invalid contact (5.4.5):* `p.stop_on_invalid` in `ch3_step`,
+  `ch3_simulate` (and `ch4_step`, `ch4_simulate`).
+- *Order test (4.4.6):* enforced on the Bézier basis; the cubic B-spline run is
+  `[xfail]`, and an `[XPASS]` fails the suite.
+- *Tests:* +12 model, +4 collocation, +3 simulation → **102 checks expected,
+  101 pass + 1 xfail**.
+
+**Chapter 4**
+- *Structured uncertainty (5.4.2):* `Model/ch4_link_params`,
+  `ch4_link_dynamics`, `ch4_structured_part`, `ch4_joint_extra`;
+  `Control/ch4_uncertainty_set` (per-link mass/COM/inertia, reflected rotor
+  inertia, friction, bias, noise, one-sample delay, legs swapped on alternate
+  steps), `ch4_delta_bounds_prior` (D1, D2 from the prior set, fixed before any
+  run). `ch4_control_affine`, `ch4_impact`, `ch4_step` (noise, delay),
+  `ch4_simulate` use them. Driver: `Analysis/reruns/ch4_structured_study`.
+- *PWC adaptation (5.4.3):* `p.l1.adaptation = 'pwc'`, `p.l1.pwc_rate`,
+  `p.l1.pwc_max` (`ch4_l1_opts`, `ch4_l1_deriv`, `ch4_l1_advance`); needs the
+  plant predictor and sampled control. Default stays `'gradient'`.
+- *Statistics (5.4.4):* `Analysis/ch4_wilson`, `ch4_fisher_exact`;
+  `Analysis/reruns/ch4_seed_study` (50 random-load seeds 101–150 × none,
+  nrm075, dt0500us, pwc).
+- *Tests:* +5 model, +2 L1 → **61 checks expected**.
+
+**Chapter 5**
+- *Joint limit (6.4.3):* `p.ecbf.extra`, `Control/ch5_extra_barriers`,
+  `theta_min`/`theta_max` in `ch5_barrier`, extra rows in
+  `ch5_ctrl_ecbf_clf_qp`. Driver: `Analysis/reruns/ch5_joint_limit_study`.
+- *RD-1 witness (6.4.2):* the relative-degree study in `ch5_main` now uses
+  ẋ1 ≤ 0.70 (under the baseline's 0.7852 peak); `ch5_test_qp` requires the
+  baseline to violate it.
+- *Ensemble failures and the dimensional bound (6.4.1, 6.4.4):*
+  `ch5_simulate(..., 'log', true)` records ‖L_gV‖, ψ, exit flag, ‖L_b‖, ‖μ‖,
+  δ and ode45 steps per period; driver `Analysis/reruns/ch5_ensemble_probe`.
+- *Walking preview (6.4.5):* `Analysis/reruns/ch5_walking_preview` (Corollary
+  5.2 at the reference gait's post-impact state with Chapter 6's footstep
+  barriers; calls `ch6_*` read-only).
+- *Tests:* +2 ECBF, 1 QP check stricter → **63 checks expected**.
+
+### Reports (all three Persian, plus the English twins where they carry the same claim)
+- Abstracts cut to 196–200 words around the one storyline; each intro names
+  its reference documents and states the 74 kg human-proportioned rationale
+  once (the exoskeleton-rehabilitation wording came from the review — the user
+  should confirm it).
+- "تأییدشده" (passes the collocation gate) and "معتبر" (contact the ground can
+  supply) are defined in Ch3 and used only in those senses.
+- Code identifiers moved out of prose into a reproducibility table at the end
+  of each appendix (`app:repro`, `app:repro4`, `app:repro5`). Claims tables
+  added to Ch3 (`tab:claims3`) and Ch5 (`tab:claims5`); Ch4 already had one.
+- Revision-history phrasing removed ("پیش‌تر", "اکنون", "نسخه پیشین", ...).
+- Stale numbers fixed while doing it: Ch4 κ paragraph (ε 0.20: 464/558/417,
+  not the ε 0.35 253/573/481); Ch4 long-horizon prose against the rating
+  reruns (e.g. ρ = 0.75 falls 0 of 6 fresh sequences, not 1; four sequences,
+  not three, pass 24–68); Ch4 English out-of-sample table and provenance plate
+  were still the pre-rating runs; Ch3 ε = 0.20 paragraph mixed "fell at step"
+  with "steps before fall"; "direct drive" was wrong (RABBIT is 50:1 harmonic
+  drive + belt, Chevallereau 2003 Table I / Fig. 4) in Ch3 .tex, the English
+  page, `Chapter3/README.md`, `docs/CH3.md`, `ch3_report.m`. Still wrong in
+  `Chapter6/ch6_params.m:409` — left alone (another session's Chapter 6 work).
+- Fonts: X Nazanin first (separate glyphs for ی/ك-family, so the PDF text layer
+  is Persian, and it has ٪ ٫); B Nazanin is the fallback. Page breaks may move.
+
+### Runs, in order — and what each result updates
+
+One MATLAB session at a time. Each is a function on the path after `startup`.
+
+| # | Run | Time | Output | Then update |
+|---|---|---|---|---|
+| 1 | `ch3_test_all` | seconds | console (log it) | Ch3 `tab:tests` and its paragraph (102 / 101 + xfail expected) |
+| 2 | `ch4_test_all` | seconds | console | Ch4 `tab:tests` (61 expected) |
+| 3 | `ch5_test_all` | ~1 min | console | Ch5 `tab:tests` (63 expected) |
+| 4 | `ch3_stamp_gaits` | minutes | `Results/reruns/stamp_gaits.log` | Ch3 stale-gait subsection: drop "مهاجرت ... اجرا نشده" |
+| 5 | `ch3_eps_bound` | seconds | `Results/reruns/ch3_eps_bound/` | Ch3 ε-bound paragraph (`eq:epsbound`), `tab:claims3` |
+| 6 | `ch5_walking_preview` | seconds | `Results/reruns/ch5_walking_preview/` | Ch5 conclusion (first limitation), `tab:claims5` |
+| 7 | `ch3_stride_licq` | 5–10 min | `Results/reruns/stride_licq/` | Ch3 `sec:stridefixed` ("آنچه اتحاد توضیح می‌دهد"), claims |
+| 8 | `ch5_main('studies', {'relative_degree'})` | minutes | `Results/ch5_<stamp>` | Ch5 `tab:reldeg` (ẋ1 ≤ 0.70 rows) and its paragraph |
+| 9 | `ch5_joint_limit_study` | ~10 min | `Results/reruns/ch5_joint_limit/` | Ch5 "نوشتن قید دوم" paragraph, claims |
+| 10 | `ch3_dt_sweep` | 30–60 min | `Results/reruns/ch3_dt_sweep/` | Ch3 "این توضیح یک فرضیه است" paragraph, abstract clause, claims |
+| 11 | `ch5_ensemble_probe` | ~1 h | `Results/reruns/ch5_probe/` | Ch5 ensemble paragraphs (hypotheses a/b, c_eff), claims |
+| 12 | `ch4_structured_study` | ~1–1.5 h | `Results/reruns/ch4_structured/` | Ch4 `sec:structured`, conclusion's prophetic-bounds caveat |
+| 13 | `ch4_seed_study` | ~80 min | `Results/reruns/ch4_seeds/` | Ch4 `sec:long` statistics paragraph, abstract's p = 0.061 sentence |
+| 14 | `ch3_stride_free_theta` | hours | `Results/reruns/stride_free_theta/` | Ch3 `sec:stridefixed`, claims |
+| 15 | `ch3_model_homotopy` | several hours | `Results/reruns/model_homotopy/` | Ch3 "ادامه روی پارامترهای مدل", conclusion, claims |
+
+Then rebuild the three PDFs (`latexmk -f -xelatex` in `docs/`; check page count
+and unresolved references, not the exit code).
+>>>>>>> Stashed changes
 
 ## Where things stand
 

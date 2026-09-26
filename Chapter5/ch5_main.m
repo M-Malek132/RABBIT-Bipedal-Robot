@@ -302,17 +302,23 @@ function R = ch5_relative_degree_study(pv)
 %
 % Two constraints on the SAME plant, from the same initial condition:
 %
-%   xdot1 <= 0.8      relative degree 1  -- Section 5.1 applies
+%   xdot1 <= 0.70     relative degree 1  -- Section 5.1 applies
 %   x3    <= 3.00     relative degree 6  -- Section 5.1 does not
 %
 % Holding the plant fixed and varying only the relative degree is what makes
 % this a controlled comparison. If the reciprocal CBF failed on a different
 % system one could blame the system.
+%
+% WHY 0.70 AND NOT 0.8. The relative-degree-1 limit is the witness that
+% Section 5.1 WORKS, and a witness has to be needed: at 0.8 the barrier-free
+% CLF-QP peaked at xdot1 = 0.7852 and never violated it, so the row showed only
+% that the barrier acts, not that it is required. 0.70 sits under that peak, so
+% the baseline violates it and the reciprocal barrier has something to hold.
 
 R = struct('rd1', [], 'rd6', [], 'rd1_base', []);
 
 % --- relative degree 1: the reciprocal CBF of Section 5.1 works
-c1 = struct('type', 'v1_max', 'value', 0.8);
+c1 = struct('type', 'v1_max', 'value', 0.70);
 
 p = ch5_params('system','springmass','controller','cbfclfqp', ...
                'constraint', c1, 'ecbf.poles', 2.0, pv{:});
@@ -321,7 +327,7 @@ R.rd1 = ch5_simulate(p);
 p.controller = 'clfqp';
 R.rd1_base = ch5_simulate(p);
 
-fprintf('  rel. degree 1  (xdot1 <= 0.8)\n');
+fprintf('  rel. degree 1  (xdot1 <= %.2f)\n', c1.value);
 fprintf('    CLF-QP        max xdot1 = %.4f   h_min = %+.4f\n', ...
         max(R.rd1_base.x(4,:)), R.rd1_base.h_min);
 fprintf('    CBF-CLF-QP    max xdot1 = %.4f   h_min = %+.4f   <- Section 5.1 works\n', ...

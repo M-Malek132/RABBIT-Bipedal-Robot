@@ -110,9 +110,9 @@ Jst = J_st(q);
 w3  = cross(Jst(1,1:3), Jst(2,1:3));
 w   = [w3(:).', zeros(1, nq-3)];
 
-Mq = M(q);
-Vq = V([q; v]);            % Coriolis vector at thetadot = 1; quadratic in qdot
-Gq = G(q);
+% Coriolis vector at thetadot = 1 (quadratic in qdot); M.m / V.m / G.m unless
+% p.model_blend is set (ch3_mvg).
+[Mq, Vq, Gq] = ch3_mvg(q, v, p);
 
 a = w * Mq * v;
 

@@ -117,6 +117,26 @@ if sq.ok
     ok = report('validity scores lift-off, slip', double(bad), 0, ok);
     fprintf('        this step: valid %d/1, min Fz %.1f N, max mu %.3f\n', ...
             Vq.valid_steps, Vq.Fz_min, Vq.mu_max);
+
+    %% ---- 5. p.stop_on_invalid ends the step AT that sample ---------------
+    % The same step, rerun with the flag: it must stop, not ok, at exactly the
+    % sample ch3_validity found first, with the same kind -- the trajectory up
+    % to there is the same computation, so the time agrees to the bit.
+    if Vq.valid_steps == 0
+        ps = pq; ps.stop_on_invalid = true;
+        ss = ch3_step(x0, alpha, ps);
+        bad = ss.ok || ~ss.contact_invalid || ...
+              ~(ss.contact_invalid && strcmp(ss.invalid.kind, Vq.first_kind));
+        ok = report('stop_on_invalid ends the step', double(bad), 0, ok);
+        if ss.contact_invalid
+            ok = report('... at the first invalid sample', ...
+                        abs(ss.t(end) - Vq.first_t), 0, ok);
+            ok = report('... and records it last', ...
+                        abs(ss.lambda(2, end) - ss.invalid.Fz), 0, ok);
+        end
+    else
+        fprintf('        (stop_on_invalid check skipped: this step is valid)\n');
+    end
 end
 
 %% ------------------------------------------------------------------------

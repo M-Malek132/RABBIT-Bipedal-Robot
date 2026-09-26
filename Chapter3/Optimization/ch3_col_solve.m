@@ -38,6 +38,12 @@ function [z_opt, out] = ch3_col_solve(p, z0, opts_override)
 %   z_opt : optimized decision vector
 %   out   : struct .fval .exitflag .output .alpha .X .T .z0 .seed_info
 %           .wall_time .max_ceq .max_c
+%           .p          p as the gait must be saved and used: upgraded, and
+%                       with the solved theta_minus / theta_plus when
+%                       p.free_theta is set. SAVE THIS p WITH z_opt.
+%           .theta_pm   [theta_minus; theta_plus] of the result
+%           .model_sig  ch3_model_signature of the dynamics the solve ran on,
+%                       so the gait file records its model (ch3_model_check)
 %
 % See also CH3_COL_SEED, CH3_COL_CONSTRAINTS, CH3_REPORT.
 
@@ -48,7 +54,12 @@ if nargin < 2 || isempty(z0)
     [z0, seed_info] = ch3_col_seed(p);
 end
 
-N = (numel(z0) - 1 - p.ny*p.n_ctrl) / p.nx;
+% A free-theta solve may be warm-started from any stored gait: those have the
+% phase endpoints fixed, so append them at the values the gait was solved at.
+z0 = ch3_col_theta_augment(z0, p);
+
+X0 = ch3_col_unpack(z0, p);
+N  = size(X0, 2);
 [lb, ub] = ch3_col_bounds(p, N);
 
 options = optimoptions('fmincon', ...
@@ -124,16 +135,24 @@ t_start = tic;
 wall_time = toc(t_start);
 
 [c, ceq] = ch3_col_constraints(z_opt, p);
-[X, T, alpha] = ch3_col_unpack(z_opt, p);
+[X, T, alpha, theta_pm] = ch3_col_unpack(z_opt, p);
 
 out = struct('fval', fval, 'exitflag', exitflag, 'output', output, ...
              'alpha', alpha, 'X', X, 'T', T, ...
              'z0', z0, 'seed_info', seed_info, ...
              'wall_time', wall_time, ...
-             'max_ceq', max(abs(ceq)), 'max_c', max(c));
+             'max_ceq', max(abs(ceq)), 'max_c', max(c), ...
+             'p', ch3_col_effective_params(z_opt, p), ...
+             'theta_pm', theta_pm, ...
+             'model_sig', ch3_model_signature(p));
+out.p.model_sig = out.model_sig;
 
 fprintf('\n[ch3_col_solve] exitflag %d, J = %.4f, max|ceq| = %.3e, max c = %.3e, %.1f s\n', ...
         exitflag, fval, out.max_ceq, out.max_c, wall_time);
+if p.free_theta
+    fprintf('[ch3_col_solve] phase endpoints: theta_minus %.4f, theta_plus %.4f rad\n', ...
+            theta_pm(1), theta_pm(2));
+end
 
 % A converged solve with tiny residuals can still be a spurious discrete
 % solution, so check it here rather than leaving it to whoever reports later.

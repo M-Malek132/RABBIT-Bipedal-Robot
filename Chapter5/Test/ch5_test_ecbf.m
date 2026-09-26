@@ -13,6 +13,9 @@ function pass = ch5_test_ecbf()
 %   7. THE GUARANTEE: h stays >= 0 along closed-loop runs on both plants
 %   8. the sampled-data excursion is O(dt) -- i.e. discretization, not the row
 %   9. the exponential envelope of Definition 5.1 actually lower-bounds h
+%  10. an EXTRA barrier (p.ecbf.extra, a theta2 joint limit): its row is the
+%      output channel +-mu_2 exactly, it rides in the QP next to the height row,
+%      and the upright start is admissible for it
 %
 % Check 1 is not pedantry. Kb = fliplr(poly(-p)) and Kb = poly(-p) both give a
 % Hurwitz Ab; only one gives the requested poles, and the wrong one produces a
@@ -301,6 +304,44 @@ neg = min(hmins, 0);
 ok  = all(hmins >= 0) || (abs(neg(3)) <= abs(neg(1)) + 1e-12);
 fprintf('  [%s] %-34s worst excursion %.2e -> %.2e\n', tf(ok), ...
         'excursion shrinks with dt', neg(1), neg(3));
+pass = pass && ok;
+
+%% --------------------------- 10. an EXTRA barrier: the theta2 joint limit
+% theta is the pendulum's output, so after the input-output linearization a
+% joint limit's barrier row is the output channel itself: h^(4) = sign * mu_2,
+% i.e. b0 = 0 and Lb = sign * e_2' exactly -- for the lower limit and the
+% upper. And the ECBF-CLF-QP with the extra row must report it per barrier,
+% with the height row unchanged, and the upright start must be admissible for
+% it (at rest, theta2 = 0 is 2.5 rad inside a -2.5 rad limit).
+pj = ch5_params('system', 'pendulum', 'controller', 'ecbfclfqp', 'constraint', -0.5, ...
+                'ecbf.extra', struct('type', 'theta_min', 'joint', 2, 'value', -2.5, 'poles', []));
+x0j = ch5_x0(pj);
+XJ  = x0j + 0.3 * randn(pj.sys.nx, 6);
+e10 = 0;
+for k = 1:size(XJ, 2)
+    io = ch5_io_lin(XJ(:, k), pj);
+    for tp = {'theta_min', 'theta_max'}
+        pk = pj; pk.constraint = struct('type', tp{1}, 'joint', 2, 'value', 0.3);
+        bk = ch5_barrier(XJ(:, k), pk);
+        sg = 1 - 2 * strcmp(tp{1}, 'theta_max');
+        b0k = bk.Lfrb + bk.LgLfrb1 * io.u_ff;
+        Lbk = bk.LgLfrb1 * io.Ainv;
+        e10 = max([e10, abs(b0k) / max(1, abs(bk.Lfrb)), norm(Lbk - sg * [0 1], inf)]);
+    end
+end
+pass = rep('joint-limit row == +-mu_2', e10, 1e-9, pass);
+
+io = ch5_io_lin(x0j, pj);
+bj = ch5_barrier(x0j, pj);
+ej = ch5_ecbf_gain(pj, bj.rb);
+[XJx, PXj] = ch5_extra_barriers(x0j, pj, ej);
+[~, ~, qj] = ch5_ctrl_ecbf_clf_qp(io, bj, ej, pj, false, XJx);
+[~, ~, q0] = ch5_ctrl_ecbf_clf_qp(io, bj, ej, pj, false);
+aj = ch5_ecbf_admissible(x0j, PXj{1}, XJx(1).e);
+ok = numel(qj.extra) == 1 && abs(qj.extra(1).h - 2.5) < 1e-9 && qj.feasible ...
+     && isfield(q0, 'extra') && isempty(q0.extra) && abs(qj.h - q0.h) < 1e-12 && aj.ok;
+fprintf('  [%s] %-34s h = %.3f, y_rb = %.3g, admissible at x0 %d\n', tf(ok), ...
+        'extra barrier in the QP', qj.extra(1).h, qj.extra(1).y_rb, aj.ok);
 pass = pass && ok;
 
 fprintf('--- ch5_test_ecbf: %s ---\n', tf(pass));

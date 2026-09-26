@@ -9,7 +9,7 @@ README).
 
 | file | role | produces |
 |------|------|----------|
-| `rabbit_energy_model_generalized_Lagrange.m` | Master Euler–Lagrange derivation. Defines the transform chain, link masses/inertias (nested `Mass_Properties`: torso 10 kg/0.75 m, links 5 kg/0.5 m, g = 9.8062). Script, no inputs. | `Tt, T1, T2, T3, T4, P_st, P_sw, M, DM, V, G` |
+| `rabbit_energy_model_generalized_Lagrange.m` | Master Euler–Lagrange derivation. Defines the transform chain, link masses/inertias (nested `Mass_Properties`: torso 47 kg/0.75 m, each thigh 10 kg and each shank 3.5 kg/0.5 m, 74 kg in all, human-proportioned on purpose; g = 9.8062). Script, no inputs. | `Tt, T1, T2, T3, T4, P_st, P_sw, M, DM, V, G` |
 | `Jacobians.m` | Symbolically differentiates foot positions to build contact Jacobians. Script, no inputs. | `J_st, J_sw, Jdotdq_st, Jdotdq_sw` |
 
 ## Generated kinematics (homogeneous transforms & foot positions)
@@ -40,6 +40,7 @@ phase variable `θ = qt + q1 + q2/2` is exact (see `Controller/theta_of_q.m`).
 | `J_sw.m` | `J = J_sw(q)`    | 2×7 swing-foot Jacobian |
 | `Jdotdq_st.m` | `a = Jdotdq_st(q,dq)` | 2×1 stance `J̇·dq` |
 | `Jdotdq_sw.m` | `a = Jdotdq_sw(q,dq)` | 2×1 swing `J̇·dq` |
+| `M_m30.m`, `V_m30.m`, `G_m30.m` | as `M`, `V`, `G` | the **30 kg** model the same generator produced before 2026-09-02 (torso 10 kg, thighs and shanks 5 kg), restored verbatim from git (`854f00b~1`) and renamed. Nothing calls them directly: `Chapter3/Model/ch3_mvg.m` blends them with today's `M`/`V`/`G` when `p.model_blend` is set (exact, since the dynamics are linear in the inertial parameters). Do not edit. |
 
 Equation of motion: `M(q)·q̈ + V([q;dq]) + G(q) = B·u`.
 

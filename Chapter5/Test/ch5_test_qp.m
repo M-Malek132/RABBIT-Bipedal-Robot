@@ -132,7 +132,9 @@ pass = pass && ok;
 % With rb = 1 the ECBF row reads h^(1) >= -kb h, which is the zeroing-CBF
 % condition verbatim. Check the row the QP builds against that expression, and
 % then check that running it enforces the set.
-p1 = ch5_params('constraint', struct('type','v1_max','value',0.8), ...
+% 0.70, the level the relative-degree study uses: under the baseline's own
+% overshoot (xdot1 peaks near 0.785), so the barrier is NEEDED, not only active.
+p1 = ch5_params('constraint', struct('type','v1_max','value',0.70), ...
                 'ecbf.poles', 2.0, 'controller', 'ecbfclfqp');
 kb = p1.ecbf.poles;
 e_z = 0;
@@ -151,8 +153,8 @@ p1.T = 20; p1.integrator = 'rk4';
 s1 = ch5_simulate(p1);
 p1b = p1; p1b.controller = 'clfqp';
 s1b = ch5_simulate(p1b);
-ok = (s1.h_min >= 0) && (s1b.h_min < s1.h_min);
-fprintf('  [%s] %-34s ECBF h_min = %+.4f, baseline %+.4f\n', tf(ok), ...
+ok = (s1.h_min >= 0) && (s1b.h_min < 0);
+fprintf('  [%s] %-34s ECBF h_min = %+.4f, baseline %+.4f (must violate)\n', tf(ok), ...
         'rb=1 ECBF enforces the set', s1.h_min, s1b.h_min);
 pass = pass && ok;
 

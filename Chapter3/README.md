@@ -270,16 +270,22 @@ simulations, which is why it is a post-hoc diagnostic rather than a constraint.
 ## Table 3.1 limits — measure first
 
 The thesis limits are **ATRIAS** numbers: 63 kg with 50:1 harmonic drives, so
-its "|u| ≤ 5 Nm" is *motor* torque, 250 Nm at the joint. RABBIT's model is 74 kg and
-**direct drive** — `u` here *is* joint torque. Copying the numbers across
-produces an infeasible problem and a solver that fails for reasons that look
-like bugs.
+its "|u| ≤ 5 Nm" is *motor* torque, 250 Nm at the joint. Copying the numbers
+across produces an infeasible problem and a solver that fails for reasons that
+look like bugs. RABBIT is not direct drive either: each joint is driven through
+a 50:1 harmonic drive and a belt (Chevallereau et al. 2003, Table I and Fig. 4).
+In this 74 kg model `u` is the **joint-side** torque, after that reduction; rotor
+inertia and gear friction are not modelled (Chapter 4's structured uncertainty
+set adds both). The 120 Nm in `ch3_params` is the project's declared limit, not a
+Table 3.1 number.
 
-Even RABBIT's own torque box is out of reach on today's model: no verified gait
-sits inside the 120 Nm `ch3_params` still carries. Two warm-started torque
-ladders verified down to 212 Nm and to 195 Nm, then lost verification at their
-next rungs, 159 Nm and 180 Nm; the reference gait was solved against its own
-195 Nm box.
+Even the project's own 120 Nm box is out of reach on this model: no verified
+gait sits inside it. Two warm-started torque ladders verified down to 212 Nm and
+to 195 Nm, then lost verification at their next rungs, 159 Nm and 180 Nm; the
+reference gait was solved against its own 195 Nm box. A later ladder from a
+1.2 m/s gait reaches a floor of 162.5 Nm, and at that box an impulse ladder
+lands a verified gait with a 15.00 Ns impulse (`ch3_impulse_march`; swing apex
+0.32 m, stability not measured) — see `docs/ch3_report_fa.tex`.
 
 Every limit in `ch3_report` is printed with its **measured** value whether or
 not it is enforced, and `[E]` marks the enforced ones. The workflow is: solve

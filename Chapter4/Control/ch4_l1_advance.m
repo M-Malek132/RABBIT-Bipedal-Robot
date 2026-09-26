@@ -80,6 +80,15 @@ k4 = ch4_l1_deriv(xi + dt   * k3, sig_end, clf, p);
 
 xi = xi + dt/6 * (k1 + 2*k2 + 2*k3 + k4);
 
+% THE PIECEWISE-CONSTANT LAW (p.l1.adaptation = 'pwc') updates HERE, once per
+% period, from the prediction error the period left behind. The RK4 stages
+% above held theta_hat (ch4_l1_deriv gives it zero rate), so eta_tilde at the
+% end of the period is exactly what the held estimate failed to explain.
+if strcmp(o.adaptation, 'pwc')
+    xi = pwc_update(xi, smp, clf, p, o, dt);
+    return;
+end
+
 % THE PROJECTION BALLS HOLD IN CONTINUOUS TIME, NOT AFTER A STEP. Proj removes
 % the outward component of the update, which keeps the estimate on the ball
 % only in the limit of small steps; a finite step along the tangent lands
@@ -96,6 +105,38 @@ if strcmp(o.predictor, 'plant')
     xi = ch4_l1_state('pack', p, s);
 end
 
+end
+
+% ---------------------------------------------------------------------------
+function xi = pwc_update(xi, smp, clf, p, o, dt)
+%PWC_UPDATE  theta_hat(k+1) = -Phi(T)^-1 e^(A_s T) G' eta_tilde(t_{k+1}).
+%
+% With A_s = -a_s I the error dynamics over one period are
+%   eta_tilde_v(t_{k+1}) = e^(-a_s T) eta_tilde_v(t_k) + Phi (theta_hat_k - theta_bar),
+%   Phi = (1 - e^(-a_s T)) / a_s,  theta_bar the (weighted) mean uncertainty,
+% and choosing theta_hat_{k+1} = -e^(-a_s T)/Phi eta_tilde_v(t_{k+1}) makes the
+% next period's error depend on the uncertainty alone -- no memory, no loop.
+% At a_s = 0: theta_hat_{k+1} = -eta_tilde_v(t_{k+1})/T = theta_bar over the
+% last period, exactly, one sample late.
+%
+% A period the guard cut to a sliver (under a tenth of the control period)
+% carries too little signal for 1/T to amplify, so the estimate is kept.
+if dt < 0.1 * p.control_dt
+    return;
+end
+s  = ch4_l1_state('unpack', p, xi);
+ev = clf.G.' * (s.eta_hat - smp.eta_next);        % velocity prediction error
+a  = o.pwc_rate;
+if a > 0
+    gain = a / expm1(a * dt);                      % e^(-aT) / Phi(T)
+else
+    gain = 1 / dt;
+end
+th = -gain * ev;
+if isfinite(o.pwc_max), th = to_ball(th, o.pwc_max); end
+s.alpha_hat = zeros(size(s.alpha_hat));
+s.beta_hat  = th;
+xi = ch4_l1_state('pack', p, s);
 end
 
 % ---------------------------------------------------------------------------

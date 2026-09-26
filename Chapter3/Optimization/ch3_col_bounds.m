@@ -33,4 +33,20 @@ x_hi = [q_hi; dq_hi];
 lb = [repmat(x_lo, N, 1); p.T_min; -3*ones(p.ny*p.n_ctrl, 1)];
 ub = [repmat(x_hi, N, 1); p.T_max;  3*ones(p.ny*p.n_ctrl, 1)];
 
+% The phase endpoints, when they are decision variables (p.free_theta). The
+% two ranges are disjoint, so theta_plus > theta_minus holds at every iterate
+% SQP visits (it keeps bounds satisfied) and s(q) is always defined.
+if isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta
+    tb = p.theta_bounds;
+    if ~(isequal(size(tb), [2 2]) && tb(1,1) < tb(1,2) && tb(2,1) < tb(2,2) ...
+            && tb(1,2) < tb(2,1))
+        error('ch3_col_bounds:thetaBounds', ...
+              ['p.theta_bounds must be [lo hi] for theta_minus over [lo hi] for ' ...
+               'theta_plus, with the theta_minus range entirely below the ' ...
+               'theta_plus one (got %s).'], mat2str(tb));
+    end
+    lb = [lb; tb(1,1); tb(2,1)];
+    ub = [ub; tb(1,2); tb(2,2)];
+end
+
 end

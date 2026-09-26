@@ -48,16 +48,23 @@ fprintf(' v_des %.3f m/s, eps %.2f, CLF via %s\n', p.v_des, p.eps, p.clf_constru
 % multiplying zero. p.controller selects what RUNS the resulting gait.
 [z_opt, solve_out] = ch3_col_solve(p);
 
+% Save the p the solve returns, not the one it was given: it carries the
+% solved phase endpoints when p.free_theta is set, and model_sig, the record
+% of which dynamics this gait is an orbit of (ch3_model_check reads it back).
+ckpt = p.checkpoint_file;
+p = solve_out.p;
+
 %% --- report --------------------------------------------------------------
 R = ch3_report(z_opt, p, struct('stability', true, 'simulate', 5));
 
 %% --- save ---------------------------------------------------------------
 alpha = solve_out.alpha; %#ok<NASGU>
+model_sig = solve_out.model_sig; %#ok<NASGU>
 fname = fullfile(results_dir, sprintf('ch3_result_%s.mat', stamp));
-save(fname, 'z_opt', 'solve_out', 'p', 'R');
+save(fname, 'z_opt', 'solve_out', 'p', 'R', 'model_sig');
 fprintf(' Saved: %s\n', fname);
 
-if exist(p.checkpoint_file, 'file'), delete(p.checkpoint_file); end
+if ~isempty(ckpt) && exist(ckpt, 'file'), delete(ckpt); end
 
 out = struct('p', p, 'z_opt', z_opt, 'alpha', solve_out.alpha, ...
              'solve', solve_out, 'report', R, 'file', fname);

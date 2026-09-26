@@ -69,6 +69,26 @@ if randomize
     rng(seed);
 end
 
+% A STRUCTURED uncertainty (ch4_uncertainty_set) brings three things that
+% outlive a single step: one measurement-noise stream for the whole run (a
+% handle, so its state carries across steps), the command pending in a
+% one-sample actuation delay, and -- when the two legs were perturbed
+% independently -- which PHYSICAL leg is the stance leg. The model always calls
+% the stance leg links 2-3 and joints 1-2, and the legs relabel at every
+% impact, so on even steps the drawn parameters of the two legs are swapped.
+S_unc = ch4_structured_part(p.uncertainty);
+noise_rs = [];
+if isfield(p.uncertainty, 'noise') && isstruct(p.uncertainty.noise) ...
+        && ((isfield(p.uncertainty.noise, 'q')  && p.uncertainty.noise.q  > 0) || ...
+            (isfield(p.uncertainty.noise, 'dq') && p.uncertainty.noise.dq > 0))
+    nseed = 0;
+    if isfield(p.uncertainty.noise, 'seed'), nseed = p.uncertainty.noise.seed; end
+    noise_rs = RandStream('mt19937ar', 'Seed', nseed);
+end
+swap_legs = ~isempty(S_unc) && isfield(p.uncertainty, 'asymmetric') ...
+            && ~isempty(p.uncertainty.asymmetric) && p.uncertainty.asymmetric;
+u_prev = [];
+
 for k = 1:n_steps
 
     if ~all(isfinite(x))
@@ -84,12 +104,26 @@ for k = 1:n_steps
         pk.uncertainty.load_mass = lo + (hi - lo) * rand();
     end
     loads(end+1) = pk.uncertainty.load_mass; %#ok<AGROW>
+    if ~isempty(noise_rs), pk.uncertainty.noise.stream = noise_rs; end
+    if ~isempty(S_unc),    pk.uncertainty.u_prev = u_prev;         end
+    if swap_legs && mod(k, 2) == 0
+        pk.uncertainty = swap_leg_parameters(pk.uncertainty);
+    end
 
     s = ch4_step(x, xi, alpha, pk);
+    if isfield(s, 'u_last'), u_prev = s.u_last; end
 
     if ~s.ok
         failed = true;
-        reason = sprintf('step %d never reached the guard (T = %.3f s)', k, s.T);
+        if isfield(s, 'contact_invalid') && s.contact_invalid
+            % p.stop_on_invalid: the step ended where the ground could not
+            % have held the pinned foot; it is not counted as walked.
+            reason = sprintf(['step %d lost contact validity: %s at t = %.3f s ' ...
+                              '(Fz %.1f N, |Fx|/Fz %.2f)'], k, s.invalid.kind, ...
+                             s.invalid.t, s.invalid.Fz, s.invalid.mu);
+        else
+            reason = sprintf('step %d never reached the guard (T = %.3f s)', k, s.T);
+        end
         break;
     end
 
@@ -125,7 +159,8 @@ if isempty(steps)
     steps_arr = struct('t', {}, 'x', {}, 'x_end', {}, 'T', {}, 'ok', {}, ...
                        'sol', {}, 'xi', {}, 't_xi', {}, 'xi_end', {}, ...
                        'L_step', {}, 'x_next', {}, 'impulse', {}, ...
-                       'xi_next', {}, 'u', {}, 't_u', {}, 'lambda', {});
+                       'xi_next', {}, 'u', {}, 't_u', {}, 'lambda', {}, ...
+                       'contact_invalid', {}, 'invalid', {}, 'u_last', {});
 else
     steps_arr = [steps{:}];
 end
@@ -135,6 +170,18 @@ out = struct('steps', steps_arr, 't', t_all, 'x', x_all, ...
              'n_ok', numel(steps), 'failed', failed, 'reason', reason, ...
              'x_final', x, 'xi_final', xi);
 
+end
+
+% ---------------------------------------------------------------------------
+function unc = swap_leg_parameters(unc)
+%SWAP_LEG_PARAMETERS  The other physical leg is the stance leg on this step.
+unc.links = unc.links([1 4 5 2 3]);
+for f = {'J_ref', 'b_visc', 'tau_coulomb', 'tau_bias'}
+    if isfield(unc, f{1}) && numel(unc.(f{1})) == 4
+        v = unc.(f{1});
+        unc.(f{1}) = v([3 4 1 2]);
+    end
+end
 end
 
 % ---------------------------------------------------------------------------

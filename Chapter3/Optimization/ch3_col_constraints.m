@@ -28,6 +28,15 @@ function [c, ceq] = ch3_col_constraints(z, p)
 %       theta(x_N) = theta_+    (1)
 %       swing-foot height = 0   (1)   x_N is genuinely ON the guard
 %
+%   THESE TWO PIN THE STRIDE. theta is the hip-to-foot direction of the
+%   stance leg (0.5 m links), and periodicity puts the landing leg at
+%   theta_- after relabelling, so with both feet on the ground at the strike
+%       L_step = h_hip(x_N) (tan theta_+ - tan theta_-)
+%   exactly. With theta_-, theta_+ fixed the stride can only change through
+%   the hip height at impact, which row 8 bounds. p.free_theta makes them
+%   decision variables (ch3_col_pack); the equalities are unchanged, but then
+%   hold at the solved endpoints.
+%
 %   Periodicity -- the HZD condition                               (13)
 %       Delta(x_N) - x_1 = 0, EXCLUDING px. px is the translation gauge and
 %       must advance; requiring it to repeat would demand the robot end where
@@ -108,6 +117,7 @@ function [c, ceq] = ch3_col_constraints(z, p)
 % See also CH3_COL_EVAL, CH3_ZERO_DYNAMICS, CH3_COL_COST, CH3_COL_SOLVE.
 
 E  = ch3_col_eval(z, p);
+p  = E.p;          % theta_minus / theta_plus from z when p.free_theta is set
 nq = p.nq;
 N  = E.N;
 

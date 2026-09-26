@@ -293,6 +293,34 @@ p.l1.alpha_regressor_rate = 0;
 % CH4_UNCERTAINTY.md §5a has the tables.
 p.l1.normalized_rate = 0.75;
 
+% THE ADAPTATION LAW: 'gradient' | 'pwc'.
+%
+%   'gradient'  (4.26): the projection-gradient laws above, integrated over
+%               each period by RK4, with the normalization and the other
+%               options as set. The default, so every table reproduces.
+%   'pwc'       the PIECEWISE-CONSTANT law of the sampled-data L1 literature
+%               (Hovakimyan & Cao 2010, ch. 3): at every sample the estimate is
+%               set so that, held over the next period, it would cancel the
+%               prediction error just measured,
+%                   theta_hat(k) = -Phi(T)^-1 e^(A_s T) G' eta_tilde(k),
+%                   A_s = -a_s I,   Phi(T) = int_0^T e^(A_s t) dt,
+%               i.e. -a_s/(e^(a_s T) - 1) G' eta_tilde, and -G' eta_tilde / T at
+%               a_s = 0. There is NO adaptation dynamics -- no Gamma, no
+%               alpha/beta split, no estimator loop that can outrun the sample
+%               rate -- so it is stable by construction at any T: the estimate
+%               is the average uncertainty over the last period, one sample
+%               late. That is what the four 1 kHz patches (normalization,
+%               caps, leaks) were approximating. Requires the plant predictor
+%               and sampled control.
+%   pwc_rate    a_s [rad/s]. The estimate carries a bias factor e^(-a_s T), so
+%               0 (the default) is unbiased; a_s > 0 is the textbook form with a
+%               Hurwitz predictor and is kept to measure what the bias costs.
+%   pwc_max     radius of a safety ball on theta_hat (Inf: none, as the law is
+%               written).
+p.l1.adaptation = 'gradient';
+p.l1.pwc_rate   = 0;
+p.l1.pwc_max    = Inf;
+
 % WHAT 'l1_con' CONSTRAINS.  false: Section 4.2.3 as written -- the torque box
 % on mu1 alone, no contact rows, so mu2 is applied outside every constraint.
 % true: mu2 enters the QP as a known offset, and the box and the friction and

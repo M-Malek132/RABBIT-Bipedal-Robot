@@ -114,6 +114,20 @@ p.ecbf = struct();
 % Empty means "use the per-system default in ch5_system".
 p.ecbf.poles = [];
 
+% EXTRA BARRIERS, enforced alongside p.constraint by the ECBF-CLF-QP: a struct
+% array of constraint specs (.type .value, .joint for joint limits, .poles --
+% [] for the plant's default ECBF poles). Each gets its own row, its own gain
+% and its own admissibility check; none is slacked. [] (the default) is the
+% chapter as run. The reason to have it: on the pendulum the height barrier is
+% met by folding the arm to theta2 = -3.10 rad, a self-collision the model does
+% not contain -- a constraint that is not written down is not enforced. A
+% joint-limit row on theta2 writes it down, e.g.
+%   ch5_params('system','pendulum','controller','ecbfclfqp', ...
+%              'ecbf.extra', struct('type','theta_min','joint',2,'value',-2.5,'poles',[]))
+% and ch5_joint_limit_study measures whether two relative-degree-4 barriers
+% can be held at once.
+p.ecbf.extra = [];
+
 % Corollary 5.2 says the poles are not free: p_i >= -ydot_{i-1}(x0)/y_{i-1}(x0).
 % ch5_ecbf_admissible checks it at the actual initial condition.
 %   'error'  refuse to run from an x0 the poles do not cover

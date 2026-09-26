@@ -16,9 +16,11 @@ function R = ch3_report(z, p, opts)
 % MEASURE BEFORE YOU CONSTRAIN.  Every Table 3.1 quantity is reported with its
 % measured value AND the limit, with a marker showing whether the limit is
 % currently enforced. The thesis limits are ATRIAS numbers (63 kg, 50:1 gears,
-% so its 5 Nm is 250 Nm at the joint); RABBIT is ~30 kg direct drive. Copying
-% them across without measuring first produces an infeasible problem and a
-% solver that fails for reasons that look like bugs.
+% so its 5 Nm is 250 Nm at the joint). This model is 74 kg, and RABBIT is not
+% direct drive either (50:1 harmonic drive and belt per joint, Chevallereau et
+% al. 2003, Table I): u is the joint-side torque. Copying the limits across
+% without measuring first produces an infeasible problem and a solver that
+% fails for reasons that look like bugs.
 %
 % Inputs
 %   z    : collocation decision vector
@@ -42,6 +44,7 @@ if ~isfield(opts,'verbose'),   opts.verbose   = true;  end
 
 E = ch3_col_eval(z, p);
 [c, ceq] = ch3_col_constraints(z, p);
+p = E.p;                     % the solved phase endpoints when p.free_theta is set
 [X, T, alpha] = ch3_col_unpack(z, p);
 N = E.N;
 
@@ -49,6 +52,11 @@ R = struct();
 R.alpha = alpha; R.T = T; R.X = X; R.N = N;
 R.max_ceq = max(abs(ceq));
 R.max_c   = max(c);
+
+% --- which dynamics this gait is being evaluated on -----------------------
+% A gait file does not otherwise say which M/V/G it was solved on, and a gait
+% saved before a regeneration still loads and simulates (see ch3_model_check).
+R.model = ch3_model_check(p, 'report');
 
 % --- residuals by block ---------------------------------------------------
 i = 0;

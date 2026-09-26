@@ -56,6 +56,21 @@ function out = ch4_step(x0, xi0, alpha, p)
 %                     for physical validity afterwards (ch4_validity) at the
 %                     full solver resolution, for the price of one contact
 %                     solve per point.
+%           .contact_invalid, .invalid   as ch3_step: with p.stop_on_invalid
+%                     the step ends AT its first sample the ground could not
+%                     supply (Fz <= 0 or |Fx|/Fz > p.limits.mu_s) and is not ok
+%           .u_last   the last COMMANDED torque, which a one-sample actuation
+%                     delay applies at the start of the next step
+%
+% IMPLEMENTATION EFFECTS of a structured uncertainty (ch4_uncertainty_set),
+% sampled control only:
+%   uncertainty.noise   .q .dq std of the measurement noise; the controller
+%                       (and the L1 predictor) sees x + noise, the plant and
+%                       the guard the true x. One draw per sample, from
+%                       .noise.stream (ch4_simulate creates it from .seed).
+%   uncertainty.delay   1: the robot receives each command one sample late
+%                       (the controller does not know); 0: none.
+%   uncertainty.u_prev  the command pending from the previous step.
 %
 % See also CH3_STEP, CH4_ODE_RHS, CH4_IMPACT, CH4_L1_ADVANCE, CH4_L1_STATE.
 
@@ -76,10 +91,12 @@ opts = odeset('RelTol',  p.ode_reltol, ...
 T_cap = p.T_max * 2;
 
 if p.control_dt > 0
-    [t, X, XI, t_xi, fired, U, t_u, LAM] = integrate_zoh(x0, xi0, alpha, p, T_cap, opts);
+    [t, X, XI, t_xi, fired, U, t_u, LAM, inv, u_last] = ...
+        integrate_zoh(x0, xi0, alpha, p, T_cap, opts);
     sol = [];
 else
     U = zeros(p.nu, 0); t_u = zeros(1, 0); LAM = zeros(2, 0);
+    inv = []; u_last = [];
     z0  = [x0(:); xi0(:)];
     sol = ode45(@(t,z) ch4_ode_rhs(t, z, alpha, p), [0 T_cap], z0, opts);
     t   = sol.x;
@@ -102,6 +119,9 @@ out.xi_end = XI(:, end);
 out.u      = U;
 out.t_u    = t_u;
 out.lambda = LAM;
+out.contact_invalid = ~isempty(inv);
+out.invalid = inv;
+out.u_last  = u_last;
 
 foot_st_0   = P_st(x0(1:p.nq));
 foot_sw_end = P_sw(out.x_end(1:p.nq));
@@ -124,10 +144,10 @@ end
 end
 
 % ---------------------------------------------------------------------------
-function [t_all, X_all, XI_all, t_xi, fired, U_all, t_u, LAM_all] = integrate_zoh(x0, xi0, alpha, p, T_cap, opts)
+function [t_all, X_all, XI_all, t_xi, fired, U_all, t_u, LAM_all, inv, u_last] = integrate_zoh(x0, xi0, alpha, p, T_cap, opts)
 %INTEGRATE_ZOH  One control decision per period; plant and controller advance.
-% Also records the held torque of each period and the TRUE contact force at
-% every solver point under it (see .lambda in the header).
+% Also records the torque the robot received in each period and the TRUE
+% contact force at every solver point under it (see .lambda in the header).
 
 dt = p.control_dt;
 
@@ -139,6 +159,17 @@ if stateful
     l1o = ch4_l1_opts(p);
     plant_predictor = strcmp(l1o.predictor, 'plant');
 end
+
+% measurement noise and actuation delay of a structured uncertainty
+[sig_q, sig_dq, rs, delay, u_hold] = implementation(p);
+measure = @(x) x;
+if sig_q > 0 || sig_dq > 0
+    measure = @(x) x + [sig_q * randn(rs, p.nq, 1); sig_dq * randn(rs, p.nq, 1)];
+end
+
+stop_inv = isfield(p, 'stop_on_invalid') && ~isempty(p.stop_on_invalid) && p.stop_on_invalid;
+n_seen   = 0;
+inv      = [];
 
 t_all  = 0;
 X_all  = x0(:);
@@ -152,6 +183,7 @@ tk    = 0;
 xk    = x0(:);
 xik   = xi0(:);
 fired = false;
+x_meas = measure(xk);                   % what the controller sees at t_0
 
 while tk < T_cap - eps(T_cap)
 
@@ -178,28 +210,52 @@ while tk < T_cap - eps(T_cap)
     end
 
     % ---- one control decision for this period ---------------------------
-    [u, ~, ci] = ch4_control(xk, xik, alpha, p);
+    % from the MEASURED state (the true one when there is no noise)
+    [u, ~, ci] = ch4_control(x_meas, xik, alpha, p);
 
     if ~all(isfinite(u))
         break;
     end
 
+    % A one-sample actuation delay: the robot receives the previous command.
+    % The first period of a run has no previous command and applies its own.
+    if delay > 0
+        if isempty(u_hold), u_hold = u; end
+        u_apply = u_hold;
+        u_hold  = u;
+    else
+        u_apply = u;
+    end
+
     te = min(tk + dt, T_cap);
-    s  = ode45(@(~, x) zoh_rhs(x, u, p), [tk te], xk, opts);
+    s  = ode45(@(~, x) zoh_rhs(x, u_apply, p), [tk te], xk, opts);
 
     t_all = [t_all, s.x(2:end)];        %#ok<AGROW>
     X_all = [X_all, s.y(:, 2:end)];     %#ok<AGROW>
 
-    U_all = [U_all, u(:)];              %#ok<AGROW>
+    U_all = [U_all, u_apply(:)];        %#ok<AGROW>
     t_u   = [t_u, tk];                  %#ok<AGROW>
     if tk == 0
-        LAM_all(:, 1) = true_lambda(xk, u, p);
+        LAM_all(:, 1) = true_lambda(xk, u_apply, p);
     end
     lam_s = zeros(2, numel(s.x) - 1);
     for j = 2:numel(s.x)
-        lam_s(:, j-1) = true_lambda(s.y(:, j), u, p);
+        lam_s(:, j-1) = true_lambda(s.y(:, j), u_apply, p);
     end
     LAM_all = [LAM_all, lam_s];         %#ok<AGROW>
+
+    % End the step at its first contact-invalid sample (p.stop_on_invalid).
+    if stop_inv
+        [j, inv] = first_invalid(t_all, LAM_all, n_seen, p.limits.mu_s);
+        if ~isempty(j)
+            t_all   = t_all(1:j);
+            X_all   = X_all(:, 1:j);
+            LAM_all = LAM_all(:, 1:j);
+            fired   = false;
+            break;
+        end
+        n_seen = numel(t_all);
+    end
 
     dt_actual = s.x(end) - tk;          % shorter than dt if the guard fired
     if dt_actual <= 0
@@ -207,16 +263,18 @@ while tk < T_cap - eps(T_cap)
     end
     tk = s.x(end);
     xk = s.y(:, end);
+    x_meas = measure(xk);               % the sample at t_{k+1}, used twice below
 
     % ---- advance the controller state over the SAME interval ------------
     % The plant-input predictor is also told where eta ended up: xk has
     % already advanced, so sampling it here is what a digital controller
     % does at t_{k+1}, before it computes the next control (ch4_l1_advance).
+    % It reads the same MEASUREMENT the next control decision will.
     if stateful
         smp = struct('eta', ci.eta, 'eta_next', [], 'mu', ci.mu, ...
                      'mu1_hat', ci.l1.mu1_hat);
         if plant_predictor
-            [~, ~, o_next] = ch3_outputs(xk, alpha, p);
+            [~, ~, o_next] = ch3_outputs(x_meas, alpha, p);
             smp.eta_next   = o_next.eta;
         end
         xik = ch4_l1_advance(xik, smp, clf, p, dt_actual);
@@ -234,6 +292,55 @@ if ~stateful
     XI_all = zeros(0, 1);
     t_xi   = 0;
 end
+u_last = u_hold;
+end
+
+% ---------------------------------------------------------------------------
+function [sig_q, sig_dq, rs, delay, u_hold] = implementation(p)
+%IMPLEMENTATION  Measurement noise, its random stream, and the actuation delay.
+sig_q = 0; sig_dq = 0; rs = []; delay = 0; u_hold = [];
+u = p.uncertainty;
+if isempty(u) || ~isstruct(u), return; end
+if isfield(u, 'noise') && isstruct(u.noise) && ~isempty(u.noise)
+    if isfield(u.noise, 'q')  && ~isempty(u.noise.q),  sig_q  = u.noise.q;  end
+    if isfield(u.noise, 'dq') && ~isempty(u.noise.dq), sig_dq = u.noise.dq; end
+    if isfield(u.noise, 'stream') && ~isempty(u.noise.stream)
+        rs = u.noise.stream;
+    elseif sig_q > 0 || sig_dq > 0
+        % called outside ch4_simulate: a stream from the seed, so the run is
+        % still reproducible (each such call restarts it)
+        sd = 0;
+        if isfield(u.noise, 'seed') && ~isempty(u.noise.seed), sd = u.noise.seed; end
+        rs = RandStream('mt19937ar', 'Seed', sd);
+    end
+end
+if isfield(u, 'delay') && ~isempty(u.delay), delay = u.delay; end
+if ~(delay == 0 || delay == 1)
+    error('ch4_step:delay', ...
+          'uncertainty.delay must be 0 or 1 control sample (got %g).', delay);
+end
+if isfield(u, 'u_prev'), u_hold = u.u_prev; end
+end
+
+% ---------------------------------------------------------------------------
+function [j, inv] = first_invalid(t_all, LAM, n_seen, mu_s)
+%FIRST_INVALID  First sample after n_seen the ground could not have supplied.
+% The test is ch3_validity's: Fz <= 0 (lift-off) or |Fx|/Fz > mu_s (slip).
+j = []; inv = [];
+cols = n_seen+1 : size(LAM, 2);
+Fx = LAM(1, cols);  Fz = LAM(2, cols);
+ok   = isfinite(Fx) & isfinite(Fz);
+lift = ok & (Fz <= 0);
+slip = ok & (Fz > 0) & (abs(Fx) ./ max(Fz, realmin) > mu_s);
+k = find(lift | slip, 1);
+if isempty(k), return; end
+j = cols(k);
+if lift(k)
+    kind = 'lift-off'; mu = NaN;
+else
+    kind = 'slip';     mu = abs(Fx(k)) / Fz(k);
+end
+inv = struct('t', t_all(j), 'kind', kind, 'Fz', Fz(k), 'mu', mu);
 end
 
 % ---------------------------------------------------------------------------

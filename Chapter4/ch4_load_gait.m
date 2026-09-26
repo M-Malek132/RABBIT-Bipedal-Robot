@@ -31,7 +31,9 @@ function [x0, alpha, p, meta] = ch4_load_gait(fname, varargin)
 % collapsing while every table still printed "3 steps completed". So the gait
 % is re-evaluated here against TODAY's dynamics and meta.orbit reports whether
 % it is still a periodic orbit (see the check below); ch4_main refuses one
-% that is not.
+% that is not. Gaits solved since then DO record their model (model_sig,
+% stored by ch3_col_solve; ch3_stamp_gaits adds it to older files that still
+% verify), and meta.model is ch3_model_check's verdict on it.
 %
 % Inputs
 %   fname    : .mat file with a collocation solution (z and p). Default
@@ -44,9 +46,10 @@ function [x0, alpha, p, meta] = ch4_load_gait(fname, varargin)
 %   x0    : 14x1 start-of-step state of the periodic orbit
 %   alpha : ny x n_ctrl virtual constraint coefficients
 %   p     : Chapter-4 parameter struct consistent with that gait
-%   meta  : struct .file .T .L_step .v_avg .source_p .orbit
+%   meta  : struct .file .T .L_step .v_avg .source_p .orbit .model
 %           .orbit = .defect .periodicity .eta_post .tol .ok, the gait's own
 %           collocation residuals under the dynamics currently on disk
+%           .model = ch3_model_check: 'match' | 'mismatch' | 'unrecorded'
 %
 % See also CH4_PARAMS, CH3_COL_UNPACK, CH3_COL_EVAL, CH4_MAIN.
 
@@ -74,8 +77,10 @@ p_src = S.p;
 % --- Chapter-4 defaults, then the gait's own parametrization --------------
 p = ch4_params();
 
+% free_theta says whether z carries the phase endpoints (ch3_col_pack); a gait
+% solved with them free is saved with its solved theta_minus / theta_plus in p.
 gait_fields = {'nq', 'nu', 'nx', 'iact', 'ny', 'H', ...
-               'c_theta', 'theta_minus', 'theta_plus', ...
+               'c_theta', 'theta_minus', 'theta_plus', 'free_theta', ...
                'basis', 'bez_deg', 'n_ctrl', 'bsp_deg', 'g0'};
 
 for i = 1:numel(gait_fields)
@@ -83,6 +88,16 @@ for i = 1:numel(gait_fields)
     if isfield(p_src, f)
         p.(f) = p_src.(f);
     end
+end
+
+% --- which dynamics was it solved on? -------------------------------------
+% A file written since ch3_col_solve started storing model_sig says so, and a
+% mismatch is conclusive. A file from before (posture_195 until
+% ch3_stamp_gaits has run) is 'unrecorded', and the orbit check below is what
+% decides for it.
+model = ch3_model_check(S, 'quiet');
+if strcmp(model.status, 'mismatch')
+    warning('ch4_load_gait:modelMismatch', '"%s": %s', fname, model.msg);
 end
 
 % --- re-evaluate the gait on the dynamics on the path TODAY --------------
@@ -170,7 +185,7 @@ if nargout > 3
     footN = P_sw(X(1:p.nq, end));
     L     = footN(1) - foot0(1);
     meta  = struct('file', fname, 'T', T, 'L_step', L, 'v_avg', L / T, ...
-                   'source_p', p_src, 'orbit', orbit);
+                   'source_p', p_src, 'orbit', orbit, 'model', model);
 end
 
 end

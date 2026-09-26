@@ -34,6 +34,10 @@ function out = ch5_simulate(p, varargin)
 %   name/value:
 %     'x0'      override the initial state
 %     'verbose' progress line (default false)
+%     'log'     also record the QP's internals per sample (default false):
+%               ||LgV||, psi, the exit flag, ||Lb||, ||mu||, and for ode45 the
+%               number of internal steps each control period took -- what
+%               ch5_ensemble_probe needs to find out WHY a run diverged
 %
 % Outputs
 %   out : struct with
@@ -42,11 +46,14 @@ function out = ch5_simulate(p, varargin)
 %           .cbf_active .feasible   logical rows
 %           .h_min .h_min_t .violated
 %           .adm      the admissibility report (empty for non-ECBF runs)
+%           .h_extra  (n x N) the extra barriers of p.ecbf.extra, .act_extra,
+%                     .adm_extra (their admissibility), .h_extra_min
+%           .log      the 'log' record (empty unless asked)
 %           .p .ok .reason .cpu
 %
 % See also CH5_CONTROL, CH5_ECBF_ADMISSIBLE, CH5_MAIN, CH5_REPORT.
 
-o = struct('x0', [], 'verbose', false);
+o = struct('x0', [], 'verbose', false, 'log', false);
 for k = 1:2:numel(varargin), o.(lower(varargin{k})) = varargin{k+1}; end
 
 x0 = o.x0;
@@ -89,6 +96,30 @@ else
 end
 rb = b0.rb;
 
+%% ------------------------------------ extra barriers (p.ecbf.extra), same gate
+adm_x = [];
+n_x   = 0;
+if is_ecbf
+    [X0, PX] = ch5_extra_barriers(x0, p, e);
+    n_x = numel(X0);
+    if n_x > 0
+        e.extra = [X0.e];                    % built once, like the main gain
+        for k = 1:n_x
+            ak = ch5_ecbf_admissible(x0, PX{k}, X0(k).e);
+            adm_x = [adm_x, ak];             %#ok<AGROW>
+            if ~ak.ok
+                switch lower(p.ecbf.admissibility)
+                    case 'error'
+                        error('ch5_simulate:inadmissible', ...
+                              'Corollary 5.2 fails at x0 for extra barrier %d: %s', k, ak.msg);
+                    case 'warn'
+                        fprintf('  [Cor 5.2, extra %d] %s\n', k, ak.msg);
+                end
+            end
+        end
+    end
+end
+
 %% ------------------------------------------------------------------ storage
 t     = (0:N-1) * dt;
 X     = nan(nx, N);
@@ -102,6 +133,12 @@ YRB   = nan(1,  N);
 KBE   = nan(1,  N);
 ACT   = false(1, N);
 FEAS  = true(1,  N);
+HX    = nan(n_x, N);
+AX    = false(n_x, N);
+if o.log
+    LG  = nan(1, N); PSI = nan(1, N); EXF = nan(1, N);
+    LBN = nan(1, N); MUN = nan(1, N); NST = nan(1, N);
+end
 
 ok     = true;
 reason = 'completed';
@@ -117,6 +154,18 @@ for i = 1:N
     end
 
     [u, in] = ch5_control(x, p, e);
+    if n_x > 0 && isfield(in.qp, 'extra') && ~isempty(in.qp.extra)
+        HX(:, i) = [in.qp.extra.h].';
+        AX(:, i) = [in.qp.extra.active].';
+    end
+    if o.log
+        q_ = in.qp;
+        if isfield(q_, 'LgV'),      LG(i)  = norm(q_.LgV);  end
+        if isfield(q_, 'psi'),      PSI(i) = q_.psi;        end
+        if isfield(q_, 'exitflag'), EXF(i) = q_.exitflag;   end
+        if isfield(q_, 'Lb_norm'),  LBN(i) = q_.Lb_norm;    end
+        MUN(i) = norm(in.mu);
+    end
 
     X(:,i)    = x;
     U(:,i)    = u;
@@ -137,7 +186,11 @@ for i = 1:N
 
     if i == N, break; end
 
-    x = advance(x, u, dt, p);
+    if o.log
+        [x, NST(i)] = advance(x, u, dt, p);
+    else
+        x = advance(x, u, dt, p);
+    end
 
     if o.verbose && mod(i, max(1, round(N/10))) == 0
         fprintf('    %5.1f%%  t = %6.2f s   h = %+8.4f\n', ...
@@ -153,18 +206,32 @@ keep = ~isnan(H);
 tk = t(keep);
 if isempty(h_min), h_min = NaN; h_min_t = NaN; else, h_min_t = tk(imin); end
 
+h_extra_min = nan(n_x, 1);
+for k = 1:n_x
+    hk = HX(k, keep);
+    if any(isfinite(hk)), h_extra_min(k) = min(hk); end
+end
+lg = [];
+if o.log
+    lg = struct('LgV', LG, 'psi', PSI, 'exitflag', EXF, 'Lb', LBN, ...
+                'mu', MUN, 'ode_steps', NST);
+end
+
 out = struct('t', t, 'x', X, 'u', U, 'mu', MU, 'h', H, 'eta_b', ETAB, ...
              'V', Vv, 'delta', DEL, 'y_rb', YRB, 'Kb_eta', KBE, ...
              'cbf_active', ACT, 'feasible', FEAS, ...
              'h_min', h_min, 'h_min_t', h_min_t, 'violated', h_min < 0, ...
              'adm', adm, 'p', p, 'ok', ok, 'reason', reason, 'cpu', cpu, ...
-             'n', sum(keep));
+             'n', sum(keep), 'h_extra', HX, 'act_extra', AX, ...
+             'adm_extra', adm_x, 'h_extra_min', h_extra_min, 'log', lg);
 
 end
 
 % ---------------------------------------------------------------------------
-function x = advance(x, u, dt, p)
-%ADVANCE  One control period with u held.
+function [x, nsteps] = advance(x, u, dt, p)
+%ADVANCE  One control period with u held. nsteps: the integrator's internal
+% step count for the period (only when asked; the plain path is unchanged).
+nsteps = NaN;
 switch lower(p.integrator)
 
     case 'ode45'
@@ -173,8 +240,14 @@ switch lower(p.integrator)
         % is diverging). Default p.ode_opts is RelTol/AbsTol only, so this is
         % identical to the previous behaviour for every existing caller.
         opts = odeset(p.ode_opts);
-        [~, Z] = ode45(@(tt,zz) ch5_ode_rhs(tt, zz, u, p), [0 dt], x, opts);
-        x = Z(end,:).';
+        if nargout > 1
+            sol    = ode45(@(tt,zz) ch5_ode_rhs(tt, zz, u, p), [0 dt], x, opts);
+            x      = sol.y(:, end);
+            nsteps = sol.stats.nsteps;
+        else
+            [~, Z] = ode45(@(tt,zz) ch5_ode_rhs(tt, zz, u, p), [0 dt], x, opts);
+            x = Z(end,:).';
+        end
 
     case 'rk4'
         m = p.n_substeps;
@@ -186,6 +259,7 @@ switch lower(p.integrator)
             k4 = ch5_ode_rhs(0, x + hs*k3,   u, p);
             x  = x + (hs/6)*(k1 + 2*k2 + 2*k3 + k4);
         end
+        nsteps = m;
 
     otherwise
         error('ch5_simulate:integrator', ...

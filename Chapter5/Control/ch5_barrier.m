@@ -48,6 +48,11 @@ function b = ch5_barrier(x, p)
 %   springmass  'x3_max'  x3 <= level        relative degree 6
 %               'v1_max'  xdot1 <= level     relative degree 1
 %   pendulum    'py_min'  py2 >= level       relative degree 4
+%               'theta_min' / 'theta_max'    theta_j >= / <= level, the joint
+%                         limit of link j (spec.joint, default 2), relative
+%                         degree 4 like the end-effector height -- theta is
+%                         the output itself, so h^(4) = +-mu_j exactly. Used as
+%                         an EXTRA barrier alongside py_min (p.ecbf.extra).
 %
 % Output
 %   b : struct with
@@ -101,6 +106,30 @@ switch lower(cs.type)
         b.q        = py;
         b.sense    = 'lower';
         b.label    = 'p^y_2';
+
+    %% ------------------------ theta_j >= / <= level, a joint limit (rb = 4)
+    case {'theta_min', 'theta_max'}
+        if ~strcmpi(p.system, 'pendulum')
+            error('ch5_barrier:jointLimitPlant', ...
+                  'Joint-limit barriers are defined for the pendulum only.');
+        end
+        j = 2;
+        if isfield(cs, 'joint') && ~isempty(cs.joint), j = cs.joint; end
+        [thd2, thd3, thd4f, thd4g] = ch5_pend_theta_lie(x, p.plant.pv);
+        sg = 1;
+        if strcmpi(cs.type, 'theta_max'), sg = -1; end
+
+        b = struct();
+        b.rb       = 4;
+        b.h        = sg * (x(j) - cs.value);
+        b.eta_b    = [b.h; sg * x(4 + j); sg * thd2(j); sg * thd3(j)];
+        b.Lfrb     = sg * thd4f(j);
+        b.LgLfrb1  = sg * thd4g(j, :);
+        b.Lfh      = sg * x(4 + j);
+        b.Lgh      = zeros(1, nu);
+        b.q        = x(j);
+        if sg > 0, b.sense = 'lower'; else, b.sense = 'upper'; end
+        b.label    = sprintf('\\theta_%d', j);
 
     otherwise
         error('ch5_barrier:unknownConstraint', ...

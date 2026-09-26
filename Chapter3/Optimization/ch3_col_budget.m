@@ -53,7 +53,8 @@ end
 if nargin >= 3 && ~isempty(z)
     n_vars = numel(z);
 else
-    n_vars = p.nx * p.N_nodes + 1 + p.ny * p.n_ctrl;
+    n_vars = p.nx * p.N_nodes + 1 + p.ny * p.n_ctrl + ...
+             2 * (isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta);
 end
 
 p.max_fun_evals = ceil(2.2 * n_vars * p.max_iter);

@@ -22,13 +22,18 @@ function o = ch4_l1_opts(p)
 %              .phi_max (cap on alpha's regressor; Inf for none)
 %              .loop_gain_max (normalization ceiling [rad^2/s^2]; Inf for none)
 %              .constrain_applied
+%              .adaptation ('gradient' | 'pwc') .pwc_rate [rad/s] .pwc_max
+%
+% A struct saved before the piecewise-constant law existed has no
+% p.l1.adaptation and resolves to 'gradient', the law it ran.
 %
 % See also CH4_PARAMS, CH4_L1_DERIV, CH4_L1_ADVANCE, CH4_CTRL_L1.
 
 o = struct('predictor', 'thesis', 'predictor_rate', 0, ...
            'Gamma', p.l1.Gamma, 'Gamma_alpha', p.l1.Gamma, ...
            'alpha_leak', 0, 'impact_estimate', 'carry', ...
-           'constrain_applied', false);
+           'constrain_applied', false, ...
+           'adaptation', 'gradient', 'pwc_rate', 0, 'pwc_max', Inf);
 
 if isfield(p.l1, 'predictor') && ~isempty(p.l1.predictor)
     o.predictor = lower(p.l1.predictor);
@@ -94,6 +99,44 @@ if kappa_n > 0 && p.control_dt > 0
 end
 if isfield(p.l1, 'constrain_applied') && ~isempty(p.l1.constrain_applied)
     o.constrain_applied = logical(p.l1.constrain_applied);
+end
+
+% The piecewise-constant law (ch4_params, p.l1.adaptation).
+if isfield(p.l1, 'adaptation') && ~isempty(p.l1.adaptation)
+    o.adaptation = lower(p.l1.adaptation);
+end
+if isfield(p.l1, 'pwc_rate') && ~isempty(p.l1.pwc_rate)
+    o.pwc_rate = p.l1.pwc_rate;
+end
+if isfield(p.l1, 'pwc_max') && ~isempty(p.l1.pwc_max)
+    o.pwc_max = p.l1.pwc_max;
+end
+switch o.adaptation
+    case 'gradient'
+    case 'pwc'
+        if ~strcmp(o.predictor, 'plant')
+            error('ch4_l1_opts:pwcPredictor', ...
+                  ['p.l1.adaptation = ''pwc'' needs p.l1.predictor = ''plant'': ' ...
+                   'the law inverts the error dynamics eta_tilde_dot = ' ...
+                   '-a_s eta_tilde + G theta_tilde, which only the plant-input ' ...
+                   'predictor has.']);
+        end
+        if ~(p.control_dt > 0)
+            error('ch4_l1_opts:pwcContinuous', ...
+                  ['p.l1.adaptation = ''pwc'' is a sampled-data law and needs ' ...
+                   'p.control_dt > 0.']);
+        end
+        if ~(isscalar(o.pwc_rate) && isfinite(o.pwc_rate) && o.pwc_rate >= 0)
+            error('ch4_l1_opts:pwcRate', ...
+                  'p.l1.pwc_rate must be a nonnegative rate [rad/s] (got %s).', ...
+                  mat2str(o.pwc_rate));
+        end
+        % the loop-speed limits belong to the gradient law; nothing to limit here
+        o.phi_max = Inf;
+        o.loop_gain_max = Inf;
+    otherwise
+        error('ch4_l1_opts:adaptation', ...
+              'Unknown p.l1.adaptation "%s" (expected gradient|pwc).', o.adaptation);
 end
 
 switch o.predictor

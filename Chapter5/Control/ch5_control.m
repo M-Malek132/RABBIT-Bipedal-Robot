@@ -13,6 +13,7 @@ function [u, info] = ch5_control(x, p, e)
 %   'cbfclfqp'       CLF + reciprocal barrier (5.7)     Section 5.1
 %   'cbfclfqp_viol'  the same via VIOL (5.15)           Remark 5.4
 %   'ecbfclfqp'      CLF + exponential barrier (5.31)   Section 5.2
+%                    (+ one row per p.ecbf.extra barrier, e.g. a joint limit)
 %   'ecbfclfqp_viol' the same with mu_b explicit        Remark 5.4 again
 %
 % THE BARRIER IS EVALUATED EVEN FOR 'clfqp'. It costs almost nothing and it
@@ -51,8 +52,9 @@ switch lower(p.controller)
         if nargin < 3 || isempty(e)
             e = ch5_ecbf_gain(p, b.rb);
         end
+        X = ch5_extra_barriers(x, p, e);        % [] unless p.ecbf.extra is set
         [mu, u, qp] = ch5_ctrl_ecbf_clf_qp(io, b, e, p, ...
-                                           strcmpi(p.controller, 'ecbfclfqp_viol'));
+                                           strcmpi(p.controller, 'ecbfclfqp_viol'), X);
 
     otherwise
         error('ch5_control:unknownController', ...

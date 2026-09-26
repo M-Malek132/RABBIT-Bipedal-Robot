@@ -49,6 +49,17 @@ function [f, g, aux] = ch4_control_affine(x, p, unc)
 %   Unlike mass_scale this perturbation is NOT uniform, so it also changes the
 %   impact map -- see ch4_impact.
 %
+%   links (with J_ref, b_visc, tau_coulomb, tau_bias).  A STRUCTURED model
+%   error from ch4_uncertainty_set: each body's mass, COM and inertia on its
+%   own (M, V, G from ch4_link_dynamics, exact for any link parameters),
+%   reflected rotor inertia added to the actuated diagonal of M, and joint
+%   friction and bias, which the robot adds to every command:
+%
+%       M qddot + V + G = B (u + tau_x(qdot)),    tau_x = ch4_joint_extra
+%
+%   tau_x depends on the state only, so it joins the DRIFT and the model stays
+%   control-affine. A load_mass may ride on top; a mass_scale may not.
+%
 % Inputs
 %   x   : 14x1 state [q; dq]
 %   p   : parameter struct (uses p.nq, p.nu, p.g0)
@@ -64,12 +75,18 @@ function [f, g, aux] = ch4_control_affine(x, p, unc)
 if nargin < 3, unc = p.uncertainty; end
 
 [s, mL] = unpack_unc(unc);
+S = ch4_structured_part(unc);
+if ~isempty(S) && s ~= 1
+    error('ch4_control_affine:structuredScale', ...
+          ['A structured model (uncertainty.links) cannot be combined with a ' ...
+           'mass_scale; scale the link masses instead.']);
+end
 
 % --- nominal model: defer to Chapter 3 rather than reproduce it -----------
-if s == 1 && mL == 0
+if s == 1 && mL == 0 && isempty(S)
     [f, g, aux] = ch3_control_affine(x, p);
     if nargout > 2
-        aux.unc = struct('mass_scale', 1, 'load_mass', 0);
+        aux.unc = struct('mass_scale', 1, 'load_mass', 0, 'structured', false);
     end
     return;
 end
@@ -81,10 +98,13 @@ q  = x(1:nq);
 dq = x(nq+1:2*nq);
 
 % --- perturbed dynamics terms --------------------------------------------
-if s == 1
-    M_mat = M(q);
-    V_vec = V([q; dq]);
-    G_vec = G(q);
+tau_x = zeros(nu, 1);
+if ~isempty(S)
+    [M_mat, V_vec, G_vec] = ch4_link_dynamics(q, dq, S.links, p.g0);
+    M_mat(4:7, 4:7) = M_mat(4:7, 4:7) + diag(S.J_ref);
+    tau_x = ch4_joint_extra(dq, S);
+elseif s == 1
+    [M_mat, V_vec, G_vec] = ch3_mvg(q, dq, p);
 else
     [M_mat, V_vec, G_vec] = ch4_case_dynamics(s, q, dq);
 end
@@ -105,8 +125,8 @@ nc     = size(J, 1);
 A = [M_mat, -J.'; ...
      J,     zeros(nc)];
 
-rhs = [ [-V_vec - G_vec], B_mat ; ...
-        [-Jdotdq],        zeros(nc, nu) ];
+rhs = [ [-V_vec - G_vec + B_mat * tau_x], B_mat ; ...
+        [-Jdotdq],                         zeros(nc, nu) ];
 
 sol = A \ rhs;
 
@@ -122,8 +142,9 @@ if nargout > 2
     aux = struct('ddq_drift', ddq_drift, 'ddq_in', ddq_in, ...
                  'lam_drift', lam_drift, 'lam_in', lam_in, ...
                  'M', M_mat, 'Vv', V_vec, 'Gv', G_vec, ...
-                 'J', J, 'Jdotdq', Jdotdq, ...
-                 'unc', struct('mass_scale', s, 'load_mass', mL));
+                 'J', J, 'Jdotdq', Jdotdq, 'tau_x', tau_x, ...
+                 'unc', struct('mass_scale', s, 'load_mass', mL, ...
+                               'structured', ~isempty(S)));
 end
 
 end

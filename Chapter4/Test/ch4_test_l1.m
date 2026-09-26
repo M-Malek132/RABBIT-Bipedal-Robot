@@ -41,6 +41,9 @@ function ch4_test_l1()
 %      while theta_hat stays on theta
 %  13. at a footstrike 'carry' leaves the estimates alone, while 'continuous'
 %      and 'fold' keep theta_hat continuous
+%  14. the piecewise-constant law (p.l1.adaptation = 'pwc'): exact after one
+%      sample at a_s = 0, exactly the documented bias e^(-a_s T) at a_s > 0,
+%      and no loop to outrun at ||eta|| = 13, where check 10's law diverges
 
 fprintf('\n=== ch4_test_l1 ===\n');
 pass = true;
@@ -540,6 +543,61 @@ ok13 = abs(gap13(1) - jump13) <= 1e-12 && gap13(2) <= 1e-12 && gap13(3) <= 1e-12
 fprintf(['  [%s] %-30s theta_hat jump carry %.2f / continuous %.1e / fold %.1e; ' ...
          'fold restarts alpha_hat\n'], tf(ok13), 'impact estimate modes', gap13);
 pass = pass && ok13;
+
+%% 14. the piecewise-constant law (p.l1.adaptation = 'pwc')
+% (a) On check 9's double integrator -- exact discretization under the held
+% input, a constant theta, outputs that keep accelerating -- the law at
+% a_s = 0 must return theta EXACTLY from the second sample on: the estimate is
+% the mean uncertainty over the last period, and here that is theta.
+% (b) At a_s > 0 the textbook law carries the bias factor e^(-a_s T); check it
+% is exactly that (to the RK4 advance's accuracy), so the documented bias is
+% the measured one.
+% (c) Check 10's held error at ||eta|| = 13, which drives the gradient law past
+% the sample rate: the piecewise-constant law has no loop to drive, so it must
+% land on theta after one sample and stay there, never above it.
+p14 = p9; p14.l1.adaptation = 'pwc'; p14.l1.pwc_rate = 0;
+err14 = zeros(1, 2); rates = [0 50];
+for mode = 1:2
+    pm  = p14; pm.l1.pwc_rate = rates(mode);
+    eta = zeros(2*ny, 1);
+    xi  = ch4_l1_state('init', pm, eta);
+    e_hist = zeros(1, 200);
+    for k = 1:200
+        t9  = (k-1)*T;
+        y_d = 0.3*sin(w9*t9)        * ones(ny,1);
+        v_d = 0.3*w9*cos(w9*t9)     * ones(ny,1);
+        a_d = -0.3*w9^2*sin(w9*t9)  * ones(ny,1);
+        s14 = ch4_l1_state('unpack', pm, xi);
+        mu  = a_d - 100*(eta(1:ny) - y_d) - 20*(eta(ny+1:end) - v_d) + s14.mu2;
+        eta_next = Ad*eta + Bd*(mu + theta9);
+        smp = struct('eta', eta, 'eta_next', eta_next, 'mu', mu, 'mu1_hat', []);
+        xi  = ch4_l1_advance(xi, smp, clf, pm, T);
+        eta = eta_next;
+        s14 = ch4_l1_state('unpack', pm, xi);
+        target = theta9 * exp(-rates(mode) * T);
+        e_hist(k) = norm(s14.beta_hat - target) / norm(theta9) + norm(s14.alpha_hat);
+    end
+    err14(mode) = max(e_hist(2:end));
+end
+pass = report('pwc, a_s = 0: exact after 1 sample', err14(1), 1e-9, pass);
+pass = report('pwc, a_s > 0: bias e^(-a_s T)', err14(2), 1e-6, pass);
+
+pm  = p10; pm.l1.adaptation = 'pwc'; pm.l1.pwc_rate = 0;
+xi  = ch4_l1_state('init', pm, eta10);
+smp = struct('eta', eta10, 'eta_next', eta10, 'mu', -theta10, 'mu1_hat', []);
+pk14 = 0; late14 = 0;
+for k = 1:K10
+    xi  = ch4_l1_advance(xi, smp, clf, pm, T10);
+    s14 = ch4_l1_state('unpack', pm, xi);
+    th  = s14.alpha_hat * norm(eta10) + s14.beta_hat;
+    pk14 = max(pk14, norm(th));
+    if k > 1, late14 = max(late14, norm(th - theta10) / norm(theta10)); end
+end
+ok14 = late14 < 1e-9 && pk14 <= norm(theta10) * (1 + 1e-9);
+fprintf(['  [%s] %-30s ||eta|| = 13: peak ||theta_hat||/||theta|| %.6f, ' ...
+         'error after one sample %.1e (the gradient law diverges here)\n'], ...
+        tf(ok14), 'pwc has no loop to outrun', pk14 / norm(theta10), late14);
+pass = pass && ok14;
 
 fprintf('--- ch4_test_l1: %s ---\n\n', tf(pass));
 end

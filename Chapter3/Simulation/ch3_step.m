@@ -39,8 +39,21 @@ function out = ch3_step(x0, alpha, p)
 %                    .t, under the torque held there -- sampled control only.
 %                    The stance foot is integrated as a pin, so nothing stops
 %                    Fz < 0 or |Fx| > mu Fz; this is what ch3_validity scores.
+%           .contact_invalid  true when p.stop_on_invalid ended the step at
+%                    a sample the ground could not have supplied (the step is
+%                    then .ok = false and its trajectory ends AT that sample)
+%           .invalid struct .t .kind ('lift-off' | 'slip') .Fz .mu of that
+%                    sample, [] otherwise
 %
-% See also CH3_ODE_RHS, CH3_IMPACT, CH3_SIMULATE.
+% STOPPING AT THE FIRST INVALID SAMPLE (p.stop_on_invalid, sampled control
+% only). The pinned foot lets a run "complete" steps after its contact has
+% already failed; ch3_validity scores that afterwards, but every other number
+% of the run -- steps completed, max||eta||, peak torque -- is still taken over
+% a trajectory the ground could not have produced. With the flag on the step
+% ends at that sample, with the same test ch3_validity applies (Fz <= 0, or
+% |Fx|/Fz > p.limits.mu_s), so a run's completed steps are its valid steps.
+%
+% See also CH3_ODE_RHS, CH3_IMPACT, CH3_SIMULATE, CH3_VALIDITY.
 
 opts = odeset('RelTol',   p.ode_reltol, ...
               'AbsTol',   p.ode_abstol, ...
@@ -50,13 +63,13 @@ opts = odeset('RelTol',   p.ode_reltol, ...
 T_cap = p.T_max * 2;      % hard cap so a non-striking gait cannot run forever
 
 if isfield(p, 'control_dt') && p.control_dt > 0
-    [t, X, fired, U, t_u, LAM] = integrate_zoh(x0, alpha, p, T_cap, opts);
+    [t, X, fired, U, t_u, LAM, inv] = integrate_zoh(x0, alpha, p, T_cap, opts);
     sol = [];             % see note in integrate_zoh on dense output
 else
     % Continuous control re-solves u(x) inside the integrand; recovering the
     % contact force would mean re-solving it at every output point, which the
     % seed rollouts that use this branch do not need.
-    U = zeros(p.nu, 0); t_u = zeros(1, 0); LAM = zeros(2, 0);
+    U = zeros(p.nu, 0); t_u = zeros(1, 0); LAM = zeros(2, 0); inv = [];
     sol   = ode45(@(t,x) ch3_ode_rhs(t, x, alpha, p), [0 T_cap], x0(:), opts);
     t     = sol.x;
     X     = sol.y;
@@ -73,6 +86,8 @@ out.sol   = sol;
 out.u      = U;
 out.t_u    = t_u;
 out.lambda = LAM;
+out.contact_invalid = ~isempty(inv);
+out.invalid = inv;
 
 % stance-foot position at the start, swing-foot position at strike: their
 % horizontal difference is the step length.
@@ -85,7 +100,7 @@ out.L_step  = foot_sw_end(1) - foot_st_0(1);
 end
 
 % ---------------------------------------------------------------------------
-function [t_all, X_all, fired, U_all, t_u, LAM_all] = integrate_zoh(x0, alpha, p, T_cap, opts)
+function [t_all, X_all, fired, U_all, t_u, LAM_all, inv] = integrate_zoh(x0, alpha, p, T_cap, opts)
 %INTEGRATE_ZOH  Sampled-data integration: one control solve per period.
 %
 % Also records the held torque of each period and the stance contact force at
@@ -112,6 +127,9 @@ LAM_all = nan(2, 1);                         % t = 0 is filled by the first peri
 tk    = 0;
 xk    = x0(:);
 fired = false;
+inv   = [];
+stop_inv = isfield(p, 'stop_on_invalid') && ~isempty(p.stop_on_invalid) && p.stop_on_invalid;
+n_seen   = 0;                                % samples already checked
 
 while tk < T_cap - eps(T_cap)
     u  = ch3_control(xk, alpha, p);          % one QP solve for this period
@@ -134,6 +152,20 @@ while tk < T_cap - eps(T_cap)
     end
     LAM_all = [LAM_all, lam_s];              %#ok<AGROW>
 
+    % End the step at its first contact-invalid sample (p.stop_on_invalid):
+    % the trajectory is cut AT that sample, and the step reports not ok.
+    if stop_inv
+        [j, inv] = first_invalid(t_all, LAM_all, n_seen, p.limits.mu_s);
+        if ~isempty(j)
+            t_all   = t_all(1:j);
+            X_all   = X_all(:, 1:j);
+            LAM_all = LAM_all(:, 1:j);
+            fired   = false;
+            return;
+        end
+        n_seen = numel(t_all);
+    end
+
     tk = s.x(end);
     xk = s.y(:, end);
 
@@ -142,6 +174,27 @@ while tk < T_cap - eps(T_cap)
         return;
     end
 end
+end
+
+% ---------------------------------------------------------------------------
+function [j, inv] = first_invalid(t_all, LAM, n_seen, mu_s)
+%FIRST_INVALID  First sample after n_seen the ground could not have supplied.
+% The test is ch3_validity's: Fz <= 0 (lift-off) or |Fx|/Fz > mu_s (slip).
+j = []; inv = [];
+cols = n_seen+1 : size(LAM, 2);
+Fx = LAM(1, cols);  Fz = LAM(2, cols);
+ok   = isfinite(Fx) & isfinite(Fz);
+lift = ok & (Fz <= 0);
+slip = ok & (Fz > 0) & (abs(Fx) ./ max(Fz, realmin) > mu_s);
+k = find(lift | slip, 1);
+if isempty(k), return; end
+j = cols(k);
+if lift(k)
+    kind = 'lift-off'; mu = NaN;            % no friction ratio without load
+else
+    kind = 'slip';     mu = abs(Fx(k)) / Fz(k);
+end
+inv = struct('t', t_all(j), 'kind', kind, 'Fz', Fz(k), 'mu', mu);
 end
 
 % ---------------------------------------------------------------------------

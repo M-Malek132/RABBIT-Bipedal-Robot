@@ -40,11 +40,23 @@ function E = ch3_col_eval(z, p)
 %   thd (1 x N), thdm (1 x N-1)   thetadot at nodes / midpoints  HH6
 %   dec_min              min singular value of LgLf y over the step     HH2
 %   eta_post (2ny x 1)   [y; ydot] evaluated at Delta(x_N)       HH4/HH5
+%   p                    the parameters actually evaluated: p with the phase
+%                        endpoints z carries when p.free_theta is set
+%                        (ch3_col_effective_params). Callers use E.p, not their
+%                        own p, for anything that reads theta_minus/theta_plus.
+%
+% THE CACHE KEY IS z AND THE PARTS OF p THE RESULT DEPENDS ON -- the phase
+% endpoints, the output basis and the model (p.model_blend). Keyed on z alone,
+% a march that changes the model or the phase between two calls with the same
+% z (the first evaluation of every rung is at the previous rung's answer)
+% would be handed the previous rung's dynamics.
 %
 % See also CH3_COL_COST, CH3_COL_CONSTRAINTS, CH3_COL_DYNAMICS.
 
 persistent key val
-if ~isempty(key) && numel(key) == numel(z) && isequal(key, z)
+p  = ch3_col_effective_params(z, p);
+kp = cache_key(p);
+if ~isempty(key) && numel(key.z) == numel(z) && isequal(key.z, z) && isequaln(key.p, kp)
     E = val;
     return;
 end
@@ -143,9 +155,17 @@ E = struct('X', X, 'T', T, 'alpha', alpha, 'N', N, 'h', h, ...
            'x_next', x_next, 'impulse', impulse, ...
            'sw_hm', sw_hm, 'sw_hd', sw_hd, 'sw_hd_post', sw_hd_post, ...
            'thd', thd, 'thdm', thdm, 'dec_min', dec_min, ...
-           'eta_post', eta_post);
+           'eta_post', eta_post, 'p', p);
 
-key = z;
+key = struct('z', z, 'p', {kp});
 val = E;
 
+end
+
+% ---------------------------------------------------------------------------
+function k = cache_key(p)
+%CACHE_KEY  The fields of p that E depends on beyond z itself.
+blend = NaN;
+if isfield(p, 'model_blend') && ~isempty(p.model_blend), blend = p.model_blend; end
+k = {p.theta_minus, p.theta_plus, p.c_theta, p.basis, p.bez_deg, p.bsp_deg, blend};
 end

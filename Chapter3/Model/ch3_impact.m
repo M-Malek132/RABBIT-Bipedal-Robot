@@ -42,7 +42,7 @@ q  = x_minus(1:nq);
 dq = x_minus(nq+1:2*nq);
 
 % --- 1. plastic impact ----------------------------------------------------
-M_mat = M(q);
+M_mat = ch3_mvg(q, [], p);       % M.m unless p.model_blend is set
 Jsw   = J_sw(q);                 % PRE-impact swing-foot Jacobian
 nc    = size(Jsw, 1);
 

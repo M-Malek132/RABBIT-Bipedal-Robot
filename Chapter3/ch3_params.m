@@ -18,10 +18,35 @@ p.mass = 74;                    % total mass [kg]
 p.H = zeros(p.ny, p.nq);
 p.H(:, p.iact) = eye(p.ny);
 
+% WHICH ROBOT. [] is today's 74 kg model (M.m / V.m / G.m). A scalar lambda in
+% [0, 1] blends in the 30 kg model this repository used before 2026-09-02:
+% 0 is that robot, 1 is today's, and anything between has linearly blended
+% masses and inertias -- exact, since the dynamics are linear in them (ch3_mvg).
+% Only ch3_model_homotopy sets it.
+p.model_blend = [];
+
 %% phase variable theta
 p.c_theta = [0 0 1 1 0.5 0 0];   % theta = qt + q1 + q2/2 = c*q
 p.theta_minus = -0.15;
 p.theta_plus  =  0.30;
+
+% THE PHASE ENDPOINTS AS DECISION VARIABLES. With both legs of 0.5 m links,
+% theta = qt + q1 + q2/2 is EXACTLY the direction of the hip-to-foot line
+% (Dynamics/DOCS.md), and at the strike both feet are on the ground with the
+% stance leg at theta_plus and the landing leg at theta_minus (periodicity).
+% So the stride is fixed by the hip height at impact alone:
+%
+%       L_step = h_hip(t_N) * (tan theta_plus - tan theta_minus)
+%
+% which every stored gait satisfies to ~1e-7. With theta_minus, theta_plus
+% held constant the only way to shorten the stride is to lower the hip at
+% impact, and the hip band (row 8) floors that: at 0.925 - 0.045 m the stride
+% cannot go below 0.405 m. free_theta = true appends [theta_minus; theta_plus]
+% to the collocation vector (ch3_col_pack) inside theta_bounds, so the stride
+% becomes a design variable. OFF by default: nothing solved so far changes.
+p.free_theta   = false;
+p.theta_bounds = [-0.40 -0.02; ...  % theta_minus range [rad]
+                   0.10  0.50];      % theta_plus  range [rad]
 
 %% virtual constraint parametrization
 p.basis   = 'bspline';          % 'bezier' | 'bspline'
@@ -134,6 +159,15 @@ p.ode_maxstep = 5e-3;
 p.guard_min_time = 0.05;        % ignore guard crossings before this [s]
 
 p.control_dt = 0;               % 0 = evaluate feedback continuously
+
+% END A STEP AT ITS FIRST CONTACT-INVALID SAMPLE (sampled control only). The
+% simulator pins the stance foot, so a step whose true contact force lifts off
+% (Fz <= 0) or slips (|Fx| > mu_s Fz) still "completes"; ch3_validity scores
+% that afterwards. With this on, the step stops at that sample instead and is
+% reported as failed, so the steps a run completes ARE its valid steps and no
+% metric is taken over a trajectory the ground could not have produced. OFF by
+% default so every stored table reproduces.
+p.stop_on_invalid = false;
 
 %% overrides
 for k = 1:2:numel(varargin)

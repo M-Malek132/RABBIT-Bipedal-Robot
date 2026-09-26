@@ -1,8 +1,11 @@
-function [mu, u, qp] = ch5_ctrl_ecbf_clf_qp(io, b, e, p, use_viol)
+function [mu, u, qp] = ch5_ctrl_ecbf_clf_qp(io, b, e, p, use_viol, X)
 %CH5_CTRL_ECBF_CLF_QP  Section 5.2: the ECBF-CLF-QP, eq (5.31). The chapter's result.
 %
 %   [mu, u, qp] = ch5_ctrl_ecbf_clf_qp(io, b, e, p)
 %   [mu, u, qp] = ch5_ctrl_ecbf_clf_qp(io, b, e, p, true)   explicit mu_b variable
+%   [mu, u, qp] = ch5_ctrl_ecbf_clf_qp(io, b, e, p, false, X)
+%                 with the EXTRA barriers of ch5_extra_barriers: one more row
+%                 per barrier, of the same form, none of them slacked
 %
 %       min_{mu,delta}  mu'mu + p delta^2                              (5.31)
 %       s.t.  Vdot(eta,mu) + lambda V(eta) <= delta          (CLF)
@@ -66,11 +69,19 @@ function [mu, u, qp] = ch5_ctrl_ecbf_clf_qp(io, b, e, p, use_viol)
 %
 % Outputs
 %   mu, u, qp  -- qp adds .h .eta_b .mu_b .y_rb .Kb_eta .cbf_active
-%                 .barrier_controllable .margin
+%                 .barrier_controllable .margin .Lb_norm
+%                 .extra  1 x n struct .h .y_rb .active .controllable, one per
+%                         extra barrier (empty without them)
 %
-% See also CH5_ECBF_GAIN, CH5_BARRIER, CH5_ECBF_ADMISSIBLE, CH5_CTRL_CBF_CLF_QP.
+% See also CH5_ECBF_GAIN, CH5_BARRIER, CH5_ECBF_ADMISSIBLE, CH5_CTRL_CBF_CLF_QP,
+%          CH5_EXTRA_BARRIERS.
 
-if nargin < 5, use_viol = false; end
+if nargin < 5 || isempty(use_viol), use_viol = false; end
+if nargin < 6, X = []; end
+if use_viol && ~isempty(X)
+    error('ch5_ctrl_ecbf_clf_qp:extraViol', ...
+          'Extra barriers are implemented in the direct form only (use_viol = false).');
+end
 
 clf = ch5_res_clf(p);
 ny  = p.sys.ny;
@@ -96,7 +107,36 @@ qp = struct('V', V, 'LfV', LfV, 'LgV', LgV, 'psi', psi, ...
             'exitflag', 1, 'feasible', true, ...
             'h', b.h, 'eta_b', b.eta_b, 'mu_b', NaN, 'y_rb', NaN, ...
             'Kb_eta', Kb_eta, 'cbf_active', false, ...
-            'barrier_controllable', controllable, 'margin', NaN);
+            'barrier_controllable', controllable, 'margin', NaN, ...
+            'Lb_norm', norm(Lb));
+
+%% ------------------------------------------------------- extra barriers
+% Same construction as the main row, one per barrier: b0x + Lbx mu >= -Kbx eta_bx.
+nx_ = numel(X);
+XA = zeros(0, ny); Xb = zeros(0, 1);
+ext = struct('h', cell(1, nx_), 'y_rb', NaN, 'active', false, ...
+             'controllable', true, 'Lb', [], 'b0', NaN, 'Kb_eta', NaN);
+for k = 1:nx_
+    bx  = X(k).b;
+    Lbx = bx.LgLfrb1 * io.Ainv;
+    b0x = bx.Lfrb + bx.LgLfrb1 * io.u_ff;
+    Kx  = X(k).e.Kb * bx.eta_b;
+    ext(k).h = bx.h; ext(k).Lb = Lbx; ext(k).b0 = b0x; ext(k).Kb_eta = Kx;
+    ext(k).controllable = norm(Lbx, inf) > 1e-12;
+    if ext(k).controllable
+        XA = [XA; -Lbx];            %#ok<AGROW>
+        Xb = [Xb; b0x + Kx];        %#ok<AGROW>
+    elseif b0x + Kx < 0
+        qp.feasible = false;        % an extra row with no grip, violated
+    end
+end
+qp.extra = ext;
+if ~qp.feasible
+    qp.exitflag = -2;
+    mu = zeros(ny, 1);
+    u  = io.u_ff;
+    return;
+end
 
 %% ------------------------------------------ the row has no grip on mu here
 if ~controllable
@@ -129,6 +169,11 @@ if ~use_viol
         [ra, rbs] = ch5_scale_row([row_A, 0], row_b);
         Aineq = [Aineq; ra];
         bineq = [bineq; rbs];
+    end
+    for k = 1:size(XA, 1)
+        [ra, rbs] = ch5_scale_row([XA(k, :), 0], Xb(k));
+        Aineq = [Aineq; ra];         %#ok<AGROW>
+        bineq = [bineq; rbs];        %#ok<AGROW>
     end
 
     [Aineq, bineq] = ch5_box_rows(Aineq, bineq, io, p, 1);
@@ -209,5 +254,12 @@ qp.mu_b   = b0 + Lb * mu;
 qp.y_rb   = qp.mu_b + Kb_eta;                % Remark 5.6: this is y_rb(x)
 qp.margin = qp.y_rb;                         % >= 0 is the guarantee holding
 qp.cbf_active = controllable && (qp.y_rb <= 1e-7 * max(1, abs(Kb_eta)));
+
+for k = 1:nx_
+    ext(k).y_rb   = ext(k).b0 + ext(k).Lb * mu + ext(k).Kb_eta;
+    ext(k).active = ext(k).controllable && ...
+                    (ext(k).y_rb <= 1e-7 * max(1, abs(ext(k).Kb_eta)));
+end
+qp.extra = ext;
 
 end

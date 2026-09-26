@@ -50,6 +50,7 @@ if nargin < 3, verbose = false; end
 % Saved results carry the parameter struct that produced them, which may
 % predate fields this function reads.
 p = ch3_upgrade_params(p);
+p = ch3_col_effective_params(z, p);   % the phase the solve actually used
 
 [X, T, alpha] = ch3_col_unpack(z, p);
 N = size(X, 2);

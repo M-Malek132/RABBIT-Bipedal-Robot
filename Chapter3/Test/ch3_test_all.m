@@ -19,9 +19,12 @@ function ch3_test_all()
 %   ch3_test_control      the (C)ARE residuals; Vdot affine in mu; the stage-7
 %                         closed form against quadprog; and each controller
 %                         against its OWN Lyapunov certificate.
-%   ch3_test_collocation  pack/unpack; seed quality; degrees of freedom; and
-%                         the Hermite-Simpson order of accuracy under mesh
-%                         refinement.
+%   ch3_test_collocation  pack/unpack; seed quality; degrees of freedom; the
+%                         Hermite-Simpson order of accuracy under mesh
+%                         refinement, ENFORCED on the Bezier basis the gaits
+%                         use and recorded as an expected failure (xfail) on
+%                         the cubic B-spline default; and the free phase
+%                         endpoints (p.free_theta) through pack/unpack.
 %   ch3_test_simulation   the zero-order-hold integrator against the continuous
 %                         rollout of the same controller, checking that the
 %                         sampling error is first order in the period.
@@ -31,8 +34,10 @@ function ch3_test_all()
 %                         real rollout, and delta_zero^2 against the Poincare
 %                         spectral radius from 26 independent simulations.
 %
-% Runs in a few minutes. Anything that fails prints the measured error and its
+% Runs in a few seconds. Anything that fails prints the measured error and its
 % tolerance, so the size of the discrepancy is visible rather than just a name.
+% [xfail] marks the one documented expected failure; [XPASS] (an expected
+% failure that passed) fails its suite, so the documentation cannot go stale.
 
 suites = {@ch3_test_params, @ch3_test_model, @ch3_test_vc, @ch3_test_control, ...
           @ch3_test_collocation, @ch3_test_simulation, @ch3_test_hzd};

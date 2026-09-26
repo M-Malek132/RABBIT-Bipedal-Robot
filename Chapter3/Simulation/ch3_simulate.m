@@ -8,6 +8,8 @@ function out = ch3_simulate(x0, alpha, p, n_steps)
 % state stops being finite -- which is how a periodic-but-UNSTABLE gait
 % announces itself: the velocities grow step over step until the integration
 % blows up.  Periodicity alone does not imply walking; see ch3_poincare.
+% With p.stop_on_invalid it also stops at the first sample whose contact
+% force the ground could not supply, so n_ok counts contact-valid steps.
 %
 % Inputs
 %   x0      : 14x1 start state
@@ -48,7 +50,15 @@ for k = 1:n_steps
 
     if ~s.ok
         failed = true;
-        reason = sprintf('step %d never reached the guard (T = %.3f s)', k, s.T);
+        if isfield(s, 'contact_invalid') && s.contact_invalid
+            % p.stop_on_invalid: the step ended where the ground could not
+            % have held the pinned foot, so it is not counted as walked.
+            reason = sprintf(['step %d lost contact validity: %s at t = %.3f s ' ...
+                              '(Fz %.1f N, |Fx|/Fz %.2f)'], k, s.invalid.kind, ...
+                             s.invalid.t, s.invalid.Fz, s.invalid.mu);
+        else
+            reason = sprintf('step %d never reached the guard (T = %.3f s)', k, s.T);
+        end
         break;
     end
 

@@ -47,6 +47,10 @@ function ch4_test_model()
 %      that step carried, not one load for the whole run
 %   9. physical validity: the contact force ch4_step records is the true KKT
 %      force under the held torque, and ch4_validity scores lift-off and slip
+%  10. the structured model: ch4_link_dynamics reproduces M/V/G at today's
+%      link parameters; a structured uncertainty at those parameters is
+%      Chapter 3; friction and bias enter exactly through B; prior-set draws
+%      are reproducible and genuinely non-uniform (Delta2 not a multiple of I)
 
 fprintf('\n=== ch4_test_model ===\n');
 pass = true;
@@ -246,6 +250,21 @@ if ok
              '(min Fz %.0f N, max mu %.2f); forced lift-off / slip valid %d / %d\n'], ...
             tf(ok), 'validity: recorded contact', err_lam, Vv.valid_steps, ...
             Vv.Fz_min, Vv.mu_max, Vl.valid_steps, Vs.valid_steps);
+    pass = pass && ok;
+
+    % The same run with p.stop_on_invalid: its completed steps must BE its
+    % valid steps, and it must say where and how the contact failed.
+    ps = pv; ps.stop_on_invalid = true;
+    sims = ch4_simulate(x0, alpha, ps, 2);
+    if isnan(Vv.first_step)
+        ok = sims.n_ok == 2 && ~sims.failed;
+    else
+        ok = sims.n_ok == Vv.valid_steps && sims.failed ...
+             && contains(sims.reason, 'lost contact validity') ...
+             && contains(sims.reason, Vv.first_kind);
+    end
+    fprintf('  [%s] %-30s completed %d = valid %d | %s\n', tf(ok), ...
+            'stop_on_invalid: steps = valid', sims.n_ok, Vv.valid_steps, sims.reason);
 else
     fprintf('  [FAIL] validity rollout did not complete 2 steps (%s)\n', sim.reason);
 end
@@ -261,6 +280,55 @@ ok  = strcmp(ch4_box_rule(pbx), 'rating') ...
 fprintf('  [%s] %-30s default %s (%.0f / %.0f Nm), pre-p.box struct %s\n', ...
         tf(ok), 'box rule: rating by default', ch4_box_rule(pbx), ...
         pbx.box.rating, pbx.box.rating_case4, ch4_box_rule(rmfield(pbx, 'box')));
+pass = pass && ok;
+
+%% 10. the structured model: link dynamics, and the true robot built on them
+% (a) ch4_link_dynamics at today's link parameters IS M.m / V.m / G.m -- an
+%     independent derivation (Newton-Euler on the planar chain) against the
+%     generated Lagrangian one.
+L0 = ch4_link_params();
+e10 = 0;
+for k = 1:size(XS, 2)
+    q = XS(1:7, k); dq = XS(8:14, k);
+    [Ml, Vl, Gl] = ch4_link_dynamics(q, dq, L0, p.g0);
+    e10 = max([e10, norm(Ml - M(q), inf), norm(Vl - V([q; dq]), inf), ...
+               norm(Gl - G(q), inf)]);
+end
+pass = report('link dynamics == M/V/G', e10, 1e-10, pass);
+
+% (b) a structured uncertainty at the nominal links, no actuator terms, is the
+%     nominal robot
+u0 = struct('mass_scale', 1, 'load_mass', 0, 'links', L0);
+e10b = 0;
+for k = 1:size(XS, 2)
+    [f1, g1] = ch4_control_affine(XS(:, k), p, u0);
+    [fn, gn] = ch3_control_affine(XS(:, k), p);
+    e10b = max([e10b, norm(f1 - fn, inf), norm(g1 - gn, inf)]);
+end
+pass = report('structured @ nominal == Ch3', e10b, 1e-10, pass);
+
+% (c) friction and bias act through B, like the command: with the links
+%     nominal, the drift moves by exactly g * tau_x
+ub = u0; ub.tau_bias = [3; -1; 2; 0.5]; ub.b_visc = [0.4; 0.2; 0.3; 0.1];
+ub.tau_coulomb = [1; 0.5; 0; 2];
+xk = XS(:, 3);
+[f1, g1, a1] = ch4_control_affine(xk, p, ub);
+[fn, gn]     = ch3_control_affine(xk, p);
+tx = ch4_joint_extra(xk(8:14), ch4_structured_part(ub));
+e10c = norm(f1 - (fn + gn * tx), inf) + norm(g1 - gn, inf) + norm(a1.tau_x - tx, inf);
+pass = report('friction/bias enter through B', e10c, 1e-10, pass);
+
+% (d) a draw from the prior set is reproducible, differs between seeds, and is
+%     NOT a uniform scale: Delta2 is no multiple of I
+Ua = ch4_uncertainty_set(3, 5); Ub = ch4_uncertainty_set(3, 5); Uc = ch4_uncertainty_set(3, 6);
+same   = isequal([Ua.links], [Ub.links]) && isequal([Ua.b_visc], [Ub.b_visc]);
+differ = ~isequal([Ua.links], [Uc.links]);
+D10    = ch4_uncertainty(x0, alpha, p, Ua(1));
+iso    = norm(D10.Delta2 - (trace(D10.Delta2) / p.ny) * eye(p.ny)) / max(D10.n2, eps);
+ok     = same && differ && iso > 1e-3 && isfinite(D10.n1) && isfinite(D10.n2);
+fprintf(['  [%s] %-30s reproducible %d, seeds differ %d, |Delta2| %.3f with an ' ...
+         'anisotropic part %.2f of it, |Delta1| %.1f\n'], tf(ok), 'prior-set draws', ...
+        same, differ, D10.n2, iso, D10.n1);
 pass = pass && ok;
 
 fprintf('--- ch4_test_model: %s ---\n\n', tf(pass));

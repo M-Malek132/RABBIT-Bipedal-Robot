@@ -51,8 +51,9 @@ if ~isempty(unc)
     if isfield(unc, 'mass_scale') && ~isempty(unc.mass_scale), s  = unc.mass_scale; end
     if isfield(unc, 'load_mass')  && ~isempty(unc.load_mass),  mL = unc.load_mass;  end
 end
+S = ch4_structured_part(unc);
 
-if s == 1 && mL == 0
+if s == 1 && mL == 0 && isempty(S)
     [x_plus, impulse] = ch3_impact(x_minus, p);
     return;
 end
@@ -65,9 +66,14 @@ dq = x_minus(nq+1:2*nq);
 % M_mat comes from the SAME per-case, independently rederived mass matrix as
 % ch4_control_affine (ch4_case_dynamics) rather than a local s*M(q) -- see
 % that function's header for why the scaling is rederived rather than applied
-% algebraically.
-if s == 1
-    M_mat = M(q);
+% algebraically. A structured model (ch4_uncertainty_set) takes its M from the
+% link parameters, rotor inertia included: the rotors are part of the
+% mechanism that strikes the ground.
+if ~isempty(S)
+    M_mat = ch4_link_dynamics(q, [], S.links, p.g0);
+    M_mat(4:7, 4:7) = M_mat(4:7, 4:7) + diag(S.J_ref);
+elseif s == 1
+    M_mat = ch3_mvg(q, [], p);
 else
     M_mat = ch4_case_dynamics(s, q);
 end

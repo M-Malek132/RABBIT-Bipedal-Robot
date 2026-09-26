@@ -25,7 +25,7 @@ function [z2, p2] = ch3_col_remesh(z, p, N_new)
 %
 % See also CH3_COL_VERIFY, CH3_COL_SOLVE.
 
-[X, T, alpha] = ch3_col_unpack(z, p);
+[X, T, alpha, theta_pm] = ch3_col_unpack(z, p);
 N = size(X, 2);
 
 tau_old = linspace(0, 1, N);
@@ -36,6 +36,8 @@ X2 = interp1(tau_old(:), X.', tau_new(:), 'pchip').';
 p2 = p;
 p2.N_nodes = N_new;
 
-z2 = ch3_col_pack(X2, T, alpha, p2);
+% theta_pm rides along untouched when the phase endpoints are free
+% (p.free_theta); pack ignores it otherwise.
+z2 = ch3_col_pack(X2, T, alpha, p2, theta_pm);
 
 end

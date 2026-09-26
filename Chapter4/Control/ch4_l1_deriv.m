@@ -133,6 +133,11 @@ function [xidot, d] = ch4_l1_deriv(xi, sig, clf, p)
 %    prediction error loosens by the factor m, and holds only while m^2 decays
 %    slower than exp(-2at), which a footstrike's jump in ||eta|| can break.
 %
+%    OR REPLACE THE LAW, p.l1.adaptation = 'pwc': the piecewise-constant
+%    adaptation of the sampled-data L1 literature, which has no estimator
+%    loop at all (see ch4_params and ch4_l1_advance, where the update lives).
+%    Here it only holds the estimate over the period.
+%
 % 4. LOW-PASS FILTER (4.23)
 %
 %       mu2_dot = omega_c (-theta_hat - mu2)      i.e.  mu2 = -C(s) theta_hat
@@ -167,6 +172,26 @@ s  = ch4_l1_state('unpack', p, xi);
 
 eta     = sig.eta;
 nrm_eta = min(norm(eta, 2), o.phi_max);     % alpha's regressor, capped
+
+% --- the piecewise-constant law (p.l1.adaptation = 'pwc') -----------------
+% No adaptation dynamics: theta_hat is held in the beta_hat slot for the whole
+% period (alpha_hat stays 0) and is reset at the END of each period by
+% ch4_l1_advance. Inside the period only the predictor and the filter move,
+% the predictor with its own rate a_s = p.l1.pwc_rate, the one the update
+% inverts:  eta_tilde_dot = -a_s eta_tilde + G (theta_hat - theta).
+if strcmp(o.adaptation, 'pwc')
+    theta_hat   = s.beta_hat;
+    eta_tilde   = s.eta_hat - eta;
+    eta_hat_dot = clf.F * eta + clf.G * (sig.mu + theta_hat) - o.pwc_rate * eta_tilde;
+    mu2_dot     = p.l1.omega_c * (-theta_hat - s.mu2);
+    ny = numel(s.beta_hat);
+    xidot = [eta_hat_dot; zeros(ny, 1); zeros(ny, 1); mu2_dot];
+    if nargout > 1
+        d = struct('theta_hat', theta_hat, 'eta_tilde', eta_tilde, ...
+                   'y_alpha', zeros(ny, 1), 'y_beta', zeros(ny, 1), 'm2', 1);
+    end
+    return;
+end
 
 % --- 1. estimated uncertainty --------------------------------------------
 theta_hat = s.alpha_hat * nrm_eta + s.beta_hat;

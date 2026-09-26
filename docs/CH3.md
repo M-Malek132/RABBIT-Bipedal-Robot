@@ -300,9 +300,12 @@ than a new problem each time.
 
 **Table 3.1 limits are ATRIAS numbers — measure before enforcing.** ATRIAS is
 63 kg with 50:1 harmonic drives, so its `|u| <= 5 Nm` is *motor* torque, 250 Nm
-at the joint. RABBIT's model is 74 kg and direct drive, so `u` here *is* joint
-torque. Copying the numbers across produces an infeasible problem and a solver
-that fails for reasons that look like bugs. `ch3_report` prints every limit with
+at the joint. Copying the numbers across produces an infeasible problem and a
+solver that fails for reasons that look like bugs. RABBIT is not direct drive
+either (a 50:1 harmonic drive and a belt per joint, Chevallereau et al. 2003,
+Table I and Fig. 4); in this 74 kg model `u` is the joint-side torque after that
+reduction, with rotor inertia and gear friction not modelled. The 120 Nm in
+`ch3_params` is the project's declared limit, not a Table 3.1 number. `ch3_report` prints every limit with
 its **measured** value whether or not it is enforced.
 
 **On today's model this workflow has not yet produced a gait from a cold

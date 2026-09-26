@@ -474,10 +474,10 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         along a unit vector that flips every time the state crosses <code>L_gV = 0</code>.
         Held for 1&nbsp;ms it cannot slide: one sample moves <code>L_gV</code> by 0.029 and
         overshoots whatever was left. Over the first three steps the torque actually held
-        changed by a median of <strong>253 / 573 / 481 Nm per sample</strong> in Cases I&#8211;III.
+        changed by a median of <strong>464 / 558 / 417 Nm per sample</strong> in Cases I&#8211;III.
       </p>
       <p>
-        <code>p.rclf.boundary_layer = κ</code> replaces the unit vector with a saturation of
+        A boundary layer of width parameter κ replaces the unit vector with a saturation of
         width <code>φ = κ(1 + D₂)φ_T</code>. One held sample inside the layer multiplies
         <code>L_gV</code> by, at worst, <code>1 − 1/κ</code> over the bound &#8212; which gives κ its
         units: above ½ the sampled loop converges, and from 1 it converges without overshoot.
@@ -489,23 +489,24 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="tscroll">
         <table>
           <thead>
-            <tr><th><span class="nt">κ</span></th><th class="num"><span class="nt">Δu</span> held, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th class="num"><span class="nt">max‖η‖</span>, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th>Behaviour</th></tr>
+            <tr><th><span class="nt">κ</span></th><th class="num"><span class="nt">Δu</span> held, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th class="num"><span class="nt">max‖η‖</span>, Case I</th><th class="num">Case II</th><th class="num">Case III</th><th class="num">Valid of 3, I / II / III</th><th>Behaviour</th></tr>
           </thead>
           <tbody>
-            <tr><td class="name">0 &nbsp;<span class="pill neutral">exact law</span></td><td class="num">253 Nm</td><td class="num">573 Nm</td><td class="num">481 Nm</td><td class="num">0.81</td><td class="num">1.16</td><td class="num">2.54</td><td><span class="pill bad">chatters</span></td></tr>
-            <tr><td class="name">0.33</td><td class="num">1</td><td class="num">2</td><td class="num">514</td><td class="num">0.11</td><td class="num">0.24</td><td class="num">3.02</td><td><span class="pill warn">chatters at ×0.7</span></td></tr>
-            <tr><td class="name">0.66</td><td class="num">1</td><td class="num">2</td><td class="num">1</td><td class="num">0.09</td><td class="num">0.25</td><td class="num">0.38</td><td><span class="pill safe">smooth</span></td></tr>
-            <tr class="hl"><td class="name">0.99 &nbsp;<span class="pill neutral">≈ default 1</span></td><td class="num">1</td><td class="num">2</td><td class="num">1</td><td class="num">0.11</td><td class="num">0.42</td><td class="num">0.48</td><td><span class="pill safe">smooth</span></td></tr>
-            <tr><td class="name">1.32</td><td class="num">1</td><td class="num">2</td><td class="num">1</td><td class="num">0.12</td><td class="num">0.61</td><td class="num">0.61</td><td><span class="pill safe">smooth</span></td></tr>
-            <tr><td class="name">3.30</td><td class="num">1</td><td class="num">2</td><td class="num">1</td><td class="num">0.15</td><td class="num">1.61</td><td class="num">1.28</td><td><span class="pill neutral">thick layer</span></td></tr>
+            <tr><td class="name">0 &nbsp;<span class="pill neutral">exact law</span></td><td class="num">464 Nm</td><td class="num">558 Nm</td><td class="num">417 Nm</td><td class="num">0.45</td><td class="num">0.48</td><td class="num">1.83</td><td class="num"><b>0 / 0 / 0</b></td><td><span class="pill bad">chatters</span></td></tr>
+            <tr><td class="name">0.33</td><td class="num">1.1</td><td class="num">1.6</td><td class="num">488</td><td class="num">0.07</td><td class="num">0.21</td><td class="num">1.59</td><td class="num">3 / 3 / <b>0</b></td><td><span class="pill warn">chatters at ×0.7</span></td></tr>
+            <tr><td class="name">0.66</td><td class="num">1.1</td><td class="num">1.6</td><td class="num">1.6</td><td class="num">0.08</td><td class="num">0.25</td><td class="num">0.32</td><td class="num">3 / 3 / <b>1</b></td><td><span class="pill warn">smooth, slips at ×0.7</span></td></tr>
+            <tr class="hl"><td class="name">0.99 &nbsp;<span class="pill neutral">≈ default 1</span></td><td class="num">1.1</td><td class="num">1.6</td><td class="num">0.8</td><td class="num">0.09</td><td class="num">0.38</td><td class="num">0.35</td><td class="num">3 / 3 / 3</td><td><span class="pill safe">smooth</span></td></tr>
+            <tr><td class="name">1.32</td><td class="num">1.1</td><td class="num">1.7</td><td class="num">0.8</td><td class="num">0.10</td><td class="num">0.51</td><td class="num">0.44</td><td class="num">3 / 3 / 3</td><td><span class="pill safe">smooth</span></td></tr>
+            <tr><td class="name">3.30</td><td class="num">1.1</td><td class="num">1.9</td><td class="num">0.9</td><td class="num">0.11</td><td class="num">1.26</td><td class="num">1.07</td><td class="num">3 / 3 / 3</td><td><span class="pill neutral">thick layer</span></td></tr>
           </tbody>
         </table>
       </div>
       <div class="plate-note">
-        Measured at the earlier ε = 0.35; nothing in the layer's algebra depends on ε. At
-        κ = 0.33 the predicted per-sample multiplier is −1.0 / −0.33 / −1.86 for the three true
-        input gains, and only the case below −1 chattered. A thicker layer trades tracking for
-        margin; κ = 1 is the thinnest that cannot overshoot anywhere in the bound.
+        Measured at ε = 0.20, the chapter's operating point, with the 556&nbsp;Nm rating
+        (<code>Results/reruns/ch4_eps020/</code>). The conditions κ &gt; ½ and κ ≥ 1 are algebraic and
+        do not depend on ε; the max‖η‖ and valid-step columns do, and are read here at the point the
+        chapter runs: κ = 0.99 is the smallest width that keeps all three steps valid in every case.
+        A thicker layer trades tracking for margin.
       </div>
     </div>
 
@@ -569,8 +570,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         min Fz means the ground had to pull the foot down: those steps are not realizable. The
         simulator keeps the stance foot attached, modelling neither lift-off nor slip, so such a run
         still completes its steps, and the valid-step column is what scores it. D₁ and D₂ are still
-        measured from the perturbation itself, which no controller has in practice; the box no longer
-        is. The robust and L₁ sections now run at the same 556 Nm budget and are comparable.
+        measured from the perturbation itself, which no controller has in practice; the box is
+        not. The robust and L₁ sections run at the same 556 Nm budget and are comparable.
       </div>
     </div>
 
@@ -626,7 +627,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       </div>
       <div class="plate-note">
         The nominal gait walks at 1.563 m/s. The drift is a transient toward ultimate
-        boundedness, not a divergence. At the earlier ε = 0.35, where the same growth dropped
+        boundedness, not a divergence. At ε = 0.35, where the same growth dropped
         the robot in step 21 of Case I, it survived the layer, the rows, the box and
         <code>D₂ = 0</code>, and vanished with <code>D₁ = 0</code>: it comes from the robust
         term itself.
@@ -1189,11 +1190,11 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <p class="eyebrow">Past the thesis's horizon &nbsp;&#183;&nbsp; 60&#8211;120 steps</p>
       <h2>Why L₁ fell in the long runs, and what fixed most of it</h2>
       <p>
-        The thesis stops at 25 steps. Extended to 60 (120 for plain <code>l1</code> at ×1.5)
-        with the first three fixes alone, <code>l1_con</code> held every mass scale, but plain
-        <code>l1</code> at ×1.5 fell in step 76, and under the random load <code>l1_con</code>
-        fell in all four draw sequences tried &#8212; steps 43, 33, 55 and 57 &#8212; where the
-        unconstrained CLF-QP walked all 60 steps of each.
+        The thesis stops at 25 steps. Extended to 60 (120 for plain <code>l1</code> at ×1.5),
+        all at the 556&nbsp;Nm rating and with the first three fixes alone, <code>l1_con</code>
+        completes ×1 and ×0.7 but falls in step 16 at ×1.5 and in step 25 under the fixed 46&nbsp;kg
+        load, and two of the four random-load sequences fall, in steps 48 and 56. Plain
+        <code>l1</code> at ×1.5 completes all 120 steps without a single contact-valid one.
       </p>
       <p>
         <strong>The drift is real, but it is a symptom.</strong> <code>θ̂ = α̂‖η‖ + β̂</code> is
@@ -1203,8 +1204,9 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         projection bound. Leaking <span class="m">α̂</span> back to zero made things worse, not better.
       </p>
       <p>
-        <strong>The falls are the estimator loop outrunning the sample rate.</strong> Three of
-        the five falls were re-simulated sample by sample, and each starts within a few
+        <strong>The falls are the estimator loop outrunning the sample rate.</strong> Three
+        falls were re-simulated sample by sample (with the thesis's per-case torque boxes; this
+        diagnosis has not been repeated at the 556&nbsp;Nm rating), and each starts within a few
         milliseconds of a footstrike that leaves ‖η‖ at 12&#8211;14. There the loop runs at about
         4100 rad/s &#8212; 4.1 rad per sample, past the RK4 advance's own stability limit of about
         2.8 &#8212; and within 1&#8211;3 samples <span class="m">θ̂</span> reaches 2700&#8211;2900 against a true θ of 30&#8211;300.
@@ -1317,7 +1319,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <figcaption>
         <b>Normalization works as a window.</b> Held at √Γ at every error (the textbook form),
         the estimator becomes overdamped under the predictor rate and lags in ordinary walking.
-        Above ρ = 1 it rarely engages, and the falls return in the runs that fell without it. No ceiling produces a valid 60-step run under a random load; only halving the control period does.
+        Above ρ = 1 it rarely engages, and falls return, including the ×1.5 run that falls without it. No ceiling produces a valid 60-step run under a random load; only halving the control period does.
         The limit that matters in closed loop, about 1 rad per sample, sits well under the RK4
         advance's own 2.8; this analysis measures it rather than derives it.
       </figcaption>
@@ -1335,49 +1337,53 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <div class="plate-head"><span>Out of sample: six new random-load sequences</span><span class="tag">l1_con · 60 steps · box 556 Nm</span></div>
       <div class="tscroll">
         <table>
-          <thead><tr><th>Variant</th><th class="num">Falls</th><th class="num">Typical step (median per-step <span class="nt">max‖η‖</span>)</th><th class="num">Largest <span class="nt">max‖η‖</span>, runs that walk</th></tr></thead>
+          <thead><tr><th>Variant</th><th class="num">Falls</th><th class="num">Typical step (median per-step <span class="nt">max‖η‖</span>)</th><th class="num">Largest <span class="nt">max‖η‖</span></th><th class="num">Valid steps</th></tr></thead>
           <tbody>
-            <tr><td class="name">first three fixes only</td><td class="num">4 &nbsp;(steps 21, 32, 47, 49)</td><td class="num">2.92&#8211;3.76</td><td class="num">7.5&#8211;7.8</td></tr>
-            <tr><td class="name">cap on α's regressor, 0.5</td><td class="num">3 &nbsp;(steps 24, 30, 44)</td><td class="num">3.35&#8211;7.96</td><td class="num">12.8&#8211;39.9</td></tr>
-            <tr class="hl"><td class="name">normalized, ρ = 0.75 &nbsp;<span class="pill neutral">adopted</span></td><td class="num">1 &nbsp;(step 52)</td><td class="num">3.34&#8211;5.53</td><td class="num">7.9&#8211;49.8</td></tr>
-            <tr><td class="name">normalized, ρ = 1</td><td class="num">2 &nbsp;(steps 11, 44)</td><td class="num">3.28&#8211;3.92</td><td class="num">7.7&#8211;26.7</td></tr>
-            <tr><td class="name">0.5 ms control period, neither</td><td class="num">0</td><td class="num">3.11&#8211;3.37</td><td class="num">7.1&#8211;16.0</td></tr>
+            <tr><td class="name">first three fixes only</td><td class="num">4 &nbsp;(steps 14, 25, 28, 49)</td><td class="num">2.95&#8211;3.63</td><td class="num">7.7&#8211;9.7</td><td class="num">2&#8211;26</td></tr>
+            <tr><td class="name">cap on α's regressor, 0.5</td><td class="num">4 &nbsp;(steps 23, 32, 44, 59)</td><td class="num">4.16&#8211;6.98</td><td class="num">18.8&#8211;49.3</td><td class="num">2&#8211;9</td></tr>
+            <tr class="hl"><td class="name">normalized, ρ = 0.75 &nbsp;<span class="pill neutral">adopted</span></td><td class="num">0</td><td class="num">3.70&#8211;4.46</td><td class="num">9.8&#8211;67.6</td><td class="num">2&#8211;22</td></tr>
+            <tr><td class="name">normalized, ρ = 1</td><td class="num">3 &nbsp;(steps 29, 51, 55)</td><td class="num">2.70&#8211;3.95</td><td class="num">7.6&#8211;40.0</td><td class="num">2&#8211;20</td></tr>
+            <tr><td class="name">0.5 ms control period, neither</td><td class="num">1 &nbsp;(step 31)</td><td class="num">3.08&#8211;3.63</td><td class="num">7.1&#8211;17.8</td><td class="num">3&#8211;<b>60</b></td></tr>
           </tbody>
         </table>
       </div>
       <div class="plate-note">
-        The long-horizon screens measure max‖η‖ on every third solver point and were run as
-        scratch studies; their numbers are recorded in <code>docs/CH4_UNCERTAINTY.md</code> §5a
-        rather than saved under <code>Results/</code>.
+        All at the 556&nbsp;Nm rating; per-run results in <code>Results/reruns/ch4/summary.log</code>.
+        Falls count the simulator; valid steps count the robot, up to the first sample whose
+        contact the ground could not supply.
       </div>
     </div>
 
     <div class="col">
       <ul class="plainlist">
-        <li><strong>Across all fifteen long runs, ρ = 0.75 falls once</strong>, against nine
-          without normalization and four with the cap. That total mixes the nine runs ρ was picked on
-          with six test runs; on the six fresh sequences, one fall against two (ρ = 1) is not a
-          distinguishable difference, and ρ = 0.75 has the largest excursion among completed runs (49.8). The one fall is seed 6, which the
-          unnormalized law walks and which brings down all three 1 kHz limits tried on it. Both
-          kinds of limit slow the estimator most when the error is largest &#8212; which is also when
-          a changed load has to be learned. That is the likely reason; it has not been checked
-          sample by sample.</li>
-        <li><strong>What survives is not always clean.</strong> Two of the new sequences pass
-          through excursions to max‖η‖ 20&#8211;50 at ρ = 0.75 and still walk.</li>
+        <li><strong>Across all fifteen long runs, ρ = 0.75 falls once</strong>, against eight
+          without normalization and six with the cap at 0.5. That total mixes the nine runs ρ was
+          picked on with six test runs, so a test on it (Fisher exact, 1/15 vs 8/15, <i>p</i> = 0.014)
+          is not valid: ρ was selected on nine of those fifteen.</li>
+        <li><strong>On the six fresh sequences alone the differences are not significant.</strong>
+          ρ = 0.75 falls 0 times, the 0.5&nbsp;ms loop once, ρ = 1 three times and the unnormalized
+          law four times. The 95% Wilson intervals on the fall rate are [0, 0.39] for ρ = 0.75 and
+          [0.30, 0.90] without normalization; the two-sided Fisher exact <i>p</i> is 0.061 for
+          0/6 vs 4/6, 1.0 against the 0.5&nbsp;ms loop and 0.18 against ρ = 1. Settling it needs
+          about fifty sequences per variant; that run (<code>ch4_seed_study</code>, seeds 101&#8211;150,
+          including the piecewise-constant law) is written and <b>not yet run</b>.</li>
+        <li><strong>What survives is not always clean.</strong> Four of the new sequences pass
+          through excursions to max‖η‖ 24&#8211;68 at ρ = 0.75 and still walk.</li>
         <li><strong>Only the faster loop is both safe and flat.</strong> At 0.5 ms, with neither
-          limit, the law fell once in twelve runs and never exceeded max‖η‖ 16 on the new
-          sequences.</li>
+          limit, the law fell once in twelve runs, never exceeded max‖η‖ 17.8 on the new
+          sequences, and is the only variant that keeps one of them valid for all 60 steps.</li>
       </ul>
 
       <div class="note good">
         <h4>Adopted: ρ = 0.75, at 1 kHz</h4>
         <p>
-          With it, plain <code>l1</code> at ×1.5 walks all 120 steps at max‖η‖ 2.0&#8211;2.9 per
-          block, <code>l1_con</code> walks all four original random-load sequences and five of the
-          six new ones, and the 46 kg run still holds 60 steps. <code>l1_con</code> at ×1.5 no
-          longer settles the way it did without normalization: 4.8 in steps 1&#8211;10, 2.2&#8211;2.4
-          through step 40, then 3.5 and 5.5. The §4.2.4 and Fig. 4.11 tables above are the reruns
-          with ρ = 0.75.
+          With it, over the long horizon, plain <code>l1</code> at ×1.5 walks all 120 steps at
+          max‖η‖ 2.0&#8211;2.5 per block without a single valid step; <code>l1_con</code> walks ×1 and
+          ×1.5 valid for all 60 steps and ×0.7 with none; it completes three of the four original
+          random-load sequences and all six new ones, but every random-load run and the 46&nbsp;kg run
+          lose validity between steps 2 and 22 (true F<sub>z</sub> down to −560&nbsp;N). At ×1.5 its
+          error is about 6 for the first thirty steps and 2.2&#8211;2.7 after. The §4.2.4 and Fig. 4.11
+          tables above are the runs with ρ = 0.75.
         </p>
       </div>
     </div>
@@ -1431,8 +1437,8 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
 
       <h3>3. The ×1.5 results are tuning, not margin</h3>
       <p>
-        The predictor-rate sweep, the ρ window with edges at 0.5 and 1.5 each falling twice in
-        nine runs, and a single seed that defeats every 1 kHz limit all say the same thing: at
+        The predictor-rate sweep, the ρ window that falls four times in nine runs at 0.5 and
+        twice at 1.5, and the out-of-sample differences no test can yet separate all say the same thing: at
         mass scale 1.5 and under a load redrawn every step, L₁ at 1 kHz works where it has been
         tuned to work. The sweeps are reported so that claim can be judged rather than taken.
       </p>
@@ -1445,8 +1451,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
       <p class="eyebrow">The real budget &nbsp;&#183;&nbsp; 120 Nm</p>
       <h2>Every headline result runs at 4.6× the declared actuator limit</h2>
       <p>
-        This robot's declared torque limit is <strong>120&nbsp;Nm</strong> (Chapter 3,
-        <code>ch3_params</code>). The chapter now uses a <em>single</em> actuator rating &#8212;
+        This robot's declared torque limit is <strong>120&nbsp;Nm</strong> (Chapter 3). The chapter uses a <em>single</em> actuator rating &#8212;
         556&nbsp;Nm for every controller, every mass scale and every load, and 731&nbsp;Nm for Case IV,
         which sits outside the design envelope &#8212; which fixes the problem of boxes built from the
         perturbation they are about to meet. It does not fix a second problem: 556 and 731 are
@@ -1514,7 +1519,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
         measures is the gait.
       </p>
       <div class="note">
-        <h4>Chapter 3 has since tried to supply a gait that fits, and the answer is no</h4>
+        <h4>Chapter 3 tried to supply a gait that fits, and the answer is no</h4>
         <p>
           Cutting the box from the gait itself reaches a verified <strong>162.5&nbsp;Nm</strong> and stops
           there: rungs at 180, 170, 165 and 162.5 are all real trajectories, and 160 refuses twice. More
@@ -1522,10 +1527,18 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
           1.1×10⁻², an Fz floor of 25&nbsp;N gives 1.3×10⁻² &#8212; because the optimizer spends the new
           slack on the contact rather than on torque. The barrier is the trajectory, not any single
           limit. So the gap to 120 narrows from 1.63× to <strong>1.35×</strong> and does not close, and
+<<<<<<< Updated upstream
           the table above will never be meaningful with a gait from this family; reaching 120 needs a
           different one. Their impulses (18.8&#8211;19.1&nbsp;Ns against a 15&nbsp;Ns limit) have since been
           brought to 15 by a second march at the same 162.5&nbsp;Nm box, at 1.39&nbsp;m/s. So a gait that meets
           every enforced limit exists at 162.5&nbsp;Nm, and the gap to 120 stands.
+=======
+          with a gait from this family the table above still measures the gait, not the controllers;
+          reaching 120 needs a different one. At the same 162.5&nbsp;Nm box an impulse ladder lands a
+          verified gait that meets all four of Chapter 3's Table&nbsp;3.1 rows, impulse 15.00&nbsp;Ns included,
+          at 1.393&nbsp;m/s &#8212; with a 0.32&nbsp;m swing-foot apex against 0.15&nbsp;m and its stability not yet
+          measured.
+>>>>>>> Stashed changes
         </p>
       </div>
       <p>
@@ -1635,7 +1648,7 @@ tr.sub td{color:var(--ink-2);background:var(--surface-2)}
           result uses the 556&nbsp;Nm rating (731&nbsp;Nm for Case IV), 4.6× and 6.1× the declared
           120&nbsp;Nm. At 120&nbsp;Nm every law whose box binds its applied torque falls within three
           steps, perfect model included, because the gait's own feedforward needs 195&nbsp;Nm. Chapter 3
-          has since brought a gait of this family down to a verified 162.5&nbsp;Nm and no further, so
+          brings a gait of this family down to a verified 162.5&nbsp;Nm and no further, so
           a later chapter built on it starts at least 1.35× over its actuators.
         </li>
         <li>
@@ -1687,8 +1700,9 @@ ch4_main('l1.predictor', 'thesis', 'l1.constrain_applied', false, 'l1.Gamma', 1e
 
       <p>
         <code>ch4_main</code> first refuses a gait that is not a periodic orbit of the dynamics
-        currently on the path: a gait file does not record which dynamics it was solved on, and
-        Chapter 4 once ran for ten days on one that no longer was. It then measures Δ₁ and Δ₂
+        currently on the path, and checks the model signature a gait file carries when it has one
+        (<code>ch3_model_check</code>; files solved before signatures are "unrecorded" and rely on the
+        orbit check alone). It then measures Δ₁ and Δ₂
         along a nominal rollout and adopts 1.2× the maxima as the robust bounds, unless they are
         passed in. The full study takes about ten minutes at 1 kHz, plus about two for Case IV
         and four for the load study.
@@ -1701,12 +1715,15 @@ ch4_main('l1.predictor', 'thesis', 'l1.constrain_applied', false, 'l1.Gamma', 1e
         <table>
           <thead><tr><th>Source</th><th class="wl">Covers</th><th>Status</th></tr></thead>
           <tbody>
-            <tr><td class="name">ch4_result_2026-09-14_22-33-20.mat</td><td class="wl">§4.2.4 table, L₁ figures, contact and estimate statistics</td><td><span class="pill safe">rerun with ρ = 0.75</span></td></tr>
-            <tr><td class="name">ch4_result_2026-09-14_22-37-57.mat</td><td class="wl">Fig. 4.11 tables and figures, typical-step and torso statistics</td><td><span class="pill safe">rerun with ρ = 0.75</span></td></tr>
-            <tr><td class="name">ch4_result_2026-09-13_20-45-50.mat</td><td class="wl">§4.1.4 Cases I&#8211;III, robust figures</td><td><span class="pill safe">L₁ plays no part</span></td></tr>
-            <tr><td class="name">ch4_result_2026-09-14_13-50-53.mat</td><td class="wl">Case IV</td><td><span class="pill safe">L₁ plays no part</span></td></tr>
-            <tr><td class="name">docs/CH4_UNCERTAINTY.md</td><td class="wl">long-horizon screens, the κ sweep and the rows-off runs (ε = 0.35), the plateau runs, the unnormalized L₁ numbers</td><td><span class="pill neutral">quoted, not re-run</span></td></tr>
-            <tr><td class="name">ch4_test_all</td><td class="wl">54 checks, the chatter and loop-speed isolations, and the recorded contact force</td><td><span class="pill safe">re-run 2026-09-18</span></td></tr>
+            <tr><td class="name">ch4_result_2026-09-17_17-27-44.mat</td><td class="wl">§4.1.4 Cases I&#8211;III, robust figures (556 Nm rating)</td><td><span class="pill safe">measured</span></td></tr>
+            <tr><td class="name">ch4_result_2026-09-17_17-47-55.mat</td><td class="wl">Case IV (731 Nm rating)</td><td><span class="pill safe">measured</span></td></tr>
+            <tr><td class="name">ch4_result_2026-09-17_20-33-53.mat</td><td class="wl">§4.2.4 table, L₁ figures, contact and estimate statistics (ρ = 0.75)</td><td><span class="pill safe">measured</span></td></tr>
+            <tr><td class="name">ch4_result_2026-09-17_20-36-27.mat</td><td class="wl">Fig. 4.11 tables and figures, typical-step and torso statistics</td><td><span class="pill safe">measured</span></td></tr>
+            <tr><td class="name">Results/reruns/ch4/summary.log</td><td class="wl">long horizon: the plateau runs, the nine runs and every mitigation, the ρ window, the six new sequences, the predictor-rate sweep (all at the rating)</td><td><span class="pill safe">measured</span></td></tr>
+            <tr><td class="name">Results/reruns/ch4_eps020/</td><td class="wl">the κ sweep, the growth ablations and the predictor overshoot, at ε = 0.20</td><td><span class="pill safe">measured</span></td></tr>
+            <tr><td class="name">Results/box120/box120.log</td><td class="wl">the 120 Nm comparison</td><td><span class="pill safe">measured</span></td></tr>
+            <tr><td class="name">ch4_test_all</td><td class="wl">54 checks, the chatter and loop-speed isolations, and the recorded contact force; 7 further checks (structured model, piecewise-constant law, stop-on-invalid) not yet run</td><td><span class="pill safe">re-run 2026-09-18</span></td></tr>
+            <tr><td class="name">ch4_structured_study, ch4_seed_study</td><td class="wl">the structured prior set with prior-derived bounds; fifty random-load sequences per variant</td><td><span class="pill warn">written, not yet run</span></td></tr>
             <tr><td class="name">Thesis, Chapter 4</td><td class="wl">Cases I&#8211;IV, the thesis's boxes and loads, the claims scored above</td><td><span class="pill neutral">published reference</span></td></tr>
           </tbody>
         </table>

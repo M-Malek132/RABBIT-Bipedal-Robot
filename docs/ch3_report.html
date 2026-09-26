@@ -878,9 +878,13 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
         Both ladders lose verification below 195&nbsp;Nm, and the gait they produce carries its own
         <code>u_max = 195</code> against the 120&nbsp;Nm in <code>ch3_params</code>. A third ladder, run
         <em>after</em> a gait exists &#8212; cutting the box from the gait itself, speed free &#8212; reaches a
-        verified <strong>162.5&nbsp;Nm</strong> and stops there (below). Table&nbsp;3.1's limits are ATRIAS numbers &#8212; 63&nbsp;kg behind 50:1 gears,
-        so its 5&nbsp;Nm is 250&nbsp;Nm at the joint &#8212; and on a direct-drive 74&nbsp;kg RABBIT, <code>u</code>
-        is joint torque.
+        verified <strong>162.5&nbsp;Nm</strong> and stops there (below). The 120&nbsp;Nm is the project's declared
+        actuator limit, not a Table&nbsp;3.1 number: Table&nbsp;3.1's limits are ATRIAS numbers &#8212; 63&nbsp;kg behind 50:1
+        gears, so its 5&nbsp;Nm is 250&nbsp;Nm at the joint &#8212; and do not transfer. RABBIT is not direct drive
+        either: each of its four joints is driven by a motor through a 50:1 harmonic drive and a belt
+        (Chevallereau et al. 2003, Table&nbsp;I and Fig.&nbsp;4). In this model <code>u</code> is the torque on the
+        joint side of that reduction; rotor inertia and gear friction are not modelled (Chapter 4 puts
+        both in its structured uncertainty set).
       </div>
     </div>
   </section>
@@ -1110,6 +1114,7 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
       <p>
         Two caveats. 162.5&nbsp;Nm is still 1.35× the declared limit, and reaching 120 needs a
         <em>different</em> gait &#8212; another posture, step length or speed branch &#8212; not more of this
+<<<<<<< Updated upstream
         ladder. And these gaits carried impulses of 18.8&#8211;19.1&nbsp;Ns against a 15&nbsp;Ns limit, because
         that gate was off throughout.
       </p>
@@ -1139,6 +1144,16 @@ J  = (1 / L_step) ∫₀ᵀ ‖u‖² dt        <span class="cmt">energy per dis
       <p>
         At 17&nbsp;Ns the solve's final iterate missed, so an earlier iterate that met every limit to
         6.3×10⁻⁶ on the friction row was kept and verified. The rungs after it meet every limit on their own.
+=======
+        ladder. And these gaits carry impulses of 18.8&#8211;19.1&nbsp;Ns against a 15&nbsp;Ns limit whose gate
+        was off on this ladder. <strong>At the same 162.5&nbsp;Nm box the impulse comes down to 15.</strong>
+        An impulse ladder from the 162.5&nbsp;Nm rung, in 1&nbsp;Ns steps (18, 17, 16, 15), lands a verified gait
+        (deviation 1.2×10⁻⁴) that meets all four Table&nbsp;3.1 rows at once &#8212; torque in its 162.5&nbsp;Nm box,
+        friction, the normal-force floor and a 15.00&nbsp;Ns impulse &#8212; at 1.393&nbsp;m/s: every rung shortened
+        the step time at a constant 0.438&nbsp;m stride. It still violates two limits &#8212; 162.5 against
+        120&nbsp;Nm, and a 0.32&nbsp;m swing-foot apex against 0.15&nbsp;m, whose gate was off &#8212; and its orbital
+        stability has not been measured. Chapters 4&#8211;6 still run on the reference gait.
+>>>>>>> Stashed changes
       </p>
 
       <h3>3. Step length is not a design variable in this transcription</h3>
