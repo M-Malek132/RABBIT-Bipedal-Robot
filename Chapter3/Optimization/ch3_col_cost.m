@@ -61,7 +61,7 @@ if isfield(p, 'cost_normalize') && ~p.cost_normalize
                'ceiling and march it, or leave the objective normalized.'], ...
               p.step_len_min);
     end
-    J = cost_scale(p) * E.int_u2;
+    J = cost_scale(p) * E.int_u2 + ch3_ub_cost(E.p);
     return;
 end
 
@@ -77,7 +77,7 @@ else
     L_eff = L_min / (1 + ((L_min - L)/L_min)^2);
 end
 
-J = cost_scale(p) * E.int_u2 / L_eff;
+J = cost_scale(p) * E.int_u2 / L_eff + ch3_ub_cost(E.p);
 
 end
 

@@ -168,6 +168,13 @@ end
 
 ceq = [ceq_start; ceq_dyn; ceq_end; ceq_per; ceq_rate];
 
+% Upper-body wrench continuous across the step boundary, when asked for
+% (Chapter3/UpperBody). Linear in beta.
+[~, ub_opt] = ch3_ub_info(p);
+if ub_opt && isfield(p.ub, 'periodic') && p.ub.periodic
+    ceq = [ceq; p.ub.beta(:, 1) - p.ub.beta(:, end)];
+end
+
 %% ============================= INEQUALITIES =============================
 c = -ones(19, 1);
 

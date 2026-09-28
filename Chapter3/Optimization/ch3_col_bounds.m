@@ -49,4 +49,13 @@ if isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta
     ub = [ub; tb(1,2); tb(2,2)];
 end
 
+% Upper-body wrench coefficients (Chapter3/UpperBody). Per-channel bounds on
+% every Bezier coefficient; by the convex-hull property they bound W(s) itself.
+[~, ub_opt] = ch3_ub_info(p);
+if ub_opt
+    nb = size(p.ub.beta, 2);
+    lb = [lb; repmat(p.ub.lb(:), nb, 1)];
+    ub = [ub; repmat(p.ub.ub(:), nb, 1)];
+end
+
 end

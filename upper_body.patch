@@ -1,0 +1,713 @@
+diff --git a/Chapter3/HZD/ch3_zd_point.m b/Chapter3/HZD/ch3_zd_point.m
+index 41b68eb..0965638 100644
+--- a/Chapter3/HZD/ch3_zd_point.m
++++ b/Chapter3/HZD/ch3_zd_point.m
+@@ -150,7 +150,10 @@ else
+ end
+ 
+ b = w * Mq * vp + w * Vq;
+-cc = w * Gq;
++% Upper-body wrench (zero unless p.ub is set): it enters the EOM as
++% M ddq + V + G = B u + J' lambda + Q_ub, i.e. exactly where -G does.
++s_ub = (theta - p.theta_minus) / (p.theta_plus - p.theta_minus);
++cc = w * (Gq - ch3_ub_wrench(q, s_ub, p));
+ 
+ if a < 0
+     a = -a;  b = -b;  cc = -cc;  w = -w;      % see the scale note in the header
+diff --git a/Chapter3/Model/ch3_control_affine.m b/Chapter3/Model/ch3_control_affine.m
+index 8fba999..8ff2f94 100644
+--- a/Chapter3/Model/ch3_control_affine.m
++++ b/Chapter3/Model/ch3_control_affine.m
+@@ -68,7 +68,14 @@ nc     = size(J, 1);
+ A = [M_mat, -J.'; ...
+      J,     zeros(nc)];
+ 
+-rhs = [ [-V_vec - G_vec], B_mat ; ...
++% --- upper-body wrench on the torso (Chapter3/UpperBody) -------------------
++% Q_ub is zero unless p.ub is set. It depends on (q, s) only -- never on u --
++% so it belongs in the DRIFT column: f, g, lam_drift and lam_in all pick it up
++% and the control-affine split, io-lin, the CLF-QP and the GRF cone are
++% unchanged in form.
++Q_ub = ch3_ub_wrench(q, ch3_phase(x, p), p);
++
++rhs = [ [-V_vec - G_vec + Q_ub], B_mat ; ...
+         [-Jdotdq],        zeros(nc, nu) ];
+ 
+ sol = A \ rhs;             % (nq+nc) x (1+nu)
+@@ -86,7 +93,7 @@ if nargout > 2
+     aux = struct('ddq_drift', ddq_drift, 'ddq_in', ddq_in, ...
+                  'lam_drift', lam_drift, 'lam_in', lam_in, ...
+                  'M', M_mat, 'Vv', V_vec, 'Gv', G_vec, ...
+-                 'J', J, 'Jdotdq', Jdotdq);
++                 'J', J, 'Jdotdq', Jdotdq, 'Q_ub', Q_ub);
+ end
+ 
+ end
+diff --git a/Chapter3/Optimization/ch3_col_bounds.m b/Chapter3/Optimization/ch3_col_bounds.m
+index 076229b..ff6f61d 100644
+--- a/Chapter3/Optimization/ch3_col_bounds.m
++++ b/Chapter3/Optimization/ch3_col_bounds.m
+@@ -49,4 +49,13 @@ if isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta
+     ub = [ub; tb(1,2); tb(2,2)];
+ end
+ 
++% Upper-body wrench coefficients (Chapter3/UpperBody). Per-channel bounds on
++% every Bezier coefficient; by the convex-hull property they bound W(s) itself.
++[~, ub_opt] = ch3_ub_info(p);
++if ub_opt
++    nb = size(p.ub.beta, 2);
++    lb = [lb; repmat(p.ub.lb(:), nb, 1)];
++    ub = [ub; repmat(p.ub.ub(:), nb, 1)];
++end
++
+ end
+diff --git a/Chapter3/Optimization/ch3_col_constraints.m b/Chapter3/Optimization/ch3_col_constraints.m
+index 69be295..e077fe3 100644
+--- a/Chapter3/Optimization/ch3_col_constraints.m
++++ b/Chapter3/Optimization/ch3_col_constraints.m
+@@ -168,6 +168,13 @@ end
+ 
+ ceq = [ceq_start; ceq_dyn; ceq_end; ceq_per; ceq_rate];
+ 
++% Upper-body wrench continuous across the step boundary, when asked for
++% (Chapter3/UpperBody). Linear in beta.
++[~, ub_opt] = ch3_ub_info(p);
++if ub_opt && isfield(p.ub, 'periodic') && p.ub.periodic
++    ceq = [ceq; p.ub.beta(:, 1) - p.ub.beta(:, end)];
++end
++
+ %% ============================= INEQUALITIES =============================
+ c = -ones(19, 1);
+ 
+diff --git a/Chapter3/Optimization/ch3_col_cost.m b/Chapter3/Optimization/ch3_col_cost.m
+index 7f71cd7..d1051a1 100644
+--- a/Chapter3/Optimization/ch3_col_cost.m
++++ b/Chapter3/Optimization/ch3_col_cost.m
+@@ -61,7 +61,7 @@ if isfield(p, 'cost_normalize') && ~p.cost_normalize
+                'ceiling and march it, or leave the objective normalized.'], ...
+               p.step_len_min);
+     end
+-    J = cost_scale(p) * E.int_u2;
++    J = cost_scale(p) * E.int_u2 + ch3_ub_cost(E.p);
+     return;
+ end
+ 
+@@ -77,7 +77,7 @@ else
+     L_eff = L_min / (1 + ((L_min - L)/L_min)^2);
+ end
+ 
+-J = cost_scale(p) * E.int_u2 / L_eff;
++J = cost_scale(p) * E.int_u2 / L_eff + ch3_ub_cost(E.p);
+ 
+ end
+ 
+diff --git a/Chapter3/Optimization/ch3_col_effective_params.m b/Chapter3/Optimization/ch3_col_effective_params.m
+index af42817..398b2f6 100644
+--- a/Chapter3/Optimization/ch3_col_effective_params.m
++++ b/Chapter3/Optimization/ch3_col_effective_params.m
+@@ -17,6 +17,12 @@ function p = ch3_col_effective_params(z, p)
+ %
+ % See also CH3_COL_UNPACK, CH3_COL_EVAL, CH3_COL_SOLVE.
+ 
++% Upper-body wrench coefficients live at the very end of z (Chapter3/UpperBody).
++[~, ub_opt, n_ub] = ch3_ub_info(p);
++if ub_opt
++    p.ub.beta = reshape(z(end-n_ub+1:end), 3, []);
++end
++
+ if ~(isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta)
+     return;
+ end
+diff --git a/Chapter3/Optimization/ch3_col_pack.m b/Chapter3/Optimization/ch3_col_pack.m
+index 1945a24..0115d23 100644
+--- a/Chapter3/Optimization/ch3_col_pack.m
++++ b/Chapter3/Optimization/ch3_col_pack.m
+@@ -32,7 +32,14 @@ if free
+     z = [z; theta_pm(:)];
+ end
+ 
+-if numel(z) ~= p.nx*size(X,2) + 1 + p.ny*p.n_ctrl + 2*free
++% Upper-body wrench coefficients, LAST, when p.ub.optimize is set
++% (Chapter3/UpperBody). Seeded from p.ub.beta.
++[~, ub_opt, n_ub] = ch3_ub_info(p);
++if ub_opt
++    z = [z; p.ub.beta(:)];
++end
++
++if numel(z) ~= p.nx*size(X,2) + 1 + p.ny*p.n_ctrl + 2*free + n_ub
+     error('ch3_col_pack:size', 'Packed vector has unexpected length.');
+ end
+ 
+diff --git a/Chapter3/Optimization/ch3_col_unpack.m b/Chapter3/Optimization/ch3_col_unpack.m
+index 0806f45..c081f5f 100644
+--- a/Chapter3/Optimization/ch3_col_unpack.m
++++ b/Chapter3/Optimization/ch3_col_unpack.m
+@@ -15,7 +15,8 @@ function [X, T, alpha, theta_pm] = ch3_col_unpack(z, p)
+ 
+ n_alpha = p.ny * p.n_ctrl;
+ free    = isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta;
+-n_extra = 2 * free;
++[~, ~, n_ub] = ch3_ub_info(p);           % upper-body beta, stored last
++n_extra = 2 * free + n_ub;
+ nX      = numel(z) - 1 - n_alpha - n_extra;
+ 
+ if nX <= 0 || mod(nX, p.nx) ~= 0
+@@ -41,7 +42,7 @@ alpha = reshape(z(nX+2 : nX+1+n_alpha), p.ny, p.n_ctrl);
+ 
+ if nargout > 3
+     if free
+-        theta_pm = z(end-1:end);
++        theta_pm = z(end-n_ub-1 : end-n_ub);
+         theta_pm = theta_pm(:);
+     else
+         theta_pm = [p.theta_minus; p.theta_plus];
+diff --git a/Chapter3/UpperBody/README.md b/Chapter3/UpperBody/README.md
+new file mode 100644
+index 0000000..b25771b
+--- /dev/null
++++ b/Chapter3/UpperBody/README.md
+@@ -0,0 +1,30 @@
++# Chapter3/UpperBody — upper-body wrench on the RABBIT torso
++
++Adds a wrench `W = [Fx; Fz; M]` acting on the torso at a "shoulder" point
++(`l_sh` from the hip along the torso axis), entering the EOM as
++
++    M(q) q̈ + V + G = B u + J_st' λ + Q_ub,     Q_ub = J_sh(q)' [Fx; Fz] + e_qt M
++
++`J_sh` has non-zero columns only for `px, pz, qt`, so the wrench acts directly on
++x, z, q_t and reaches the legs only through `M(q)` and the stance constraint.
++With no `p.ub` field every Chapter-3 result is unchanged (test T1).
++
++| file | role |
++|------|------|
++| `ch3_ub_defaults.m` | attach `p.ub` (modes `none` / `profile` / `bezier`, bounds, weight) |
++| `ch3_ub_wrench.m`   | `Q_ub`, `W`, shoulder point and Jacobian (complex step through `Tt.m`) |
++| `ch3_ub_info.m`     | the one place that reads `p.ub`'s switches |
++| `ch3_ub_cost.m`     | effort penalty on an optimized wrench |
++| `ch3_ub_test.m`     | 7 checks (identity when off, Jacobian, virtual power, Newton balance, packing) |
++| `ch3_ub_demo.m`     | A: sensitivity on the orbit, B: closed loop, C: re-optimization |
++
++Patched existing files (all no-ops without `p.ub`):
++`Model/ch3_control_affine.m` (Q_ub in the drift column),
++`HZD/ch3_zd_point.m` (Q_ub next to G in the zero dynamics),
++`Optimization/ch3_col_pack.m`, `ch3_col_unpack.m`, `ch3_col_effective_params.m`,
++`ch3_col_bounds.m` (β appended last in z), `ch3_col_cost.m` (+ wrench effort),
++`ch3_col_constraints.m` (optional W(0) = W(1)).
++
++Not modelled: impulsive wrenches at impact (the reset map is unchanged, correct
++for any bounded W), and the wrench's own dynamics — an internal upper body
++(arms) should be an extra link, not a free W.
+diff --git a/Chapter3/UpperBody/ch3_ub_cost.m b/Chapter3/UpperBody/ch3_ub_cost.m
+new file mode 100644
+index 0000000..102dd86
+--- /dev/null
++++ b/Chapter3/UpperBody/ch3_ub_cost.m
+@@ -0,0 +1,31 @@
++function J = ch3_ub_cost(p)
++%CH3_UB_COST  Effort penalty on an OPTIMIZED upper-body wrench.
++%
++%   J = ch3_ub_cost(p)
++%
++%       J = w * mean_s || W(s) ./ scale ||^2 ,   s on a 41-point grid in [0,1]
++%
++% Zero unless p.ub.optimize is set. Without this term a free external wrench
++% costs nothing, so the optimizer would lean on it to erase the joint torque
++% integral entirely; the weight w is the exchange rate between "Newtons the
++% support has to provide" and "joint torque the legs have to provide", and it
++% is the knob a crutch/assistance study sweeps.
++%
++% The phase average is state-independent (W is a function of s only), which is
++% why this can be added to the stage-3 objective without touching ch3_col_eval.
++%
++% See also CH3_UB_DEFAULTS, CH3_COL_COST.
++
++[~, optimize] = ch3_ub_info(p);
++J = 0;
++if ~optimize || p.ub.w == 0
++    return;
++end
++sg  = linspace(0, 1, 41);
++acc = 0;
++for k = 1:numel(sg)
++    Wk  = ch3_bezier(p.ub.beta, sg(k)) ./ p.ub.scale;
++    acc = acc + sum(Wk.^2);
++end
++J = p.ub.w * acc / numel(sg);
++end
+diff --git a/Chapter3/UpperBody/ch3_ub_defaults.m b/Chapter3/UpperBody/ch3_ub_defaults.m
+new file mode 100644
+index 0000000..a86c670
+--- /dev/null
++++ b/Chapter3/UpperBody/ch3_ub_defaults.m
+@@ -0,0 +1,93 @@
++function p = ch3_ub_defaults(p, mode, varargin)
++%CH3_UB_DEFAULTS  Attach an upper-body wrench model to a Chapter-3 parameter struct.
++%
++%   p = ch3_ub_defaults(p, 'none')
++%   p = ch3_ub_defaults(p, 'profile', 'fun', @(s) [Fx; Fz; M])
++%   p = ch3_ub_defaults(p, 'bezier',  'beta', B, 'optimize', true, ...)
++%
++% WHAT IS MODELLED.  RABBIT's torso is one rigid 47 kg link (head, arms and
++% trunk lumped, human-proportioned). The upper body is represented here as a
++% WRENCH W = [Fx; Fz; M] acting on that torso:
++%
++%   Fx, Fz : world-frame force [N] (z up) applied at the "shoulder" point, a
++%            distance l_sh from the hip along the torso axis;
++%   M      : pure moment [N m], signed as the generalized force on q_t
++%            (M > 0 pitches the torso toward larger q_t, i.e. forward).
++%
++% It enters the equations of motion as Q_ub = J_sh(q)' [Fx; Fz] + e_qt M.
++% J_sh only has columns for px, pz, qt, so Q_ub(4:7) = 0 identically: the
++% wrench acts DIRECTLY on x, z and q_t only and reaches the legs solely through
++% the inertial coupling in M(q) and the stance-foot constraint.
++%
++% MODES
++%   'none'    : no wrench (identical to not calling this function).
++%   'profile' : W = fun(s), s in [0,1] the phase. A fixed, prescribed load --
++%               a measured arm-swing reaction, a disturbance, a harness force.
++%               Not a decision variable.
++%   'bezier'  : W(s) = Bezier(beta, s), beta 3 x (deg+1). With optimize=true,
++%               beta is appended to z and solved with the gait.
++%
++% PHYSICAL CAUTION.  Optimizing W as a free input is only meaningful when the
++% source is genuinely EXTERNAL to the robot (crutch, handrail, harness, a
++% therapist's hand). A robot's own arms/trunk are internal: they cannot change
++% total momentum on their own, and a free W would act as a thruster. For
++% internal upper-body motion model it as an extra link instead (see the
++% accompanying notes). The bounds/sign constraints below are what keep an
++% external W honest -- e.g. crutch Fz >= 0.
++%
++% Name/value options (defaults in brackets)
++%   'l_sh'      shoulder distance from hip along torso [m]          [0.55]
++%   'fun'       @(s) -> 3x1 wrench, for 'profile'                   [zeros]
++%   'deg'       Bezier degree for 'bezier'                          [4]
++%   'beta'      3 x (deg+1) initial/fixed coefficients              [zeros]
++%   'optimize'  append beta to z                                    [false]
++%   'lb','ub'   3x1 per-channel bounds on every coefficient [N;N;Nm]
++%               (convex-hull property: bounds on the coefficients bound the
++%               whole curve, so these are SUFFICIENT for W(s) in [lb, ub])
++%                                                         [[-150;-150;-30], [150;150;30]]
++%   'w'         weight on the wrench effort term added to the cost  [500]
++%   'scale'     3x1 normalization of that term                      [[100;100;20]]
++%   'periodic'  force W(0) = W(1) (continuous across steps)         [false]
++%
++% See also CH3_UB_WRENCH, CH3_UB_COST, CH3_UB_INFO.
++
++ip = inputParser;
++ip.addParameter('l_sh', 0.55);
++ip.addParameter('fun', @(s) zeros(3, 1));
++ip.addParameter('deg', 4);
++ip.addParameter('beta', []);
++ip.addParameter('optimize', false);
++ip.addParameter('lb', [-150; -150; -30]);
++ip.addParameter('ub', [ 150;  150;  30]);
++ip.addParameter('w', 500);
++ip.addParameter('scale', [100; 100; 20]);
++ip.addParameter('periodic', false);
++ip.parse(varargin{:});
++o = ip.Results;
++
++ub = struct();
++ub.mode     = lower(mode);
++ub.l_sh     = o.l_sh;
++ub.fun      = o.fun;
++ub.optimize = logical(o.optimize);
++ub.lb       = o.lb(:);
++ub.ub       = o.ub(:);
++ub.w        = o.w;
++ub.scale    = o.scale(:);
++ub.periodic = logical(o.periodic);
++
++if isempty(o.beta)
++    ub.beta = zeros(3, o.deg + 1);
++else
++    if size(o.beta, 1) ~= 3
++        error('ch3_ub_defaults:beta', 'beta must have 3 rows [Fx; Fz; M].');
++    end
++    ub.beta = o.beta;
++end
++if ~(o.l_sh >= 0 && o.l_sh <= 0.75)
++    error('ch3_ub_defaults:l_sh', 'l_sh must lie on the 0.75 m torso (got %g).', o.l_sh);
++end
++
++p.ub = ub;
++ch3_ub_info(p);            % validates mode / optimize combination
++end
+diff --git a/Chapter3/UpperBody/ch3_ub_demo.m b/Chapter3/UpperBody/ch3_ub_demo.m
+new file mode 100644
+index 0000000..6ceb01d
+--- /dev/null
++++ b/Chapter3/UpperBody/ch3_ub_demo.m
+@@ -0,0 +1,133 @@
++%CH3_UB_DEMO  Effect of an upper-body wrench on RABBIT, in three parts.
++%
++%   Run from the repository root after startup.
++%
++%   PART A  Sensitivity on the nominal orbit (seconds, no optimizer).
++%           Holds the gait FIXED and asks: what extra joint torque and ground
++%           reaction does the wrench cost if the legs must keep walking exactly
++%           as before?  u_ff is re-solved at every collocation node with the
++%           wrench in the drift, so this is exact on the orbit.
++%
++%   PART B  Closed loop (the saved gait's controller, alpha unchanged).
++%           Lets the wrench actually push the robot and shows the response of
++%           x (progression), z (hip height) and q_t over several steps.
++%
++%   PART C  Re-optimize the gait WITH the wrench (needs the Optimization
++%           Toolbox). Two sub-cases:
++%             C1  fixed profile   : new alpha for a known upper-body load
++%             C2  optimized wrench: beta solved with alpha, crutch-like
++%                                   (Fz >= 0), penalized by p.ub.w
++%
++% The test profile used in A-C1 is ILLUSTRATIVE ONLY -- a one-cycle-per-step
++% sagittal pattern of plausible magnitude. Replace ub_fun with measured data
++% (e.g. shoulder/crutch reaction forces from an OpenSim model, resampled on
++% the phase s) before drawing conclusions from it.
++%
++% See also CH3_UB_DEFAULTS, CH3_UB_WRENCH, CH3_UB_TEST.
++
++gait_file = fullfile('Results', 'ch3_gait_posture_195.mat');   % Chapter 4's default gait
++n_sim     = 8;                                                   % steps in part B
++do_optim  = exist('fmincon', 'file') == 2;                       % part C needs fmincon
++
++% Illustrative upper-body wrench, as a function of the phase s in [0,1]:
++%   Fx : +-20 N fore-aft, Fz : +-30 N vertical, M : +-10 N m torso pitch
++ub_fun = @(s) [20*sin(2*pi*s); 30*sin(4*pi*s); 10*cos(2*pi*s)];
++
++S  = load(gait_file);
++p0 = ch3_upgrade_params(S.p);
++[X, T, alpha] = ch3_col_unpack(S.z, p0);
++N  = size(X, 2);
++pW = ch3_ub_defaults(p0, 'profile', 'fun', ub_fun);
++
++%% ------------------------------------------------------------ PART A
++u0 = zeros(p0.nu, N);  uW = u0;  L0 = zeros(2, N);  LW = L0;  s = zeros(1, N);
++Wn = zeros(3, N);
++for k = 1:N
++    s(k) = ch3_phase(X(:, k), p0);
++    [~, u0(:,k), a0] = ch3_col_dynamics(X(:, k), alpha, p0);
++    [~, uW(:,k), aW] = ch3_col_dynamics(X(:, k), alpha, pW);
++    L0(:,k) = a0.lam_drift + a0.lam_in * u0(:,k);
++    LW(:,k) = aW.lam_drift + aW.lam_in * uW(:,k);
++    [~, Wn(:,k)] = ch3_ub_wrench(X(1:7, k), s(k), pW);
++end
++names = {'stance hip', 'stance knee', 'swing hip', 'swing knee'};
++fprintf('\nPART A  same gait, with vs without the upper-body wrench\n');
++fprintf('  %-12s %10s %10s %12s\n', 'joint', 'peak|u0|', 'peak|uW|', 'RMS(du) [Nm]');
++for j = 1:p0.nu
++    fprintf('  %-12s %10.1f %10.1f %12.2f\n', names{j}, max(abs(u0(j,:))), ...
++            max(abs(uW(j,:))), sqrt(mean((uW(j,:) - u0(j,:)).^2)));
++end
++fprintf('  GRF_z min: %.1f -> %.1f N,  max |Fx/Fz|: %.3f -> %.3f\n', ...
++        min(L0(2,:)), min(LW(2,:)), max(abs(L0(1,:)./L0(2,:))), max(abs(LW(1,:)./LW(2,:))));
++
++figure('Name', 'Upper body - part A');
++subplot(3,1,1); plot(s, Wn.'); ylabel('wrench'); legend('F_x [N]','F_z [N]','M [Nm]');
++title('Prescribed upper-body wrench on the torso'); grid on;
++subplot(3,1,2); plot(s, u0.', '--', s, uW.', '-'); ylabel('u [Nm]');
++title('Feedforward torque: dashed = none, solid = with wrench'); grid on;
++subplot(3,1,3); plot(s, L0.', '--', s, LW.', '-'); ylabel('GRF [N]'); xlabel('phase s');
++legend('F_x','F_z','F_x (W)','F_z (W)'); grid on;
++
++%% ------------------------------------------------------------ PART B
++fprintf('\nPART B  closed loop, %d steps, controller ''%s''\n', n_sim, ...
++        char(getfield_or(p0, 'controller', 'default')));
++x0   = X(:, 1);
++out0 = ch3_simulate(x0, alpha, p0, n_sim);
++outW = ch3_simulate(x0, alpha, pW, n_sim);
++fprintf('  nominal : %d/%d steps ok  %s\n', out0.n_ok, n_sim, out0.reason);
++fprintf('  wrench  : %d/%d steps ok  %s\n', outW.n_ok, n_sim, outW.reason);
++report_speed('nominal', out0);  report_speed('wrench ', outW);
++
++figure('Name', 'Upper body - part B');
++lbl = {'x_{hip} [m]', 'z_{hip} [m]', 'q_t [rad]'};
++for r = 1:3
++    subplot(3,1,r);
++    plot(out0.t, hip_row(out0, r), '--', outW.t, hip_row(outW, r), '-'); grid on;
++    ylabel(lbl{r});
++end
++xlabel('t [s]'); legend('no wrench', 'with wrench');
++
++%% ------------------------------------------------------------ PART C
++if ~do_optim
++    fprintf('\nPART C skipped: fmincon not found (Optimization Toolbox).\n');
++    return;
++end
++
++% C1: known load, re-solve the gait (alpha, T, states) for it
++fprintf('\nPART C1  re-optimizing the gait under the fixed wrench\n');
++[z1, o1] = ch3_col_solve(pW, S.z);
++fprintf('  exitflag %d, cost %.1f (nominal %.1f)\n', o1.exitflag, o1.fval, ch3_col_cost(S.z, p0));
++
++% C2: crutch-like external support, solved with the gait
++%     Fz >= 0 (a crutch can only push), |Fx| <= 60 N, no pure moment.
++fprintf('\nPART C2  optimizing an external crutch-like wrench with the gait\n');
++pC = ch3_ub_defaults(p0, 'bezier', 'optimize', true, 'deg', 4, ...
++                     'lb', [-60; 0; 0], 'ub', [60; 200; 0], 'w', 500);
++zC0 = ch3_col_pack(X, T, alpha, pC, [p0.theta_minus; p0.theta_plus]);
++[zC, oC] = ch3_col_solve(pC, zC0);
++pCe = oC.p;                                           % carries the solved beta
++fprintf('  exitflag %d, total cost %.1f, of which wrench effort %.1f\n', ...
++        oC.exitflag, oC.fval, ch3_ub_cost(pCe));
++disp('  solved beta [Fx; Fz; M] (rows) :'); disp(pCe.ub.beta);
++% Sweep pC.ub.w (e.g. 50, 500, 5000) to trace the torque-vs-support trade-off.
++
++% ---------------------------------------------------------------- helpers
++function v = getfield_or(p, f, d)
++if isfield(p, f) && ~isempty(p.(f)), v = p.(f); else, v = d; end
++end
++
++function r = hip_row(out, k)
++% x_hip = px, z_hip = -pz (pz is measured downward in q), q_t = q(3)
++switch k
++    case 1, r = out.x(1, :);
++    case 2, r = -out.x(2, :);
++    case 3, r = out.x(3, :);
++end
++end
++
++function report_speed(tag, out)
++if out.n_ok < 1, fprintf('  %s: no completed step\n', tag); return; end
++dx = out.x(1, end) - out.x(1, 1);  dt = out.t(end) - out.t(1);
++fprintf('  %s: mean speed %.3f m/s, q_t in [%.3f, %.3f] rad\n', tag, dx/dt, ...
++        min(out.x(3, :)), max(out.x(3, :)));
++end
+diff --git a/Chapter3/UpperBody/ch3_ub_info.m b/Chapter3/UpperBody/ch3_ub_info.m
+new file mode 100644
+index 0000000..5fa955b
+--- /dev/null
++++ b/Chapter3/UpperBody/ch3_ub_info.m
+@@ -0,0 +1,41 @@
++function [active, optimize, n_vars] = ch3_ub_info(p)
++%CH3_UB_INFO  Is an upper-body wrench switched on, and is it being optimized?
++%
++%   [active, optimize, n_vars] = ch3_ub_info(p)
++%
++% The single place that reads p.ub's switches, so every patched Chapter-3 file
++% (control_affine, zd_point, col_pack/unpack/bounds/cost/effective_params)
++% agrees on the answer. With no p.ub field -- every gait saved before this
++% feature -- all three outputs are false/0 and NOTHING in Chapter 3 changes.
++%
++% Outputs
++%   active   : true when p.ub.mode is 'profile' or 'bezier'
++%   optimize : true when the Bezier coefficients p.ub.beta are appended to the
++%              collocation decision vector z (requires mode 'bezier')
++%   n_vars   : number of entries appended to z (3 * n_ub_ctrl, or 0)
++%
++% See also CH3_UB_DEFAULTS, CH3_UB_WRENCH.
++
++active = false;  optimize = false;  n_vars = 0;
++if ~isfield(p, 'ub') || isempty(p.ub) || ~isfield(p.ub, 'mode')
++    return;
++end
++switch lower(p.ub.mode)
++    case 'none'
++        return;
++    case {'profile', 'bezier'}
++        active = true;
++    otherwise
++        error('ch3_ub_info:mode', ...
++              'p.ub.mode must be ''none'', ''profile'' or ''bezier'' (got ''%s'').', ...
++              p.ub.mode);
++end
++optimize = isfield(p.ub, 'optimize') && ~isempty(p.ub.optimize) && p.ub.optimize;
++if optimize
++    if ~strcmpi(p.ub.mode, 'bezier')
++        error('ch3_ub_info:optimizeMode', ...
++              'p.ub.optimize needs p.ub.mode = ''bezier'' (a fixed profile has nothing to solve for).');
++    end
++    n_vars = numel(p.ub.beta);
++end
++end
+diff --git a/Chapter3/UpperBody/ch3_ub_test.m b/Chapter3/UpperBody/ch3_ub_test.m
+new file mode 100644
+index 0000000..4990cfb
+--- /dev/null
++++ b/Chapter3/UpperBody/ch3_ub_test.m
+@@ -0,0 +1,103 @@
++function ch3_ub_test(gait_file)
++%CH3_UB_TEST  Checks for the upper-body wrench extension.
++%
++%   ch3_ub_test()                          uses Results/ch3_baseline_n41.mat
++%   ch3_ub_test('Results/<gait>.mat')
++%
++%   1  p.ub absent / 'none' reproduces f, g, lambda BIT FOR BIT.
++%   2  J_sh (complex step) matches a central finite difference of Tt.
++%   3  Q_ub(4:7) == 0: the wrench acts on x, z, q_t only.
++%   4  Force through the hip (l_sh = 0) makes no torso moment: Q(3) == 0.
++%   5  Virtual power: Q' dq == F . v_sh + M dqt.
++%   6  Newton balance: raising the torso's vertical force by dF (torques
++%      frozen) changes m_tot*a_com_z - GRF_z by exactly dF.
++%   7  Pack/unpack/effective_params round-trip with optimize = true.
++
++if nargin < 1, gait_file = 'Results/ch3_baseline_n41.mat'; end
++S = load(gait_file);
++p0 = S.p;
++[X, ~, alpha] = ch3_col_unpack(S.z, p0);
++x  = X(:, round(size(X, 2)/2));
++q  = x(1:7);  dq = x(8:14);
++tol = 1e-9;
++
++% 1 ----------------------------------------------------------------------
++[f0, g0, a0] = ch3_control_affine(x, p0);
++p1 = ch3_ub_defaults(p0, 'none');
++[f1, g1, a1] = ch3_control_affine(x, p1);
++assert(isequal(f0, f1) && isequal(g0, g1) && isequal(a0.lam_drift, a1.lam_drift), ...
++       'T1: mode none changed the dynamics');
++fprintf('T1 pass: no wrench -> dynamics identical\n');
++
++% 2 ----------------------------------------------------------------------
++p2 = ch3_ub_defaults(p0, 'profile', 'fun', @(s) [30; -20; 5]);
++[~, ~, ~, J] = ch3_ub_wrench(q, 0.5, p2);
++Jfd = zeros(2, 7); h = 1e-6; pt = [0; -p2.ub.l_sh; 0; 1];
++for k = 1:7
++    e = zeros(7,1); e(k) = h;
++    rp = Tt(q+e)*pt; rm = Tt(q-e)*pt;
++    Jfd(:,k) = ([rp(1); rp(3)] - [rm(1); rm(3)]) / (2*h);
++end
++assert(max(abs(J(:) - Jfd(:))) < 1e-7, 'T2: J_sh mismatch');
++fprintf('T2 pass: J_sh complex step vs FD, max err %.2e\n', max(abs(J(:)-Jfd(:))));
++
++% 3 ----------------------------------------------------------------------
++Q = ch3_ub_wrench(q, 0.5, p2);
++assert(all(Q(4:7) == 0), 'T3: wrench leaked into leg coordinates');
++fprintf('T3 pass: Q_ub(4:7) = 0, Q_ub(1:3) = [%.2f %.2f %.2f]\n', Q(1:3));
++
++% 4 ----------------------------------------------------------------------
++p4 = ch3_ub_defaults(p0, 'profile', 'fun', @(s) [30; -20; 0], 'l_sh', 0);
++Q4 = ch3_ub_wrench(q, 0.5, p4);
++assert(abs(Q4(3)) < tol, 'T4: force through hip made a moment');
++fprintf('T4 pass: force at hip -> Q(3) = %.1e\n', Q4(3));
++
++% 5 ----------------------------------------------------------------------
++[Q5, W5, ~, J5] = ch3_ub_wrench(q, 0.5, p2);
++lhs = Q5.' * dq;  rhs = W5(1:2).' * (J5*dq) + W5(3)*dq(3);
++assert(abs(lhs - rhs) < tol, 'T5: virtual power mismatch');
++fprintf('T5 pass: virtual power %.6f == %.6f\n', lhs, rhs);
++
++% 6 ----------------------------------------------------------------------
++% Total vertical momentum rate = sum_i m_i a_iz = lambda_z + Fz - m_tot g.
++% With M ddq: the generalized-momentum identity along the pz direction
++% gives, for u = 0,   m_tot * a_com_z = lambda_z + F_z - m_tot*g.
++% We check the EQUIVALENT linear statement between two wrenches: raising Fz
++% by dF (u fixed) changes  m_tot*a_com_z - lambda_z  by exactly dF.
++m_tot = 74;
++e2 = zeros(7,1); e2(2) = 1;   % pz direction: rigid vertical translation
++pa = ch3_ub_defaults(p0, 'profile', 'fun', @(s) [0; 0; 0]);
++pb = ch3_ub_defaults(p0, 'profile', 'fun', @(s) [0; 100; 0]);
++[fa, ~, aa] = ch3_control_affine(x, pa);
++[fb, ~, ab] = ch3_control_affine(x, pb);
++% rigid-translation momentum: e2' M ddq = sum m_i * (d r_i/dpz) . a_i = -m_tot*a_com_z
++pa_rate = e2.' * aa.M * fa(8:14);
++pb_rate = e2.' * ab.M * fb(8:14);
++d_mom = -(pb_rate - pa_rate);          % change of m_tot * a_com_z (pz is down)
++d_lam = ab.lam_drift(2) - aa.lam_drift(2);
++fprintf('T6: dFz = 100 N -> d(m a_com_z) = %.4f N, d(GRF_z) = %.4f N, sum check %.2e\n', ...
++        d_mom, d_lam, abs(d_mom - d_lam - 100));
++assert(abs(d_mom - d_lam - 100) < 1e-6, 'T6: vertical Newton balance violated');
++fprintf('T6 pass: extra torso force = extra momentum rate - extra GRF\n');
++
++% 7 ----------------------------------------------------------------------
++B  = [10 20 30 20 10; 50 60 70 60 50; 1 2 3 2 1];
++p7 = ch3_ub_defaults(p0, 'bezier', 'beta', B, 'optimize', true);
++[X7, T7, al7] = ch3_col_unpack(S.z, p0);
++if isfield(p0,'free_theta') && ~isempty(p0.free_theta) && p0.free_theta
++    z7 = ch3_col_pack(X7, T7, al7, p7, [p0.theta_minus; p0.theta_plus]);
++else
++    z7 = ch3_col_pack(X7, T7, al7, p7);
++end
++assert(numel(z7) == numel(S.z) + numel(B), 'T7: pack length');
++[X8, T8, al8] = ch3_col_unpack(z7, p7);
++assert(isequal(X8, X7) && T8 == T7 && isequal(al8, al7), 'T7: unpack mismatch');
++p8 = p7; p8.ub.beta = zeros(size(B));
++p8 = ch3_col_effective_params(z7, p8);
++assert(isequal(p8.ub.beta, B), 'T7: beta not decoded');
++[lb, ub] = ch3_col_bounds(p7, size(X7, 2));
++assert(numel(lb) == numel(z7) && numel(ub) == numel(z7), 'T7: bounds length');
++fprintf('T7 pass: pack/unpack/effective_params/bounds consistent (+%d vars)\n', numel(B));
++
++fprintf('\nAll upper-body tests passed.\n');
++end
+diff --git a/Chapter3/UpperBody/ch3_ub_wrench.m b/Chapter3/UpperBody/ch3_ub_wrench.m
+new file mode 100644
+index 0000000..e661217
+--- /dev/null
++++ b/Chapter3/UpperBody/ch3_ub_wrench.m
+@@ -0,0 +1,77 @@
++function [Q, W, r_sh, J_sh] = ch3_ub_wrench(q, s, p)
++%CH3_UB_WRENCH  Generalized force of the upper-body wrench on RABBIT.
++%
++%   [Q, W, r_sh, J_sh] = ch3_ub_wrench(q, s, p)
++%
++% Maps the torso wrench W = [Fx; Fz; M] (see CH3_UB_DEFAULTS) into the 7
++% generalized coordinates q = [px pz qt q1 q2 q3 q4] by virtual work:
++%
++%       Q = J_sh(q)' * [Fx; Fz]  +  e_3 * M
++%
++%   r_sh(q) = world [x; z] of the shoulder point, Tt(q) * [0; -l_sh; 0; 1]
++%             (same torso-axis convention as ch3_body_points' torso_top).
++%   J_sh    = d r_sh / d q, 2x7.
++%
++% J_sh is taken by COMPLEX STEP through the generated Tt.m rather than being
++% hand-derived, so it inherits the repository's own sign conventions (pz is
++% measured downward in q; world z is up) with no chance of a transcription
++% slip, and it is exact to machine precision -- complex step has no
++% subtractive cancellation, unlike a finite difference.  Only columns 1..3 can
++% be non-zero (Tt depends on px, pz, qt alone); columns 4..7 are set to zero
++% exactly rather than computed.
++%
++% Inputs
++%   q : 7x1 configuration
++%   s : phase in [0,1] (clamped here: the wrench profile is not extrapolated)
++%   p : parameter struct carrying p.ub
++%
++% Outputs
++%   Q    : 7x1 generalized force (zeros when the wrench is inactive)
++%   W    : 3x1 wrench [Fx; Fz; M] at this phase
++%   r_sh : 2x1 shoulder position, world frame
++%   J_sh : 2x7 shoulder Jacobian
++%
++% See also CH3_UB_DEFAULTS, CH3_CONTROL_AFFINE, CH3_ZD_POINT.
++
++nq = numel(q);
++Q  = zeros(nq, 1);
++W  = zeros(3, 1);
++
++active = ch3_ub_info(p);
++if ~active && nargout < 3
++    return;
++end
++
++s = min(max(s, 0), 1);
++
++if active
++    switch p.ub.mode
++        case 'profile'
++            W = p.ub.fun(s);
++        case 'bezier'
++            W = ch3_bezier(p.ub.beta, s);
++    end
++    W = W(:);
++end
++
++l_sh = p.ub.l_sh;
++pt   = [0; -l_sh; 0; 1];
++
++T0   = Tt(q);
++r4   = T0 * pt;
++r_sh = [r4(1); r4(3)];
++
++h    = 1e-20;
++J_sh = zeros(2, nq);
++for k = 1:3
++    qc      = complex(q(:));
++    qc(k)   = qc(k) + 1i*h;
++    rc      = Tt(qc) * pt;
++    J_sh(:, k) = imag([rc(1); rc(3)]) / h;
++end
++
++if active
++    Q    = J_sh.' * W(1:2);
++    Q(3) = Q(3) + W(3);
++end
++end

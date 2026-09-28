@@ -32,7 +32,14 @@ if free
     z = [z; theta_pm(:)];
 end
 
-if numel(z) ~= p.nx*size(X,2) + 1 + p.ny*p.n_ctrl + 2*free
+% Upper-body wrench coefficients, LAST, when p.ub.optimize is set
+% (Chapter3/UpperBody). Seeded from p.ub.beta.
+[~, ub_opt, n_ub] = ch3_ub_info(p);
+if ub_opt
+    z = [z; p.ub.beta(:)];
+end
+
+if numel(z) ~= p.nx*size(X,2) + 1 + p.ny*p.n_ctrl + 2*free + n_ub
     error('ch3_col_pack:size', 'Packed vector has unexpected length.');
 end
 
