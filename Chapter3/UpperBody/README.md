@@ -28,3 +28,7 @@ Patched existing files (all no-ops without `p.ub`):
 Not modelled: impulsive wrenches at impact (the reset map is unchanged, correct
 for any bounded W), and the wrench's own dynamics — an internal upper body
 (arms) should be an extra link, not a free W.
+
+**Crutch-axis cone** (`'k_cone'`, off by default): `|Fx| <= k_cone * Fz` on every
+Bezier coefficient, which guarantees it for the whole curve. Appended as extra
+rows after row 19 of `ch3_col_constraints`, only when set.

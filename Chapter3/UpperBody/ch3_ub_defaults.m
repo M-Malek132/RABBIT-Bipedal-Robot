@@ -48,6 +48,9 @@ function p = ch3_ub_defaults(p, mode, varargin)
 %   'w'         weight on the wrench effort term added to the cost  [500]
 %   'scale'     3x1 normalization of that term                      [[100;100;20]]
 %   'periodic'  force W(0) = W(1) (continuous across steps)         [false]
+%   'k_cone'    crutch-axis limit |Fx| <= k_cone * Fz, i.e. the force
+%               points along a shaft at most atan(k_cone) from vertical
+%               (0.4 -> 21.8 deg). [] = off. Only used with optimize.  [[]]
 %
 % See also CH3_UB_WRENCH, CH3_UB_COST, CH3_UB_INFO.
 
@@ -62,6 +65,7 @@ ip.addParameter('ub', [ 150;  150;  30]);
 ip.addParameter('w', 500);
 ip.addParameter('scale', [100; 100; 20]);
 ip.addParameter('periodic', false);
+ip.addParameter('k_cone', []);
 ip.parse(varargin{:});
 o = ip.Results;
 
@@ -75,6 +79,10 @@ ub.ub       = o.ub(:);
 ub.w        = o.w;
 ub.scale    = o.scale(:);
 ub.periodic = logical(o.periodic);
+ub.k_cone   = o.k_cone;
+if ~isempty(ub.k_cone) && ~(isscalar(ub.k_cone) && ub.k_cone >= 0 && isfinite(ub.k_cone))
+    error('ch3_ub_defaults:k_cone', 'k_cone must be empty or a nonnegative scalar.');
+end
 
 if isempty(o.beta)
     ub.beta = zeros(3, o.deg + 1);
