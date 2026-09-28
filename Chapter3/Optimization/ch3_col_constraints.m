@@ -405,4 +405,18 @@ if isfield(p.limits.enable, 'step_len_max') && p.limits.enable.step_len_max
     c(19) = E.L_step - p.limits.step_len_max;
 end
 
+% 20+. CRUTCH-AXIS CONE on the optimized upper-body wrench (Chapter3/UpperBody),
+% appended only when p.ub.k_cone is set, so rows 1..19 and every existing
+% caller are untouched. A crutch pushes along its shaft, so |Fx| <= k Fz.
+% Imposed on every Bezier COEFFICIENT: W(s) is a convex combination of the
+% coefficients and the cone is convex, so this guarantees the cone for every
+% s (sufficient, slightly conservative) with 2*(deg+1) LINEAR rows. Scaled by
+% 1/100 N to sit near the other rows' magnitudes.
+[~, ub_opt] = ch3_ub_info(p);
+if ub_opt && isfield(p.ub, 'k_cone') && ~isempty(p.ub.k_cone)
+    Fx = p.ub.beta(1, :);  Fz = p.ub.beta(2, :);
+    c  = [c; ( Fx(:) - p.ub.k_cone*Fz(:)) / 100; ...
+             (-Fx(:) - p.ub.k_cone*Fz(:)) / 100];
+end
+
 end
