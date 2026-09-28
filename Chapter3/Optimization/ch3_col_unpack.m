@@ -15,7 +15,8 @@ function [X, T, alpha, theta_pm] = ch3_col_unpack(z, p)
 
 n_alpha = p.ny * p.n_ctrl;
 free    = isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta;
-n_extra = 2 * free;
+[~, ~, n_ub] = ch3_ub_info(p);           % upper-body beta, stored last
+n_extra = 2 * free + n_ub;
 nX      = numel(z) - 1 - n_alpha - n_extra;
 
 if nX <= 0 || mod(nX, p.nx) ~= 0
@@ -41,7 +42,7 @@ alpha = reshape(z(nX+2 : nX+1+n_alpha), p.ny, p.n_ctrl);
 
 if nargout > 3
     if free
-        theta_pm = z(end-1:end);
+        theta_pm = z(end-n_ub-1 : end-n_ub);
         theta_pm = theta_pm(:);
     else
         theta_pm = [p.theta_minus; p.theta_plus];

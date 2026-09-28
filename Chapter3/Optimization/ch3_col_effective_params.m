@@ -17,6 +17,12 @@ function p = ch3_col_effective_params(z, p)
 %
 % See also CH3_COL_UNPACK, CH3_COL_EVAL, CH3_COL_SOLVE.
 
+% Upper-body wrench coefficients live at the very end of z (Chapter3/UpperBody).
+[~, ub_opt, n_ub] = ch3_ub_info(p);
+if ub_opt
+    p.ub.beta = reshape(z(end-n_ub+1:end), 3, []);
+end
+
 if ~(isfield(p, 'free_theta') && ~isempty(p.free_theta) && p.free_theta)
     return;
 end

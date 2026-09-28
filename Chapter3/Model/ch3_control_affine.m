@@ -68,7 +68,14 @@ nc     = size(J, 1);
 A = [M_mat, -J.'; ...
      J,     zeros(nc)];
 
-rhs = [ [-V_vec - G_vec], B_mat ; ...
+% --- upper-body wrench on the torso (Chapter3/UpperBody) -------------------
+% Q_ub is zero unless p.ub is set. It depends on (q, s) only -- never on u --
+% so it belongs in the DRIFT column: f, g, lam_drift and lam_in all pick it up
+% and the control-affine split, io-lin, the CLF-QP and the GRF cone are
+% unchanged in form.
+Q_ub = ch3_ub_wrench(q, ch3_phase(x, p), p);
+
+rhs = [ [-V_vec - G_vec + Q_ub], B_mat ; ...
         [-Jdotdq],        zeros(nc, nu) ];
 
 sol = A \ rhs;             % (nq+nc) x (1+nu)
@@ -86,7 +93,7 @@ if nargout > 2
     aux = struct('ddq_drift', ddq_drift, 'ddq_in', ddq_in, ...
                  'lam_drift', lam_drift, 'lam_in', lam_in, ...
                  'M', M_mat, 'Vv', V_vec, 'Gv', G_vec, ...
-                 'J', J, 'Jdotdq', Jdotdq);
+                 'J', J, 'Jdotdq', Jdotdq, 'Q_ub', Q_ub);
 end
 
 end

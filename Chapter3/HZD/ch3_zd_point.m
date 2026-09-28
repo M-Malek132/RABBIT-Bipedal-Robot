@@ -150,7 +150,10 @@ else
 end
 
 b = w * Mq * vp + w * Vq;
-cc = w * Gq;
+% Upper-body wrench (zero unless p.ub is set): it enters the EOM as
+% M ddq + V + G = B u + J' lambda + Q_ub, i.e. exactly where -G does.
+s_ub = (theta - p.theta_minus) / (p.theta_plus - p.theta_minus);
+cc = w * (Gq - ch3_ub_wrench(q, s_ub, p));
 
 if a < 0
     a = -a;  b = -b;  cc = -cc;  w = -w;      % see the scale note in the header
