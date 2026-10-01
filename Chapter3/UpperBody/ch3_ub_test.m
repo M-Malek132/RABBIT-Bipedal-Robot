@@ -12,6 +12,7 @@ function ch3_ub_test(gait_file)
 %   6  Newton balance: raising the torso's vertical force by dF (torques
 %      frozen) changes m_tot*a_com_z - GRF_z by exactly dF.
 %   7  Pack/unpack/effective_params round-trip with optimize = true.
+%   8  ch3_col_theta_augment with optimize = true puts theta before beta.
 
 if nargin < 1, gait_file = 'Results/ch3_baseline_n41.mat'; end
 S = load(gait_file);
@@ -98,6 +99,21 @@ assert(isequal(p8.ub.beta, B), 'T7: beta not decoded');
 [lb, ub] = ch3_col_bounds(p7, size(X7, 2));
 assert(numel(lb) == numel(z7) && numel(ub) == numel(z7), 'T7: bounds length');
 fprintf('T7 pass: pack/unpack/effective_params/bounds consistent (+%d vars)\n', numel(B));
+
+% 8 ----------------------------------------------------------------------
+% Free phase endpoints on top of an optimized wrench: theta goes in FRONT of
+% the beta tail, so augmenting the z of T7 must insert it there.
+pf = p7;  pf.free_theta = true;
+za = ch3_col_theta_augment(z7, pf);
+[X9, T9, al9, th9] = ch3_col_unpack(za, pf);
+pf9 = ch3_col_effective_params(za, pf);
+had_theta = isfield(p0,'free_theta') && ~isempty(p0.free_theta) && p0.free_theta;
+assert(numel(za) == numel(z7) + 2*~had_theta, 'T8: augment length');
+assert(isequal(X9, X7) && T9 == T7 && isequal(al9, al7), 'T8: X/T/alpha moved');
+assert(isequal(th9, [p0.theta_minus; p0.theta_plus]), 'T8: theta not decoded');
+assert(isequal(pf9.ub.beta, B), 'T8: beta not decoded');
+assert(isequal(ch3_col_theta_augment(za, pf), za), 'T8: augment not idempotent');
+fprintf('T8 pass: free-theta augment keeps beta last (+2 vars)\n');
 
 fprintf('\nAll upper-body tests passed.\n');
 end

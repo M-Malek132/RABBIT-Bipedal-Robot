@@ -15,14 +15,16 @@ With no `p.ub` field every Chapter-3 result is unchanged (test T1).
 | `ch3_ub_wrench.m`   | `Q_ub`, `W`, shoulder point and Jacobian (complex step through `Tt.m`) |
 | `ch3_ub_info.m`     | the one place that reads `p.ub`'s switches |
 | `ch3_ub_cost.m`     | effort penalty on an optimized wrench |
-| `ch3_ub_test.m`     | 7 checks (identity when off, Jacobian, virtual power, Newton balance, packing) |
+| `ch3_ub_test.m`     | 8 checks (identity when off, Jacobian, virtual power, Newton balance, packing) |
 | `ch3_ub_demo.m`     | A: sensitivity on the orbit, B: closed loop, C: re-optimization |
+| `ch3_ub_ladder.m`   | speed march down on a shorter stride (free θ), from a solved wrench gait |
 
 Patched existing files (all no-ops without `p.ub`):
 `Model/ch3_control_affine.m` (Q_ub in the drift column),
 `HZD/ch3_zd_point.m` (Q_ub next to G in the zero dynamics),
 `Optimization/ch3_col_pack.m`, `ch3_col_unpack.m`, `ch3_col_effective_params.m`,
-`ch3_col_bounds.m` (β appended last in z), `ch3_col_cost.m` (+ wrench effort),
+`ch3_col_bounds.m` (β appended last in z), `ch3_col_theta_augment.m` (θ± go in
+before β), `ch3_col_cost.m` (+ wrench effort),
 `ch3_col_constraints.m` (optional W(0) = W(1)).
 
 Not modelled: impulsive wrenches at impact (the reset map is unchanged, correct
