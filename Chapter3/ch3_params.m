@@ -74,7 +74,9 @@ p.enforce_nec1 = true;          % gate on the NEC1 speed equality
 
 %% Table 3.1 physical realizability limits
 p.limits = struct();
-p.limits.u_max       = 120;     % |u_i| <= u_max                    [Nm]
+p.limits.u_max       = 200;     % |u_i| <= u_max                    [Nm]
+                                % (was 120 until 2026-10-02; the 74 kg model
+                                % floors at 162.5 Nm, HANDOFF "Torque")
 p.limits.impulse_max = 15;      % ||impact impulse||_2 <= impulse_max [Ns]
 p.limits.mu_s        = 0.4;     % |Fx| <= mu_s * Fz     NIC2        [-]
 p.limits.Fz_min      = 50;      % Fz >= Fz_min          NIC1        [N]
